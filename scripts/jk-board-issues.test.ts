@@ -12,12 +12,19 @@ const block = (name: string) => {
 }
 // The constants above the blocks (CMD reads HC_MARK at load) run first, so a misordered declaration throws here as it would in the app.
 const head = src.slice(src.indexOf('from "herdr";\n') + 'from "herdr";\n'.length, src.indexOf("// <tree>"))
-const names = "CMD, parse, parseOverview, parseIssues, parseSessions, issueCmd, sortAsks, sortHealth, splitQueue, askIssue, askBadge, summaryLine, oneLine, age, duration, compact, modelShort, factsLine, quotaLine, metaLine, issueKind, sections, holdFor, terminalsMap, timelineTail, normTab, sessionKind, known"
+const names = "CMD, pollCmd, byProject, kanban, cardLines, clock, stamp, tip, parse, parseOverview, parseIssues, parseSessions, issueCmd, sortAsks, sortHealth, splitQueue, askIssue, askBadge, summaryLine, oneLine, age, duration, compact, modelShort, factsLine, quotaLine, metaLine, issueKind, sections, holdFor, terminalsMap, timelineTail, normTab, sessionKind, known"
 const lib = new Function(`${head}\n${block("tree")}\n${block("issues")}; return { ${names} }`)() as Lib
 
 type Fn<A extends unknown[], R> = (...args: A) => R
 interface Lib {
   CMD: string
+  pollCmd: Fn<[boolean], string>
+  byProject: Fn<[Card[], Map<string, Sess>], { repo: string; running: Card[]; queued: Card[] }[]>
+  kanban: Fn<[Card[], Map<string, Sess>, string | null?], { id: string; label: string; cards: Card[] }[]>
+  cardLines: Fn<[Partial<Card>], string[]>
+  clock: Fn<[string], string>
+  stamp: Fn<[string], string>
+  tip: Fn<[unknown, number?, number?], string>
   parse: Fn<[string], { overview: Overview | null; issues: Card[] | null; sessions: Sess[] | null; hc: { address: string }[] | null }>
   parseOverview: Fn<[string], Overview | null>
   parseIssues: Fn<[string], Card[] | null>
@@ -54,7 +61,7 @@ interface Sess {
   terminal: { id: string } | null; repo: string
 }
 interface Card {
-  id: number; filedTitle: string; title: string; summary: string; state: string; reason: string | null; outcome: string | null
+  id: number; filedTitle: string; title: string; about: string; summary: string; state: string; reason: string | null; outcome: string | null
   phase: string | null; repoName: string; kind: string; size: string; lead: string | null; account: string | null
   quota: { account: string; fiveHourUsed: number | null; weeklyUsed: number | null } | null
   insights: { workingMs: number; turns: number; toolCalls: number; subagents: number; tokens: { output: number }; models: string[]; partial: boolean }
@@ -62,7 +69,7 @@ interface Card {
 }
 
 const C = (id: number, extra: Partial<Card> = {}): Card => ({
-  id, filedTitle: `Filed ${id}`, title: `Title ${id}`, summary: `Summary ${id}`, state: "working", reason: null, outcome: null, phase: "ship",
+  id, filedTitle: `Filed ${id}`, title: `Title ${id}`, about: `About ${id}`, summary: `Summary ${id}`, state: "working", reason: null, outcome: null, phase: "ship",
   repoName: "repo", kind: "feature", size: "l", lead: `lead-${id}-1`, account: "me", quota: null,
   insights: { workingMs: 38 * 60000, turns: 20, toolCalls: 112, subagents: 10, tokens: { output: 61000 }, models: ["claude-sonnet-5-5"], partial: false },
   createdAt: "2026-11-06T00:00:00.000Z", updatedAt: "2026-11-06T07:00:00.000Z", closedAt: null, waitingOnOwner: false, ...extra,
@@ -107,6 +114,16 @@ test("the command reads overview, issues and sessions in one secrets-run (json f
   expect(CMD.indexOf("read sessions")).toBeLessThan(CMD.indexOf("echo '@@HC@@'"))
   expect(CMD.indexOf("echo '@@HC@@'")).toBeLessThan(CMD.indexOf("hc ls --json"))
   expect(CMD).not.toContain("factory fleet")
+  expect(lib.pollCmd(false)).toBe(CMD)
+})
+
+test("the hot command refreshes the fleet snapshot first, inside the same secrets-run", () => {
+  const hot = lib.pollCmd(true)
+  expect(hot).toContain("factory --format json fleet --refresh >/dev/null 2>&1")
+  expect(hot.indexOf("fleet --refresh")).toBeLessThan(hot.indexOf("read overview"))
+  expect(hot.indexOf("secrets-run")).toBeLessThan(hot.indexOf("fleet --refresh"))
+  expect(hot.match(/secrets-run run/g)).toHaveLength(1)
+  expect(hot.replace("factory --format json fleet --refresh >/dev/null 2>&1; ", "")).toBe(lib.CMD)
 })
 
 test("the Issue id reaches the shell as an integer or not at all", () => {
@@ -172,20 +189,21 @@ test("age and one-line text", () => {
 })
 
 test("facts and quota lines", () => {
-  expect(lib.factsLine(C(1))).toBe("feature · l · sonnet · 20 turns · 112 tools · 10 subagents · 61k out")
+  expect(lib.factsLine(C(1))).toBe("feature (size l) · sonnet · 20 turns · 112 tool calls · 10 subagents · 61k tokens out")
   const partial = C(1, { insights: { ...C(1).insights, partial: true, models: [] } })
-  expect(lib.factsLine(partial)).toBe("feature · l · 20 turns · 112 tools · 10 subagents · 61k out · partial")
+  expect(lib.factsLine(partial)).toBe("feature (size l) · 20 turns · 112 tool calls · 10 subagents · 61k tokens out · partial")
+  expect(lib.factsLine(C(1, { size: "", insights: {} as Card["insights"] }))).toBe("feature")
   expect(lib.quotaLine({ account: "me2", fiveHourUsed: 1.2, weeklyUsed: 83 })).toBe("me2 5h 1% · 7d 83%")
   expect(lib.quotaLine({ account: "iu", fiveHourUsed: null, weeklyUsed: 35 })).toBe("iu 7d 35%")
   expect(lib.quotaLine(null)).toBe("")
 })
 
 test("meta line: phase, else state with its reason; unknown enums read as other", () => {
-  expect(lib.metaLine(C(1))).toBe("repo · ship · me")
-  expect(lib.metaLine(C(2, { phase: null, state: "waiting", reason: "decision" }))).toBe("repo · waiting: decision · me")
-  expect(lib.metaLine(C(3, { phase: null, state: "closed", outcome: "done", account: null }))).toBe("repo · closed: done")
-  expect(lib.metaLine(C(4, { phase: null, state: "hibernating", reason: "cosmic", account: null }))).toBe("repo · other: other")
-  expect(lib.metaLine(C(5, { phase: null, state: "queued", account: null }))).toBe("repo · queued")
+  expect(lib.metaLine(C(1))).toBe("ship · me")
+  expect(lib.metaLine(C(2, { phase: null, state: "waiting", reason: "decision" }))).toBe("waiting: decision · me")
+  expect(lib.metaLine(C(3, { phase: null, state: "closed", outcome: "done", account: null }))).toBe("closed: done")
+  expect(lib.metaLine(C(4, { phase: null, state: "hibernating", reason: "cosmic", account: null }))).toBe("other: other")
+  expect(lib.metaLine(C(5, { phase: null, state: "queued", account: null }))).toBe("queued")
 })
 
 test("issue dot: owner needs first, then the lead's state; queued and closed are idle", () => {
@@ -271,4 +289,83 @@ test("unknown enum values read as other, known ones pass", () => {
   expect([lib.known("a", set), lib.known("zzz", set), lib.known(null, set)]).toEqual(["a", "other", null])
   expect(lib.sessionKind({ state: "dead" })).toBe("idle")
   expect(lib.sessionKind({ state: "from-the-future" })).toBe("idle")
+})
+
+test("card lines: about, then the status, each once and never the title", () => {
+  expect(lib.cardLines(C(1))).toEqual(["About 1", "Summary 1"])
+  expect(lib.cardLines(C(1, { about: "  Same.  ", summary: "same." }))).toEqual(["Same."])
+  expect(lib.cardLines(C(1, { about: "title 1", summary: "Working on it" }))).toEqual(["Working on it"])
+  expect(lib.cardLines(C(1, { about: "", summary: "" }))).toEqual([])
+  expect(lib.cardLines({ title: "T" })).toEqual([])
+})
+
+test("times by hand: HH:MM and Mon D, HH:MM, no seconds", () => {
+  const iso = "2026-11-06T07:05:09Z"
+  const d = new Date(iso)
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  expect(lib.clock(iso)).toBe(hm)
+  expect(lib.clock(iso)).toMatch(/^\d{2}:\d{2}$/)
+  expect(lib.stamp(iso)).toBe(`${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getDate()}, ${hm}`)
+  expect([lib.clock("nope"), lib.clock(""), lib.stamp("nope")]).toEqual(["", "", ""])
+})
+
+test("tooltip text: collapsed, cut on a word with an ellipsis, wrapped on word boundaries", () => {
+  expect(lib.tip("")).toBe("")
+  expect(lib.tip(null)).toBe("")
+  expect(lib.tip("  a \n\n b\t c ")).toBe("a b c")
+  const long = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ")
+  const out = lib.tip(long)
+  const lines = out.split("\n")
+  expect(lines.length).toBeGreaterThan(1)
+  for (const l of lines) expect(l.length).toBeLessThanOrEqual(44)
+  const flat = out.replace(/\n/g, " ")
+  expect(flat.length).toBeLessThanOrEqual(200)
+  expect(flat.endsWith("…")).toBe(true)
+  expect(long.startsWith(flat.slice(0, -1).trimEnd())).toBe(true)
+  expect(long[flat.length - 1]).toBe(" ") // cut on a word boundary
+  expect(lib.tip("one two three four", 9, 100)).toBe("one two\nthree\nfour")
+  expect(lib.tip("short text")).toBe("short text")
+  expect(lib.tip("x".repeat(300), 44, 50)).toBe(`${"x".repeat(49)}…`) // no space to cut at
+})
+
+test("by project: most urgent repo first then name; running keeps its order, queued follows; closed is left out", () => {
+  const leads = byId(S("lead-1-1", 1, "t1", { state: "idle" }), S("lead-2-1", 2, "t2"), S("lead-3-1", 3, "t3", { state: "blocked" }))
+  const cards = [
+    C(1, { repoName: "zeta" }), C(2, { repoName: "beta", updatedAt: "2026-11-06T06:00:00Z" }), C(3, { repoName: "alpha" }),
+    C(4, { repoName: "beta", state: "queued", lead: null, createdAt: "2026-11-06T02:00:00Z" }),
+    C(5, { repoName: "gamma", state: "queued", lead: null }), C(6, { repoName: "aaa", state: "queued", lead: null }),
+    C(7, { repoName: "beta", lead: "lead-7-1", updatedAt: "2026-11-06T07:30:00Z" }),
+    C(8, { repoName: "closedrepo", state: "closed", lead: null }),
+  ]
+  const out = lib.byProject(cards, leads)
+  expect(out.map((p) => p.repo)).toEqual(["alpha", "beta", "aaa", "gamma", "zeta"]) // needs, working, then the idle ones (a queued card is idle) by name
+  const beta = out.find((p) => p.repo === "beta")
+  expect(beta?.running.map((c) => c.id)).toEqual([7, 2])
+  expect(beta?.queued.map((c) => c.id)).toEqual([4])
+  expect(lib.byProject([], new Map())).toEqual([])
+})
+
+test("kanban: each column's rule, the repo filter, DONE capped and newest first, QUEUED oldest first", () => {
+  const leads = byId(S("lead-1-1", 1, "t1", { state: "blocked" }), S("lead-2-1", 2, "t2"), S("lead-3-1", 3, "t3", { state: "waiting", wait: "workers" }),
+    S("lead-4-1", 4, "t4", { state: "idle" }), S("lead-5-1", 5, "t5"), S("lead-6-1", 6, "t6"))
+  const cards = [
+    C(1), C(2, { updatedAt: "2026-11-06T05:00:00Z" }), C(6, { updatedAt: "2026-11-06T06:00:00Z", repoName: "other" }), C(3), C(4),
+    C(5, { state: "queued" }), // queued with a live lead: not QUEUED, its dot is idle, so WAITING
+    C(7, { state: "queued", lead: null, createdAt: "2026-11-06T04:00:00Z" }), C(8, { state: "queued", lead: null, createdAt: "2026-11-06T03:00:00Z", repoName: "other" }),
+    C(9, { state: "waiting", lead: null, waitingOnOwner: true }),
+    ...Array.from({ length: 12 }, (_, i) => C(20 + i, { state: "closed", lead: null, closedAt: `2026-11-${String(i + 1).padStart(2, "0")}T00:00:00Z` })),
+  ]
+  const ids = (cols: ReturnType<typeof lib.kanban>, id: string) => cols.find((c) => c.id === id)?.cards.map((c) => c.id)
+  const all = lib.kanban(cards, leads)
+  expect(all.map((c) => c.label)).toEqual(["NEEDS YOU", "WORKING", "WAITING", "QUEUED", "DONE"])
+  expect(ids(all, "needs")).toEqual([9, 1]) // equal activity: higher id first
+  expect(ids(all, "working")).toEqual([6, 2]) // 6 (06:00) before 2 (05:00)
+  expect(ids(all, "waiting")).toEqual([5, 4, 3]) // a workers wait, and idle open Issues with a live lead
+  expect(ids(all, "queued")).toEqual([8, 7])
+  expect(ids(all, "done")).toEqual([31, 30, 29, 28, 27, 26, 25, 24, 23, 22])
+  const other = lib.kanban(cards, leads, "other")
+  expect(ids(other, "working")).toEqual([6])
+  expect(ids(other, "queued")).toEqual([8])
+  expect(ids(other, "done")).toEqual([])
+  expect(lib.kanban([], new Map()).every((c) => c.cards.length === 0)).toBe(true)
 })

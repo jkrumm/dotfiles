@@ -14,7 +14,8 @@ BASE='{"global":{"cmd-q":"app.quit","cmd-shift-b":"layout.toggle:board"},"termin
 echo "$BASE" > "$T/keys.json"
 "$HERE/herdr-app-keys.sh" "$T" >/dev/null
 expect "binds cmd-e" "$(jq -r '.global["cmd-e"]' "$T/keys.json")" "jk-keys.brain-note"
-expect "other bindings unchanged" "$(jq -c 'del(.global["cmd-e"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .)"
+expect "binds cmd-alt-b" "$(jq -r '.global["cmd-alt-b"]' "$T/keys.json")" "jk-keys.board"
+expect "other bindings unchanged" "$(jq -c 'del(.global["cmd-e"], .global["cmd-alt-b"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .)"
 expect "terminal section unchanged" "$(jq -c .terminal "$T/keys.json")" "$(echo "$BASE" | jq -c .terminal)"
 
 # 2. idempotent

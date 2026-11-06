@@ -183,6 +183,18 @@
       }
     },
     {
+      "id": "boardfull",
+      "type": "block",
+      "hidden": true,
+      "background": "chrome",
+      "content": {
+        "mod": "jk-board",
+        "props": {
+          "view": "board"
+        }
+      }
+    },
+    {
       "id": "keys",
       "type": "block",
       "size": {

@@ -2,19 +2,28 @@
 // Uptime: an Uptime Kuma overview from Argo's /uptime-kuma/monitors, read on the mini with secrets-run (the
 // token never reaches argv), grouped by parent group. jk-status switches it to Uptime through
 // shared("jk.board.tab"). Read-only.
-// Issues: every 15 s one call on the mini reads software-factory's read API (`factory read overview|issues|sessions`,
+// Issues: every 15 s (every 5 s in hot mode, see below) one call on the mini reads software-factory's read API (`factory read overview|issues|sessions`,
 // token through secrets-run) and hc's terminal list. Each part parses on its own and keeps its last good answer.
 // Top to bottom: the summary line, ASKS (the owner's own first), HUMAN QUEUE (stale ones folded), HEALTH, then the
-// Issues: RUNNING, QUEUED (folded), RECENT (folded), and the live sessions that belong to no Issue. An Issue card
-// shows its human title, phase and summary; a click opens facts, its sessions, the hidden-child tree and the last
-// timeline lines (`read issue <id>`, only while open). All text from the API is data.
+// Issues: RUNNING, QUEUED (folded), RECENT (folded), and the live sessions that belong to no Issue. A Status | Project
+// switch (localStorage board.group) regroups the Issues as one foldable section per repo (running, then queued).
+// An Issue card shows its repo, human title, phase, what it is about and its status; a click opens facts, its sessions,
+// the hidden-child tree and the last timeline lines (`read issue <id>`, only while open). All text from the API is data.
+// Full board (layout block `boardfull`, props view=board, toggled by jk-keys' cmd-alt-b or the Full button): the same class
+// as a Kanban over the window, no tabs, no Uptime: a top bar (title, summary, project chips persisted in board.full.repo,
+// Close), the owner's asks and open human queue as a strip, then equal columns NEEDS YOU / WORKING / WAITING / QUEUED /
+// DONE (`kanban`). A card click focuses the lead's agent. It polls like the sidebar but not while its block is hidden,
+// polls at once when shown again, and never publishes jk.factory.terminals (the sidebar instance does).
+// Hot mode: the server rebuilds its fleet snapshot every 30 s, so an answered ask would linger. For 3 min after the owner
+// clicks an ask, and while the focused Issue has an open ask, a 5 s timer polls with `fleet --refresh` first (DB and hc
+// reads, no model calls). Times are formatted by hand (this runtime's toLocale* ignores its options): HH:MM, no seconds.
 // Header feed: after each good sessions answer the board publishes shared("jk.factory.terminals") (app terminal
 // address -> what that agent is about) for the jk-pane header, and only when it changed.
 // Hidden children: a session row lists the terminals that hang under it (hc's `parent`) as a tree: name,
 // state, turn. Click a child for its last lines (`hc read`, on demand).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, machines, shared, setShared, run, terminals, focused } from "herdr";
+import { exec, theme, machines, shared, setShared, run, terminals, focused, props, layout } from "herdr";
 
 // The token comes from the factory's own env template through secrets-run, never argv.
 const SECRETS = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl --`;
@@ -25,7 +34,9 @@ const HC_SPLIT = `\n${HC_MARK}\n`;
 // hc starts a stray core (no keychain) when none runs: ask lib/core-up.sh first (socket answers AND a launchd-born core), as rd's require_core does. Bounded when the host has a timeout.
 const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 1; t=$(command -v timeout || command -v gtimeout)`;
 const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
-const CMD = `{ ${SECRETS} sh -c '${READS}'; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
+// Hot: rebuild the server's fleet snapshot first (inside the same secrets-run), so the overview read is current.
+const pollCmd = (hot) => `{ ${SECRETS} sh -c '${hot ? "factory --format json fleet --refresh >/dev/null 2>&1; " : ""}${READS}'; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
+const CMD = pollCmd(false);
 // A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.
 const PEEK_LINES = 8;
 const peekCmd = (addr) => `${HC_GUARD}; out=$(\${t:+"$t"} \${t:+8} hc read ${addr} 2>&1) || { echo "(hc read failed)"; exit 1; }; printf '%s\\n' "$out" | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;
@@ -37,6 +48,8 @@ const UPTIME_BG_MS = 60000; // otherwise, for the tab badge
 const TABS = [["issues", "Issues"], ["uptime", "Uptime"]];
 
 const POLL_MS = 15000;
+const HOT_POLL_MS = 5000;
+const HOT_MS = 3 * 60000; // after an ask click
 const STALE_MS = 2 * 60000;
 const RECENT_MAX = 8;
 const TIMELINE_LINES = 5;
@@ -242,12 +255,13 @@ function modelShort(name) {
   return m ? m[1].toLowerCase() : String(name ?? "").replace(/^claude-/, "");
 }
 
-// `feature · l · sonnet · 20 turns · 112 tools · 10 subagents · 61k out`, "partial" when the insights are incomplete.
+// `feature (size l) · sonnet · 20 turns · 112 tool calls · 10 subagents · 61k tokens out · partial`; a missing part is skipped.
 function factsLine(c) {
   const i = c.insights ?? {};
-  const parts = [c.kind, c.size, asArray(i.models).map(modelShort).join("+") || null,
-    Number.isFinite(i.turns) ? `${i.turns} turns` : null, Number.isFinite(i.toolCalls) ? `${i.toolCalls} tools` : null,
-    Number.isFinite(i.subagents) ? `${i.subagents} subagents` : null, Number.isFinite(i.tokens?.output) ? `${compact(i.tokens.output)} out` : null,
+  const parts = [c.kind ? (c.size ? `${c.kind} (size ${c.size})` : c.kind) : c.size ? `size ${c.size}` : null,
+    asArray(i.models).map(modelShort).join("+") || null,
+    Number.isFinite(i.turns) ? `${i.turns} turns` : null, Number.isFinite(i.toolCalls) ? `${i.toolCalls} tool calls` : null,
+    Number.isFinite(i.subagents) ? `${i.subagents} subagents` : null, Number.isFinite(i.tokens?.output) ? `${compact(i.tokens.output)} tokens out` : null,
     i.partial ? "partial" : null];
   return parts.filter(Boolean).join(" · ");
 }
@@ -259,12 +273,12 @@ function quotaLine(q) {
   return [q.account, parts.filter(Boolean).join(" · ")].filter(Boolean).join(" ");
 }
 
-// Line 2 of a card: repo · phase (else state, with its reason or outcome: "waiting: decision") · account.
+// The status line of a card (the repo has its own row): phase (else state, with its reason or outcome: "waiting: decision") · account.
 function metaLine(c) {
   const state = known(c.state, ISSUE_STATES) ?? "other";
   const why = known(c.reason, ISSUE_REASONS) ?? (c.state === "closed" ? oneLine(c.outcome, 24) || null : null);
   const stage = c.phase ? oneLine(c.phase, 40) : why ? `${state}: ${why}` : state;
-  return [c.repoName, stage, c.account].filter(Boolean).join(" · ");
+  return [stage, c.account].filter(Boolean).join(" · ");
 }
 
 // The dot of an Issue: needs when it waits on the owner (or its lead does), else its lead's state; queued and closed ones are idle.
@@ -294,6 +308,55 @@ function sections(cards, sessionsById) {
     queued: queued.sort((a, b) => time(a.createdAt) - time(b.createdAt) || a.id - b.id),
     recent: recent.sort((a, b) => time(b.closedAt) - time(a.closedAt) || b.id - a.id).slice(0, RECENT_MAX),
   };
+}
+
+// The open Issues per repo: [{ repo, running, queued }], the repo with the most urgent card first (a queued card is idle), then by name.
+// Each list keeps sections()' order. Closed Issues are not in it.
+function byProject(cards, sessionsById) {
+  const byId = sessionsById ?? new Map();
+  const { running, queued } = sections(cards, byId);
+  const repos = new Map();
+  const slot = (c) => {
+    const repo = c.repoName || "other";
+    if (!repos.has(repo)) repos.set(repo, { repo, running: [], queued: [], urgency: Infinity });
+    return repos.get(repo);
+  };
+  for (const c of running) {
+    const p = slot(c);
+    p.running.push(c);
+    p.urgency = Math.min(p.urgency, RANK[issueKind(c, c.lead ? byId.get(c.lead) ?? null : null)]);
+  }
+  for (const c of queued) {
+    const p = slot(c);
+    p.queued.push(c);
+    p.urgency = Math.min(p.urgency, RANK.idle);
+  }
+  return [...repos.values()].sort((a, b) => a.urgency - b.urgency || a.repo.localeCompare(b.repo))
+    .map(({ repo, running, queued }) => ({ repo, running, queued }));
+}
+
+// The full board's columns: [{ id, label, cards }]. An open Issue goes by its dot (issueKind): needs, working, waiting; a queued
+// one without a live lead is QUEUED (oldest first); an idle one is WAITING; closed ones are DONE (newest first, DONE_MAX).
+// Otherwise the most recent activity first. `repo` filters by repoName (null = all).
+const DONE_MAX = 10;
+function kanban(cards, sessionsById, repo = null) {
+  const byId = sessionsById ?? new Map();
+  const live = (c) => (c.lead ? byId.get(c.lead) ?? null : null);
+  const cols = new Map([["needs", "NEEDS YOU"], ["working", "WORKING"], ["waiting", "WAITING"], ["queued", "QUEUED"], ["done", "DONE"]]
+    .map(([id, label]) => [id, { id, label, cards: [] }]));
+  for (const c of asArray(cards)) {
+    if (repo && c.repoName !== repo) continue;
+    if (c.state === "closed") { cols.get("done").cards.push(c); continue; }
+    if (c.state === "queued" && !live(c)) { cols.get("queued").cards.push(c); continue; }
+    const kind = issueKind(c, live(c));
+    cols.get(kind === "idle" ? "waiting" : kind).cards.push(c);
+  }
+  const recency = (a, b) => time(b.updatedAt) - time(a.updatedAt) || b.id - a.id;
+  for (const id of ["needs", "working", "waiting"]) cols.get(id).cards.sort(recency);
+  cols.get("queued").cards.sort((a, b) => time(a.createdAt) - time(b.createdAt) || a.id - b.id);
+  const done = cols.get("done");
+  done.cards = done.cards.sort((a, b) => time(b.closedAt) - time(a.closedAt) || b.id - a.id).slice(0, DONE_MAX);
+  return [...cols.values()];
 }
 
 // The queue's hold reason for an Issue's spawn (its key is `lead-<issue>-<n>`), or null.
@@ -338,7 +401,43 @@ function timelineTail(text, n = TIMELINE_LINES) {
   return d.timeline.slice(-n).map((e) => ({ at: e.at, text: oneLine(e.text, 200) }));
 }
 
-const clock = (iso) => (Date.parse(iso) ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+// Local time by hand: this runtime's toLocale* ignores its options and prints seconds.
+const two = (n) => String(n).padStart(2, "0");
+const clock = (iso) => { const d = new Date(Date.parse(iso) || NaN); return Number.isNaN(d.getTime()) ? "" : `${two(d.getHours())}:${two(d.getMinutes())}`; };
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const stamp = (iso) => { const d = new Date(Date.parse(iso) || NaN); return Number.isNaN(d.getTime()) ? "" : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${clock(iso)}`; };
+
+// A tooltip body: whitespace collapsed, cut at `max` characters on a word boundary with an ellipsis, hard-wrapped at `width` columns.
+function tip(text, width = 44, max = 200) {
+  let flat = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  if (flat.length > max) {
+    const head = flat.slice(0, max - 1);
+    const space = head.lastIndexOf(" ");
+    flat = `${(space > 0 ? head.slice(0, space) : head).trimEnd()}…`;
+  }
+  const lines = [];
+  let line = "";
+  for (const word of flat.split(" ")) {
+    if (line && line.length + 1 + word.length > width) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  lines.push(line);
+  return lines.join("\n");
+}
+
+// A card's description lines: what it is about, then its status, each once (none equal to the title, case-insensitive).
+function cardLines(c) {
+  const norm = (v) => String(v ?? "").trim();
+  const seen = new Set([norm(c.title).toLowerCase()]);
+  const out = [];
+  for (const v of [c.about, c.summary].map(norm)) {
+    if (!v || seen.has(v.toLowerCase())) continue;
+    seen.add(v.toLowerCase());
+    out.push(v);
+  }
+  return out;
+}
 
 // A stored or shared tab name: "waves" (the old tab) reads as "issues".
 const normTab = (v) => (v === "uptime" ? "uptime" : "issues");
@@ -354,6 +453,29 @@ const MEANING = {
 
 // hc's own status word for a terminal the factory does not list.
 const hcKind = (status) => ({ working: "working", blocked: "needs" }[status] ?? "idle");
+
+// The full-screen toggle, a copy of jk-keys' toggleBoard (mods can't import each other; keep in step with jk-keys).
+const hiddenBlock = (id) => Boolean(findBlock(layout(), id)?.hidden);
+function findBlock(node, id) {
+  if (node?.id === id) return node;
+  for (const child of node?.children ?? []) {
+    const found = findBlock(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+function toggleBoard() {
+  if (hiddenBlock("boardfull")) {
+    setShared("jk.board.wasOpen", !hiddenBlock("board"));
+    for (const id of ["sidebar", "work", "board"]) run("layout.hide", { id });
+    run("layout.show", { id: "boardfull" });
+    return;
+  }
+  run("layout.hide", { id: "boardfull" });
+  run("layout.show", { id: "sidebar" });
+  run("layout.show", { id: "work" });
+  if (shared("jk.board.wasOpen") !== false) run("layout.show", { id: "board" });
+}
 
 export default class Board extends View {
   init(_props, cx) {
@@ -381,7 +503,19 @@ export default class Board extends View {
     this.upOpen = JSON.parse(localStorage.getItem("board.uptime.open") ?? "{}"); // group -> shown?
     this.open = new Set(JSON.parse(localStorage.getItem("issues.open") ?? "[]")); // expanded Issue cards
     this.folded = new Set(JSON.parse(localStorage.getItem("issues.folded") ?? "[]"));
+    this.full = props()?.view === "board"; // the full-screen instance (props may be absent in the sidebar's)
+    this.repoFilter = localStorage.getItem("board.full.repo") || null;
+    this.polledAt = 0;
+    this.group = localStorage.getItem("board.group") === "project" ? "project" : "status";
+    this.fastUntil = 0; // hot mode until then (an ask was clicked)
+    this.focusIssue = null; // the Issue of the focused terminal, set in render
     this.refresh(cx);
+    cx.timer.every(HOT_POLL_MS, (cx) => { if (this.hot()) this.refresh(cx, true); });
+    if (this.full) {
+      // Not while the block is hidden; shown again with data older than POLL_MS, it polls within 2 s.
+      cx.timer.every(2000, (cx) => { if (Date.now() - this.polledAt >= POLL_MS) this.refresh(cx); });
+      return;
+    }
     cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
     this.refreshUptime(cx);
     cx.timer.every(UPTIME_MS, (cx) => {
@@ -403,14 +537,26 @@ export default class Board extends View {
     });
   }
 
-  refresh(cx) {
+  // Hot: an ask was just clicked, or the focused Issue has an open ask.
+  hot() {
+    if (Date.now() < this.fastUntil) return true;
+    return this.focusIssue != null && asArray(this.overview?.asks).some((a) => askIssue(a) === this.focusIssue);
+  }
+
+  boardHidden() {
+    return Boolean(findBlock(layout(), "boardfull")?.hidden);
+  }
+
+  refresh(cx, hot = false) {
+    if (this.full && this.boardHidden()) return;
     if (this.polling || machines().find((m) => m.name === "mini")?.layout !== "ready") {
       cx.notify(); // the stale dimming follows the clock
       return;
     }
     this.polling = true;
+    this.polledAt = Date.now();
     cx.spawn(async (cx) => {
-      const r = await exec("sh", ["-c", CMD], { on: "mini" }).catch(() => null);
+      const r = await exec("sh", ["-c", pollCmd(hot)], { on: "mini" }).catch(() => null);
       this.polling = false;
       this.tried = true;
       const next = r?.stdout ? parse(r.stdout) : null;
@@ -438,6 +584,7 @@ export default class Board extends View {
 
   // The header feed, only when it changed.
   publish() {
+    if (this.full) return;
     const json = JSON.stringify(terminalsMap(this.issues, this.sessions));
     if (json === this.published) return;
     this.published = json;
@@ -525,12 +672,14 @@ export default class Board extends View {
   sessionRow(t, s, tip = "Jump to this agent") {
     const address = this.jumpTo(s);
     const kind = sessionKind(s);
-    return h_flex().id(`is-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+    const repo = repoOf(s.repo);
+    return h_flex().id(`is-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11.5).rounded(5).tooltip(tip)
       .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); run("agent.focus", { terminal: address }); }))
       .child(this.dot(t, kind, 5))
       .child(div().flex_shrink(0).text_color(t.muted).child(s.role ?? "?"))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(s.title || s.id))
+      .when(Boolean(repo), (el) => el.child(div().flex_shrink(0).max_w(96).truncate().text_color(t.muted).child(repo)))
       .child(div().flex_none().text_color(kind === "needs" ? this.tone(t, "needs") : t.dim).child(this.stateOf(s)));
   }
 
@@ -572,49 +721,53 @@ export default class Board extends View {
     const quota = quotaLine(c.quota);
     const lines = this.details.get(c.id)?.lines ?? [];
     const jump = this.jumpTo(lead);
-    const note = (id, text, tip) => div().id(`is-${c.id}-${id}`).truncate().text_size(11).text_color(t.dim).tooltip(tip ?? text).child(text);
+    const note = (id, text) => div().id(`is-${c.id}-${id}`).truncate().text_size(11.5).text_color(t.dim).tooltip(tip(text)).child(text);
     return v_flex().mt(3).gap(2)
-      .when(Boolean(c.filedTitle) && c.filedTitle !== c.title, (el) => el.child(div().pl(14).text_size(11).text_color(t.dim).child(c.filedTitle)))
+      .when(Boolean(c.filedTitle) && c.filedTitle !== c.title, (el) => el.child(div().pl(14).text_size(11.5).text_color(t.dim).child(`Asked: ${c.filedTitle}`)))
       .when(Boolean(facts), (el) => el.child(div().pl(14).child(note("facts", facts))))
       .when(Boolean(quota), (el) => el.child(div().pl(14).child(note("quota", quota))))
       .children(shown.flatMap((s) => this.sessionWithTree(t, s)))
       .children(lines.map((l, i) => h_flex().id(`is-${c.id}-tl-${i}`).pl(14).gap(6).text_size(10.5).text_color(t.dim)
-        .child(div().flex_none().child(clock(l.at))).child(div().flex_1().min_w(0).truncate().tooltip(l.text).child(l.text))))
+        .child(div().flex_none().child(clock(l.at))).child(div().flex_1().min_w(0).tooltip(tip(l.text)).child(l.text))))
       .when(Boolean(jump), (el) => el.child(h_flex().id(`is-${c.id}-jump`).h(18).pl(10).items_center().rounded(5).text_size(11).text_color(t.muted)
         .cursor_pointer().hover((st) => st.bg(t.selected).text_color(t.foreground))
         .on_click((_e, cx) => { cx.stop_propagation(); run("agent.focus", { terminal: jump }); })
         .child("Jump to agent")));
   }
 
-  // A running or closed Issue: dot, human title, working time; repo · phase · account; the summary, all of it; the rest on click.
+  // A running or closed Issue: dot, repo, working time (else age); the human title; phase · account; what it is about and its status, all of it; the rest on click.
   issueCard(t, c) {
     const open = this.open.has(c.id);
     const lead = this.bySession.get(c.lead) ?? null;
     const kind = issueKind(c, lead);
     const meta = metaLine(c);
     const worked = duration(c.insights?.workingMs);
+    const since = worked || age(c.closedAt ?? c.updatedAt);
+    const about = String(c.about ?? "").trim();
     return v_flex().id(`is-${c.id}`).flex_none().px(8).py(5).gap(2).rounded(8).cursor_pointer()
       .when(this.focusIssue === c.id, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => this.toggleIssue(c.id, cx))
-      .child(h_flex().gap(7).items_start()
-        .child(div().h(18).flex_none().flex().items_center().child(this.dot(t, kind)))
-        .child(div().flex_1().min_w(0).text_color(t.foreground).font_semibold().child(c.title))
-        .when(Boolean(worked), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).tooltip("Working time").child(worked))))
-      .when(Boolean(meta), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(meta)))
-      .when(Boolean(c.summary), (el) => el.child(div().pl(14).text_size(11).text_color(t.muted).child(c.summary)))
+      .child(h_flex().gap(7).items_center()
+        .child(this.dot(t, kind))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).font_semibold().text_color(t.muted).child(c.repoName ?? "?"))
+        .when(Boolean(since), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).tooltip(worked ? "Working time" : "Age").child(since))))
+      .child(div().pl(14).text_color(t.foreground).font_semibold().child(c.title))
+      .when(Boolean(meta), (el) => el.child(div().pl(14).truncate().text_size(11.5).text_color(t.dim).child(meta)))
+      .children(cardLines(c).map((l, i) => div().id(`is-${c.id}-d-${i}`).pl(14).text_size(l === about ? 12 : 11.5).text_color(l === about ? t.muted : t.dim).child(l)))
       .when(open, (el) => el.child(this.issueBody(t, c)));
   }
 
-  // A queued Issue: title and repo, plus the queue's hold reason when it has one.
+  // A queued Issue: repo (with the queue's hold reason when it has one), then the title.
   queuedCard(t, c, spawns) {
     const hold = holdFor(spawns, c);
     return v_flex().id(`is-${c.id}`).flex_none().px(8).py(3).gap(1).rounded(8).hover((s) => s.bg(t.hover))
-      .tooltip(c.summary || c.filedTitle || c.title)
+      .tooltip(tip(cardLines(c).join(" ") || c.filedTitle || c.title))
       .child(h_flex().gap(7).items_center()
         .child(this.dot(t, "idle"))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(c.title)))
-      .child(div().pl(14).truncate().text_size(11).text_color(t.dim).child([c.repoName, hold ? `held: ${hold}` : null].filter(Boolean).join(" · ")));
+        .child(div().flex_1().min_w(0).truncate().text_size(11).font_semibold().text_color(t.muted).child(c.repoName ?? "?"))
+        .when(Boolean(hold), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`held: ${hold}`))))
+      .child(div().pl(14).truncate().text_color(t.foreground).child(c.title));
   }
 
   // One ask: the owner's own in the blocked tone, the rest muted. Short, repo (or where it came from), age; the tooltip has the rest.
@@ -622,37 +775,40 @@ export default class Board extends View {
     const yours = isYours(a);
     const address = this.jumpFor(a);
     const hint = a.suggestion ? `Suggested: ${a.suggestion.verb} — ${a.suggestion.why} (${a.suggestion.evidence})` : null;
-    const tip = [a.summary, oneLine(a.text, 600), hint].filter(Boolean).join("\n\n");
-    return h_flex().id(`is-a-${a.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+    const text = [a.summary, a.text, hint].map((x) => tip(x)).filter(Boolean).join("\n\n");
+    return h_flex().id(`is-a-${a.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(text)
       .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
-        .on_click((_e, cx) => run("agent.focus", { terminal: address })))
+        .on_click((_e, cx) => {
+          this.fastUntil = Date.now() + HOT_MS; // the answer should clear at once
+          run("agent.focus", { terminal: address });
+        }))
       .child(this.dot(t, yours ? "needs" : "idle", 5, false))
       .child(div().flex_1().min_w(0).truncate().text_color(yours ? t.foreground : t.muted).child(oneLine(a.short ?? a.text)))
-      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(a.repo ? base(a.repo) : a.source))
+      .child(div().flex_shrink(0).max_w(96).truncate().text_color(t.muted).child(a.repo ? base(a.repo) : a.source))
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(a.at)));
   }
 
   // A human-queue item: nothing to jump to. Stale ones are dim.
   queueRow(t, q, stale) {
-    const tip = [q.summary, oneLine(q.text, 600)].filter(Boolean).join("\n\n");
-    return h_flex().id(`is-q-${q.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+    const text = [q.summary, q.text].map((x) => tip(x)).filter(Boolean).join("\n\n");
+    return h_flex().id(`is-q-${q.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(text)
       .when(stale, (el) => el.opacity(0.55))
       .child(this.dot(t, "idle", 5, false))
       .child(div().flex_1().min_w(0).truncate().text_color(stale ? t.dim : t.foreground).child(oneLine(q.short ?? q.text)))
-      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(q.repo ? base(q.repo) : q.source))
+      .child(div().flex_shrink(0).max_w(96).truncate().text_color(t.muted).child(q.repo ? base(q.repo) : q.source))
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(q.at)));
   }
 
   // One health line, dimmer than an ask and with no urgency dot: short, repo (else its kind), age; a click jumps to its session or Issue's lead.
   healthRow(t, h) {
     const address = this.jumpFor(h);
-    const tip = [h.summary, oneLine(h.text, 600)].filter(Boolean).join("\n\n");
-    return h_flex().id(`is-hl-${h.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+    const text = [h.summary, h.text].map((x) => tip(x)).filter(Boolean).join("\n\n");
+    return h_flex().id(`is-hl-${h.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(text)
       .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
         .on_click((_e, cx) => run("agent.focus", { terminal: address })))
       .child(this.dot(t, "idle", 5, false))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(oneLine(h.short ?? h.text)))
-      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(h.repo ? base(h.repo) : h.kind))
+      .child(div().flex_shrink(0).max_w(96).truncate().text_color(t.muted).child(h.repo ? base(h.repo) : h.kind))
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(h.since)));
   }
 
@@ -715,15 +871,37 @@ export default class Board extends View {
         })));
   }
 
+  setGroup(group, cx) {
+    this.group = group;
+    localStorage.setItem("board.group", group);
+    cx.notify();
+  }
+
+  // Status | Project: the tab strip's look, smaller.
+  groupControl(t) {
+    return h_flex().flex_none().gap(2).p(2).rounded(6).bg(t.hover)
+      .children([["status", "Status"], ["project", "Project"]].map(([id, label]) => {
+        const on = this.group === id;
+        return h_flex().id(`bd-group-${id}`).h(18).px(8).items_center().justify_center().rounded(5).cursor_pointer().text_size(10.5)
+          .text_color(on ? t.foreground : t.dim)
+          .when(on, (el) => el.bg(t.selected).font_semibold())
+          .when(!on, (el) => el.hover((s) => s.bg(t.selected)))
+          .on_click((_e, cx) => this.setGroup(id, cx))
+          .child(label);
+      }));
+  }
+
   render() {
-    this.adoptTab();
     const t = theme();
+    if (this.full) return this.boardView(t);
+    this.adoptTab();
     return v_flex().size_full().min_h(0).bg(t.chrome)
       .child(this.tabs(t))
       .child(this.tab === "uptime" ? this.uptimeView(t) : this.issuesView(t));
   }
 
-  issuesView(t) {
+  // What both views share, from the last good answers: staleness, the session maps, hc's tree, the focused Issue.
+  derive() {
     const ov = this.overview;
     // Stale after STALE_MS without a good poll, or when the factory's own snapshot is that old.
     const since = ov ? Math.max(Date.now() - this.at, Date.now() - (Date.parse(ov.builtAt) || this.at)) : 0;
@@ -737,19 +915,29 @@ export default class Board extends View {
     const at = focused();
     const here = at?.terminal ?? at?.agent ?? null;
     this.focusIssue = here ? live.find((s) => s.terminal?.id && `mini/${s.terminal.id}` === here)?.issue ?? null : null;
+    return { ov, stale, live };
+  }
 
+  issuesView(t) {
+    const { ov, stale, live } = this.derive();
     const asks = ov ? sortAsks(ov.asks) : [];
     const { fresh, stale: older } = splitQueue(ov?.humanQueue);
     const health = ov ? sortHealth(ov.health) : [];
     const { running, queued, recent } = this.issues ? sections(this.issues, this.bySession) : { running: [], queued: [], recent: [] };
     const nestedLoose = nestedPanes(live.filter((s) => s.issue == null).map((s) => s.terminal?.id).filter(Boolean), this.hcList);
     const loose = live.filter((s) => s.issue == null && !nestedLoose.has(s.terminal?.id)).sort((a, b) => RANK[sessionKind(a)] - RANK[sessionKind(b)] || a.id.localeCompare(b.id));
+    const grouped = this.group === "project";
+    const projects = grouped && this.issues ? byProject(this.issues, this.bySession) : [];
     const spawns = ov?.queue?.spawns ?? [];
     const queueCount = Number.isInteger(ov?.counts?.humanQueue) ? ov.counts.humanQueue : fresh.length;
     const olderOpen = this.folded.has("open:hq-older");
     return v_flex().flex_1().min_h(0).text_size(13)
       .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
-        .child(div().text_size(11.5).text_color(t.dim).child("Issues"))
+        .child(h_flex().items_center().gap(8)
+          .child(div().flex_1().text_size(11.5).text_color(t.dim).child("Issues"))
+          .child(h_flex().flex_none().gap(6).items_center()
+            .child(this.textButton(t, "bd-full", "Full", "Full-screen board (⌘⌥B)", toggleBoard))
+            .child(this.groupControl(t))))
         .when(Boolean(ov), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(summaryLine(ov)))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .when(Boolean(stale), (el) => el.opacity(0.5))
@@ -766,12 +954,88 @@ export default class Board extends View {
           ...(older.length && olderOpen ? older.map((q) => this.queueRow(t, q, true)) : []),
         ]) : [])
         .children(health.length ? this.section(t, "health", "HEALTH", health.length, () => health.map((h) => this.healthRow(t, h))) : [])
-        .children(running.length ? this.section(t, "running", "RUNNING", running.length, () => running.map((c) => this.issueCard(t, c))) : [])
-        .children(queued.length ? this.section(t, "queued", "QUEUED", queued.length, () => queued.map((c) => this.queuedCard(t, c, spawns)), { fold: true }) : [])
+        .children(grouped ? projects.flatMap((p) => this.section(t, `proj:${p.repo}`, p.repo.toUpperCase(), p.running.length + p.queued.length,
+          () => [...p.running.map((c) => this.issueCard(t, c)), ...p.queued.map((c) => this.queuedCard(t, c, spawns))])) : [])
+        .children(!grouped && running.length ? this.section(t, "running", "RUNNING", running.length, () => running.map((c) => this.issueCard(t, c))) : [])
+        .children(!grouped && queued.length ? this.section(t, "queued", "QUEUED", queued.length, () => queued.map((c) => this.queuedCard(t, c, spawns)), { fold: true }) : [])
         .children(recent.length ? this.section(t, "recent", "RECENT", recent.length, () => recent.map((c) => this.issueCard(t, c)), { fold: true }) : [])
         .children(loose.length ? this.section(t, "sessions", "SESSIONS", loose.length,
-          () => loose.flatMap((s) => this.sessionWithTree(t, s, [s.title, s.summary].filter(Boolean).join("\n\n")))) : []))
+          () => loose.flatMap((s) => this.sessionWithTree(t, s, [s.title, s.summary].map((x) => tip(x)).filter(Boolean).join("\n\n")))) : []))
       .child(this.legend(t));
+  }
+
+  textButton(t, id, label, hint, action) {
+    return h_flex().id(id).h(20).px(8).items_center().justify_center().rounded(5).cursor_pointer().text_size(10.5).text_color(t.dim)
+      .hover((s) => s.bg(t.selected).text_color(t.foreground)).tooltip(hint)
+      .on_click((_e, cx) => { action(); cx.notify(); })
+      .child(label);
+  }
+
+  setRepo(repo, cx) {
+    this.repoFilter = repo;
+    if (repo) localStorage.setItem("board.full.repo", repo);
+    else localStorage.removeItem("board.full.repo");
+    cx.notify();
+  }
+
+  // A card of the full board: repo and time, the title, phase · account, what it is about. A click focuses the lead's agent.
+  boardCard(t, c) {
+    const lead = this.bySession.get(c.lead) ?? null;
+    const kind = issueKind(c, lead);
+    const address = this.jumpTo(lead);
+    const meta = metaLine(c);
+    const worked = duration(c.insights?.workingMs);
+    const since = worked || age(c.closedAt ?? c.updatedAt);
+    const about = String(c.about ?? "").trim();
+    return v_flex().id(`bf-${c.id}`).flex_none().p(10).gap(4).rounded(8).border_1().border_color(t.border).bg(this.focusIssue === c.id ? t.selected : t.raised)
+      .when(Boolean(address), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => run("agent.focus", { terminal: address })))
+      .child(h_flex().gap(7).items_center()
+        .child(this.dot(t, kind))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).font_semibold().text_color(t.muted).child(c.repoName ?? "?"))
+        .when(Boolean(since), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).tooltip(worked ? "Working time" : "Age").child(since))))
+      .child(div().text_color(t.foreground).font_semibold().child(c.title))
+      .when(Boolean(meta), (el) => el.child(div().truncate().text_size(11.5).text_color(t.dim).child(meta)))
+      .children(cardLines(c).map((l, i) => div().id(`bf-${c.id}-d-${i}`).text_size(l === about ? 12 : 11.5).text_color(l === about ? t.muted : t.dim).child(l)));
+  }
+
+  // The full-screen board: top bar, the owner's attention strip, the Kanban.
+  boardView(t) {
+    const { ov, stale } = this.derive();
+    const cards = this.issues ?? [];
+    const repos = [...new Set([...cards.filter((c) => c.state !== "closed").map((c) => c.repoName), this.repoFilter].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const asks = ov ? sortAsks(ov.asks) : [];
+    const { fresh } = splitQueue(ov?.humanQueue);
+    const attention = asks.length + fresh.length;
+    const columns = kanban(cards, this.bySession, this.repoFilter);
+    const chip = (id, label, on, repo) => h_flex().id(id).h(22).px(10).flex_none().items_center().rounded(6).cursor_pointer().text_size(11.5)
+      .text_color(on ? t.foreground : t.dim)
+      .when(on, (el) => el.bg(t.selected).font_semibold())
+      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      .on_click((_e, cx) => this.setRepo(on ? null : repo, cx))
+      .child(label);
+    return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
+      .child(h_flex().flex_none().h(44).px(20).gap(12).items_center()
+        .child(div().flex_none().font_semibold().text_color(t.foreground).child("Issues"))
+        .when(Boolean(ov), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(summaryLine(ov))))
+        .child(h_flex().flex_1().min_w(0).gap(4).items_center()
+          .child(chip("bf-repo-all", "All", !this.repoFilter, null))
+          .children(repos.map((r) => chip(`bf-repo-${r}`, r, this.repoFilter === r, r))))
+        .child(this.textButton(t, "bf-close", "Close", "Back to the normal layout (⌘⌥B)", toggleBoard)))
+      .when(Boolean(stale), (el) => el.opacity(0.5))
+      .when(!ov, (el) => el.child(div().px(20).py(6).text_size(12).text_color(t.dim).child(this.tried ? "No answer from the factory" : "Loading…")))
+      .when(attention > 0, (el) => el.child(v_flex().flex_none().px(20).pb(10)
+        .child(v_flex().h(Math.min(120, attention * 20 + 8)).p(4).rounded(8).border_1().border_color(t.border).overflow_y_scrollbar().mode("always")
+          .children(asks.map((a) => this.askRow(t, a)))
+          .children(fresh.map((q) => this.queueRow(t, q, false))))))
+      .child(h_flex().flex_1().min_h(0).gap(12).px(20).pb(16)
+        .children(columns.map((col) => v_flex().id(`bf-col-${col.id}`).flex_1().min_w(0).min_h(0).gap(8)
+          .child(h_flex().flex_none().h(20).gap(7).items_center().text_size(10.5).font_bold().text_color(t.dim)
+            .child(div().flex_1().truncate().child(col.label))
+            .child(div().flex_none().child(String(col.cards.length))))
+          .child(v_flex().flex_1().min_h(0).gap(8).overflow_y_scrollbar().mode("always")
+            .when(!col.cards.length, (el) => el.child(div().text_size(12).text_color(t.dim).child("—")))
+            .children(col.cards.map((c) => this.boardCard(t, c)))))));
   }
 
   // Every dot color in one line, with its meaning on hover.
@@ -809,7 +1073,7 @@ export default class Board extends View {
   }
 
   upTip(m) {
-    const parts = [m.msg, m.lastBeatAt ? `last beat ${new Date(m.lastBeatAt).toLocaleString()}` : null,
+    const parts = [tip(m.msg), m.lastBeatAt && stamp(m.lastBeatAt) ? `last beat ${stamp(m.lastBeatAt)}` : null,
       m.uptime30d != null ? `30 d: ${(m.uptime30d * 100).toFixed(2)}%` : null].filter(Boolean);
     return parts.join("\n");
   }

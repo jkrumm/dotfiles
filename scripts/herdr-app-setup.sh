@@ -38,8 +38,8 @@ link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
 # The + menu's agents: the four Claude launchers (jk-new shows only these).
 link "$SRC/programs.json" "$HOME_DIR/programs.json"
 
-# keys.json is the app's own file (not tracked): add the one key that toggles the board
-# column, never overwrite an existing binding (the old layout.toggle:waves is migrated).
+# keys.json is the app's own file (not tracked): add the key that toggles the board
+# column (herdr-app-keys.sh below binds cmd-alt-b, the full-screen board), never overwrite an existing binding (the old layout.toggle:waves is migrated).
 KEYS="$HOME_DIR/keys.json"
 if [ -f "$KEYS" ]; then
   CUR="$(jq -r '.global["cmd-shift-b"] // ""' "$KEYS")"
