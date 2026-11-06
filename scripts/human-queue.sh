@@ -402,6 +402,14 @@ gui_run_command() {
     return
   fi
 
+  # The approved text must equal the executed text: any byte the sanitizer
+  # would drop means the dialog is not showing the whole command.
+  if [[ "$cmd_disp" != "$cmd_value" ]]; then
+    build_result_json "$id" "unanswered" "" "$ran_at" \
+      "refused: command contains hidden or control characters — use make human-queue"
+    return
+  fi
+
   local msg result rc
   msg="$text_disp
 

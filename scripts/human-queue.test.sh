@@ -171,6 +171,33 @@ else
   bad "control byte: capture file missing"
 fi
 
+# Approval text must equal the executed text: a command the sanitizer would
+# alter is refused without a dialog, for control bytes and invisible Unicode.
+for variant in $'echo a\x1b[2Kb' $'echo a\xe2\x80\xaeb' $'echo a\xe2\x80\x8bb' $'echo a\xef\xbb\xbfb' $'echo a\xc2\x85b'; do
+  req="$(build_req "20260914T000020-1" "hidden chars" "$variant")"
+  capture="$TMP/argv-hidden.txt"
+  rm -f "$capture"
+  out="$(HUMAN_QUEUE_TEST_BUTTON=Run HUMAN_QUEUE_CAPTURE_ARGV="$capture" gui_run "$req")"
+  label="$(printf '%s' "$variant" | od -An -tx1 | tr -d ' \n')"
+  assert_eq "altered command [$label]: status unanswered" "unanswered" "$(json_field "$out" status)"
+  assert_contains "altered command [$label]: refusal reason" "refused" "$(json_field "$out" output_tail)"
+  [[ ! -f "$capture" ]] && ok "altered command [$label]: dialog never shown" || bad "altered command [$label]: osascript WAS called"
+done
+
+# Invisible Unicode in the request text is stripped from the dialog message.
+uni_text="$(printf 'plain\xe2\x80\xaeRTL\xe2\x80\x8bZW end')"
+req="$(build_req "20260914T000021-1" "$uni_text" "echo uni-ok")"
+capture="$TMP/argv-uni.txt"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Deny HUMAN_QUEUE_CAPTURE_ARGV="$capture" gui_run "$req")"
+msg_line="$(sed -n '3p' "$capture")"
+assert_contains "unicode text: visible characters kept" "plainRTLZW end" "$msg_line"
+if printf '%s' "$msg_line" | LC_ALL=C grep -q $'\xe2\x80'; then bad "unicode text: invisible characters leaked into the dialog"; else ok "unicode text: invisible characters stripped"; fi
+
+# Ordinary non-ASCII text is untouched and still runs.
+req="$(build_req "20260914T000022-1" "Prüfung €" "echo Prüfung-ok")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run gui_run "$req")"
+assert_eq "umlaut command: still runs" "done" "$(json_field "$out" status)"
+
 # Over-long command: must never reach the dialog at all (no osascript call —
 # a truncated command must not be offered a Run button).
 long_cmd="echo $(head -c 3000 </dev/zero | tr '\0' 'x')"

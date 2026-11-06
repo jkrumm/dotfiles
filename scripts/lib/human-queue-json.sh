@@ -84,8 +84,22 @@ json_field() {
 # a human learns to click past — which costs exactly the protection it exists
 # to give. Deleting C0 (minus tab/newline) plus DEL keeps every UTF-8 byte
 # (0x80-0xFF) untouched and is identical in every locale.
+#
+# Beyond C0/DEL, the UTF-8 encodings of the invisible and direction-changing
+# code points are removed too (byte sequences, so the filter is locale-proof
+# like the tr above): C1 controls U+0080-009F, zero-width U+200B-200D / U+2060 /
+# U+FEFF, direction marks and overrides U+200E/F, U+202A-202E, U+2066-2069, and
+# the line/paragraph separators U+2028/9. What a human reads must be what runs.
 printable() {
-  printf '%s' "$1" | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177'
+  local e2=$'\xe2' c2=$'\xc2' ef=$'\xef' bb=$'\xbb' bf=$'\xbf'
+  local b80=$'\x80' b81=$'\x81' b8b=$'\x8b' b8f=$'\x8f' b9f=$'\x9f'
+  local ba0=$'\xa0' ba6=$'\xa6' ba8=$'\xa8' ba9=$'\xa9' bae=$'\xae'
+  printf '%s' "$1" | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177' \
+    | LC_ALL=C sed \
+        -e "s/${e2}${b80}[${b8b}-${b8f}${ba8}-${bae}]//g" \
+        -e "s/${e2}${b81}[${ba0}${ba6}-${ba9}]//g" \
+        -e "s/${c2}[${b80}-${b9f}]//g" \
+        -e "s/${ef}${bb}${bf}//g"
 }
 
 # A request id is always <date>T<time>-<RANDOM> from ask-human.sh. Shared by
