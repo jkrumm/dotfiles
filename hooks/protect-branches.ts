@@ -79,23 +79,28 @@ export interface RepoConfig {
   directToMain: string[];
 }
 
+/** Fallback is safe but must not be silent: a stderr line makes it observable. */
+function warnFallback(why: string): void {
+  process.stderr.write(`protect-branches: pr-required-repos.json ${why} — using built-in fallback list\n`);
+}
+
 export async function loadRepoConfig(): Promise<RepoConfig> {
   try {
     const f = Bun.file(`${process.env.HOME}/.claude/pr-required-repos.json`);
     if (await f.exists()) {
       const data = (await f.json()) as { repos?: unknown; directToMain?: unknown };
-      const prRequired =
-        Array.isArray(data.repos) && data.repos.every((r) => typeof r === "string")
-          ? (data.repos as string[])
-          : PR_REQUIRED_FALLBACK;
+      const reposValid = Array.isArray(data.repos) && data.repos.every((r) => typeof r === "string");
+      if (!reposValid) warnFallback("has no valid `repos` string array");
+      const prRequired = reposValid ? (data.repos as string[]) : PR_REQUIRED_FALLBACK;
       const directToMain =
         Array.isArray(data.directToMain) && data.directToMain.every((r) => typeof r === "string")
           ? (data.directToMain as string[])
           : [];
       return { prRequired, directToMain };
     }
-  } catch {
-    // fall through to fallback
+    warnFallback("is missing");
+  } catch (err) {
+    warnFallback(`is unreadable (${err instanceof Error ? err.message : String(err)})`);
   }
   return { prRequired: PR_REQUIRED_FALLBACK, directToMain: [] };
 }
@@ -135,26 +140,66 @@ export interface GitInvocation {
  *
  * Walks git's global flags rather than assuming the subcommand sits at index 1,
  * so `git -C repo -c user.name=x push` classifies as a push against `repo`.
- * A wrapper prefix (`timeout 60 git …`, `command git …`) is tolerated.
+ * A wrapper prefix (`timeout 60 git …`, `command git …`) is tolerated. An alias
+ * defined on the command line (`-c alias.p=push`) is expanded, so `git -c
+ * alias.p=push p origin main` reads as the push it is.
  */
 export function inspectGit(tokens: string[]): GitInvocation | null {
   const g = tokens.findIndex((t) => basename(t) === "git");
   if (g === -1) return null;
 
   const cDirs: string[] = [];
+  const aliases = new Map<string, string>();
   let i = g + 1;
   while (i < tokens.length) {
     const token = tokens[i];
     if (!token.startsWith("-")) break;
     if (GIT_VALUE_FLAGS.has(token)) {
       if (token === "-C" && tokens[i + 1] !== undefined) cDirs.push(tokens[i + 1]);
+      const alias = token === "-c" ? tokens[i + 1]?.match(/^alias\.([^=]+)=(.*)$/s) : null;
+      if (alias) aliases.set(alias[1], alias[2]);
       i += 2;
       continue;
     }
     i++;
   }
 
-  return { subcommand: tokens[i] ?? null, args: tokens.slice(i + 1), cDirs };
+  let subcommand = tokens[i] ?? null;
+  let args = tokens.slice(i + 1);
+  for (let depth = 0; subcommand !== null && aliases.has(subcommand) && depth < 5; depth++) {
+    const words = (aliases.get(subcommand) ?? "").replace(/^!/, "").trim().split(/\s+/);
+    if (basename(words[0]) === "git") words.shift();
+    subcommand = words.shift() ?? null;
+    args = [...words, ...args];
+  }
+
+  return { subcommand, args, cDirs };
+}
+
+/**
+ * Every git directory the command names: `--git-dir=<x>`, `--git-dir <x>` and a
+ * `GIT_DIR=<x>` assignment (as a prefix, or an `export`). git judges the repo
+ * from these, not from the cwd.
+ */
+export function gitDirsOf(tokens: string[]): string[] {
+  const dirs: string[] = [];
+  const g = tokens.findIndex((t) => basename(t) === "git");
+  const isExport = tokens[0] === "export";
+  if (g === -1 && !isExport) return dirs;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.startsWith("GIT_DIR=") && (isExport || i < g)) dirs.push(t.slice("GIT_DIR=".length));
+    else if (g !== -1 && i > g && t.startsWith("--git-dir=")) dirs.push(t.slice("--git-dir=".length));
+    else if (g !== -1 && i > g && t === "--git-dir" && tokens[i + 1] !== undefined) {
+      dirs.push(tokens[i + 1]);
+    }
+  }
+  return dirs;
+}
+
+/** A path the static parse cannot resolve: shell expansion or a substitution. */
+function isDynamic(value: string): boolean {
+  return /[$`\0]/.test(value);
 }
 
 // ── Which directory the command acts on ──────────────────────────────────────
@@ -172,13 +217,31 @@ export function repoDirectories(command: string, sessionCwd: string): string[] {
   const explicit: string[] = [];
   for (const tokens of splitIntoCommands(command)) {
     const git = inspectGit(tokens);
-    if (!git) continue;
-    for (const dir of git.cDirs) explicit.push(expandPath(dir, cwd));
+    if (git) for (const dir of git.cDirs) explicit.push(expandPath(dir, cwd));
+    for (const dir of gitDirsOf(tokens)) explicit.push(repoOfGitDir(expandPath(dir, cwd)));
   }
   if (cwd !== sessionCwd) explicit.push(cwd);
 
   const resolved = [...new Set(explicit)].filter(isDirectory);
   return resolved.length > 0 ? resolved : [sessionCwd];
+}
+
+/** `<repo>/.git` belongs to `<repo>`; a bare git dir is its own repo. */
+function repoOfGitDir(dir: string): string {
+  const trimmed = dir.replace(/\/+$/, "");
+  return basename(trimmed) === ".git" ? trimmed.slice(0, trimmed.length - 5) || "/" : trimmed;
+}
+
+/**
+ * True when a `--git-dir`/`GIT_DIR` points somewhere that cannot be resolved
+ * statically (a variable, a substitution, a missing directory). The repo git
+ * will use is then unknown, so a push must be denied rather than guessed.
+ */
+export function hasUnresolvableGitDir(command: string, sessionCwd: string): boolean {
+  const cwd = effectiveCwd(command, sessionCwd);
+  return splitIntoCommands(command).some((tokens) =>
+    gitDirsOf(tokens).some((dir) => isDynamic(dir) || !isDirectory(expandPath(dir, cwd)))
+  );
 }
 
 // ── What the push does ───────────────────────────────────────────────────────
@@ -187,6 +250,8 @@ export type PushKind =
   | { kind: "none" }
   /** `--force`/`-f` without `--force-with-lease` — blocked on every branch. */
   | { kind: "hard-force" }
+  /** `--all` / `--mirror` — pushes every branch, protected ones included. */
+  | { kind: "all-refs" }
   /** A refspec naming a protected branch outright. */
   | { kind: "protected-ref" }
   /** No refspec (or `HEAD`) — blocked only if the current branch is protected. */
@@ -214,19 +279,24 @@ export function inspectPush(command: string): PushKind {
     if (!git || git.subcommand !== "push") continue;
 
     const { args } = git;
-    const hardForce =
-      (args.includes("--force") || args.includes("-f")) && !args.includes("--force-with-lease");
-    if (hardForce) return { kind: "hard-force" };
+    if (args.includes("--all") || args.includes("--mirror")) return { kind: "all-refs" };
 
+    const lease = args.some((a) => a.startsWith("--force-with-lease"));
     const positional: string[] = [];
+    let force = false;
     for (let j = 0; j < args.length; j++) {
-      if (PUSH_VALUE_FLAGS.has(args[j])) {
+      const arg = args[j];
+      if (PUSH_VALUE_FLAGS.has(arg)) {
         j++;
         continue;
       }
-      if (args[j].startsWith("-")) continue;
-      positional.push(args[j]);
+      if (arg === "--force") force = true;
+      // Short-flag cluster (`-fu`): scan up to `o`, whose value is the rest.
+      if (/^-[^-]/.test(arg) && arg.slice(1).split("o")[0].includes("f")) force = true;
+      if (arg.startsWith("-")) continue;
+      positional.push(arg);
     }
+    if (force && !lease) return { kind: "hard-force" };
 
     // positional: [] bare, [remote], [remote, ...refspecs]
     const refspecs = positional.slice(1);
@@ -234,7 +304,14 @@ export function inspectPush(command: string): PushKind {
       verdict = { kind: "protected-ref" };
       continue;
     }
-    if (refspecs.length === 0 || refspecs.every((spec) => spec === "HEAD")) {
+    // A leading `+` forces that one ref whatever the flags say.
+    if (refspecs.some((spec) => spec.startsWith("+"))) return { kind: "hard-force" };
+    // A refspec the parse cannot resolve (`$BRANCH`, `$(git branch --show-current)`)
+    // is judged as the current branch.
+    if (
+      refspecs.length === 0 ||
+      refspecs.every((spec) => spec === "HEAD" || isDynamic(destinationBranch(spec)))
+    ) {
       if (verdict.kind === "none") verdict = { kind: "current-branch" };
     }
   }
@@ -311,8 +388,20 @@ if (import.meta.main) {
   const push = inspectPush(command);
   if (push.kind === "none") process.exit(0);
 
+  const cwd = input.cwd ?? process.cwd();
+  if (hasUnresolvableGitDir(command, cwd)) {
+    block(
+      [
+        "git push with an unresolvable --git-dir / GIT_DIR is blocked in Claude Code.",
+        "",
+        "The repository git will use cannot be determined statically, so the PR rule cannot be checked.",
+        "Use a literal path, or run the command in your terminal.",
+      ].join("\n")
+    );
+  }
+
   const config = await loadRepoConfig();
-  const enforceDir = repoDirectories(command, input.cwd ?? process.cwd()).find((dir) =>
+  const enforceDir = repoDirectories(command, cwd).find((dir) =>
     requiresPR(dir, config)
   );
   if (!enforceDir) process.exit(0);
@@ -325,6 +414,17 @@ if (import.meta.main) {
         "Claude Code must not rewrite history on remote branches.",
         "Use --force-with-lease for feature branches (safe: fails if remote has new commits).",
         "To force push: run the command directly in your terminal.",
+      ].join("\n")
+    );
+  }
+
+  if (push.kind === "all-refs") {
+    block(
+      [
+        "git push --all / --mirror is blocked in Claude Code.",
+        "",
+        `It pushes every branch, protected ones included — ${enforceDir} requires a PR.`,
+        "Push the feature branch by name.",
       ].join("\n")
     );
   }

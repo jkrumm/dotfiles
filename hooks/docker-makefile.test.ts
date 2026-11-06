@@ -9,13 +9,17 @@
  * and defeats the point of the hook. Both are covered below.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   effectiveCwd,
   inspectDockerCommand,
   projectDirectories,
   shouldBlock,
   splitIntoCommands,
+  unwrapWrappers,
 } from "./docker-makefile";
 
 describe("splitIntoCommands", () => {
@@ -331,8 +335,19 @@ describe("inspectDockerCommand", () => {
  * Makefile-less directory anywhere in the chain cannot fail the gate open.
  */
 describe("projectDirectories — a cd cannot shake off the project", () => {
-  const HOME = process.env.HOME ?? "";
+  // A throwaway HOME: the tests must not depend on ~/SourceRoot/dotfiles existing.
+  const realHome = process.env.HOME;
+  const HOME = realpathSync(mkdtempSync(join(tmpdir(), "dm-home-")));
   const REPO = `${HOME}/SourceRoot/dotfiles`;
+
+  beforeAll(() => {
+    mkdirSync(REPO, { recursive: true });
+    process.env.HOME = HOME;
+  });
+  afterAll(() => {
+    process.env.HOME = realHome;
+    rmSync(HOME, { recursive: true, force: true });
+  });
 
   test("an absolute -f puts its own directory first", () => {
     expect(projectDirectories(`cd /tmp && docker compose -f ${REPO}/x.yml up`, "/usr")[0])
@@ -366,5 +381,62 @@ describe("projectDirectories — a cd cannot shake off the project", () => {
   test("does not duplicate a directory reached two ways", () => {
     const dirs = projectDirectories("cd /usr && docker compose -f /usr/x.yml up", "/usr");
     expect(dirs).toEqual(["/usr"]);
+  });
+});
+
+describe("shouldBlock — wrappers with arguments, and shell strings", () => {
+  test.each([
+    ["timeout 120 docker compose up -d"],
+    ["gtimeout 5m docker compose up -d"],
+    ["timeout -k 5 -s KILL 120 docker compose up -d"],
+    ["timeout --signal=KILL 10 docker compose up -d"],
+    ["xargs docker rm"],
+    ["xargs -I {} docker rm {}"],
+    ["watch docker compose up -d"],
+    ["watch -n 2 docker compose up -d"],
+    ["sudo -u deploy docker compose up -d"],
+    ["sudo -g wheel -u deploy docker compose up -d"],
+    ["sudo -D /srv -C 3 docker compose up -d"],
+    ["env -u FOO docker compose up -d"],
+    ["env -C /srv docker compose up -d"],
+    ["nice -n 10 docker compose up -d"],
+    ["stdbuf -o L docker compose up -d"],
+    ["stdbuf -i0 -o L -e L docker compose up -d"],
+    ["bash -c 'docker compose up -d'"],
+    ['sh -c "docker compose up -d"'],
+    ['zsh -c "cd /srv && docker compose up -d"'],
+    ["bash -lc 'docker compose up -d'"],
+    ["sudo bash -c 'docker compose up -d'"],
+    ["timeout 60 bash -c 'docker run x'"],
+    ["bash -c \"bash -c 'docker compose up -d'\""],
+    ['eval "docker compose up -d"'],
+  ])("blocks: %s", (command) => {
+    expect(shouldBlock(command)).toBe(true);
+  });
+
+  test.each([
+    ["docker ps"],
+    ["timeout 10 docker ps"],
+    ["sudo -u deploy docker logs web"],
+    ["bash -c 'docker ps'"],
+    ["make up"],
+    ["timeout 120 make up"],
+    ["sudo -u deploy make up"],
+    ["bash -c 'make up'"],
+    ["xargs echo docker"],
+    ["bash -c 'echo docker compose up'"],
+    ["bash script.sh"],
+  ])("allows: %s", (command) => {
+    expect(shouldBlock(command)).toBe(false);
+  });
+
+  test("a backslash-newline between docker and its subcommand is a continuation", () => {
+    expect(shouldBlock("docker \\\ncompose up -d")).toBe(true);
+  });
+
+  test("unwrapWrappers gives value flags their arity", () => {
+    expect(unwrapWrappers(["sudo", "-u", "x", "docker", "ps"])).toEqual(["docker", "ps"]);
+    expect(unwrapWrappers(["timeout", "-k", "1", "60", "docker", "ps"])).toEqual(["docker", "ps"]);
+    expect(unwrapWrappers(["env", "A=1", "-u", "B", "docker"])).toEqual(["docker"]);
   });
 });

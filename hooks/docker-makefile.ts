@@ -49,7 +49,84 @@ const WRAPPERS = new Set([
   "nohup",
   "stdbuf",
   "time",
+  "timeout",
+  "gtimeout",
+  "xargs",
+  "watch",
 ]);
+
+/**
+ * Wrapper flags that consume the following token as their value, per wrapper.
+ * Without the arity `sudo -u deploy docker …` read `deploy` as the wrapped
+ * command and the docker call behind it escaped. Unknown flags stay one token.
+ */
+const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
+  sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "--user", "--group"]),
+  env: new Set(["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]),
+  nice: new Set(["-n", "--adjustment"]),
+  stdbuf: new Set(["-i", "-o", "-e"]),
+  timeout: new Set(["-k", "-s", "--kill-after", "--signal"]),
+  gtimeout: new Set(["-k", "-s", "--kill-after", "--signal"]),
+  xargs: new Set(["-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a"]),
+  watch: new Set(["-n", "--interval"]),
+};
+
+/** Wrappers whose first positional argument is a duration, not the command. */
+const DURATION_WRAPPERS = new Set(["timeout", "gtimeout"]);
+
+/**
+ * Strip leading env assignments and wrapper commands (with their flags and flag
+ * values) and return the tokens of the command they wrap.
+ */
+export function unwrapWrappers(tokens: string[]): string[] {
+  let i = 0;
+  let wrapper: string | null = null;
+  let needsDuration = false;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
+      i++;
+      continue;
+    }
+    if (wrapper !== null && t.startsWith("-")) {
+      i += WRAPPER_VALUE_FLAGS[wrapper]?.has(t) ? 2 : 1;
+      continue;
+    }
+    if (wrapper !== null && needsDuration) {
+      needsDuration = false;
+      i++;
+      continue;
+    }
+    const name = basename(t);
+    if (WRAPPERS.has(name)) {
+      wrapper = name;
+      needsDuration = DURATION_WRAPPERS.has(name);
+      i++;
+      continue;
+    }
+    break;
+  }
+  return tokens.slice(i);
+}
+
+/**
+ * Commands hidden inside a shell string: `bash -c '…'`, `sh -c`, `zsh -c`
+ * (including `-lc`-style clusters) and `eval …`. Returns the parsed inner
+ * commands, which may themselves nest.
+ */
+function nestedShellCommands(tokens: string[]): string[][] {
+  const rest = unwrapWrappers(tokens);
+  if (rest.length === 0) return [];
+  const name = basename(rest[0]);
+  if (name === "eval") return splitIntoCommands(rest.slice(1).join(" "));
+  if (name !== "sh" && name !== "bash" && name !== "zsh") return [];
+  for (let i = 1; i < rest.length && rest[i].startsWith("-"); i++) {
+    if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(rest[i]) && rest[i + 1] !== undefined) {
+      return splitIntoCommands(rest[i + 1]);
+    }
+  }
+  return [];
+}
 
 /**
  * Subcommands that need no Makefile orchestration: read-only inspection plus
@@ -211,6 +288,7 @@ export function splitIntoCommands(input: string): string[][] {
     endToken();
     if (current.length > 0) {
       commands.push(current);
+      for (const nested of nestedShellCommands(current)) commands.push(nested);
       current = [];
     }
   };
@@ -235,7 +313,8 @@ export function splitIntoCommands(input: string): string[][] {
 
     // Escape outside quotes — next character is literal.
     if (ch === "\\") {
-      if (i + 1 < input.length) add(input[i + 1]);
+      // Backslash-newline is a line continuation: the shell drops both.
+      if (i + 1 < input.length && input[i + 1] !== "\n") add(input[i + 1]);
       i += 2;
       continue;
     }
@@ -254,7 +333,7 @@ export function splitIntoCommands(input: string): string[][] {
       i++;
       while (i < input.length && input[i] !== '"') {
         if (input[i] === "\\") {
-          if (i + 1 < input.length) add(input[i + 1]);
+          if (i + 1 < input.length && input[i + 1] !== "\n") add(input[i + 1]);
           i += 2;
           continue;
         }
@@ -478,29 +557,10 @@ function isReadOnlyManagement({ subcommand, args }: DockerInvocation): boolean {
  * Inspect one simple command. Returns null when it does not invoke docker.
  */
 export function inspectDockerCommand(tokens: string[]): DockerInvocation | null {
+  tokens = unwrapWrappers(tokens);
   let i = 0;
 
-  // Skip leading environment assignments and wrapper commands (and their flags).
-  let sawWrapper = false;
-  while (i < tokens.length) {
-    const t = tokens[i];
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
-      i++;
-      continue;
-    }
-    if (sawWrapper && t.startsWith("-")) {
-      i++;
-      continue;
-    }
-    if (WRAPPERS.has(basename(t))) {
-      i++;
-      sawWrapper = true;
-      continue;
-    }
-    break;
-  }
-
-  if (i >= tokens.length) return null;
+  if (tokens.length === 0) return null;
 
   const name = basename(tokens[i]);
   if (name !== "docker" && name !== "docker-compose") return null;
