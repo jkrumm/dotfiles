@@ -17,7 +17,7 @@ timestamp: 2026-10-04
 (Hermes), one human cockpit (the Herdr app on herdr-core). Every repo describes itself through the same
 four Make targets and four AGENTS.md sections, so no central component holds
 per-repo knowledge. Trust comes from the infrastructure (Tailscale, the owner's
-GitHub account); the only gates left are quality gates. Alerts go to Slack and a
+GitHub account); the only gates left are quality gates. Alerts go to ntfy (Slack for Kuma and HyperDX until they move) and a
 human acts; there is no autonomous remediation loop.
 
 STATUS: adopted 2026-10-02, landed as of 2026-10-10 (setup round 4 closed the
@@ -44,7 +44,7 @@ Before-the-rewrite design: [[agent-platform-history]].
  jobs-grade (job failures)             Hermes: Slack/Argo chat               (narrate, answer)
         │                                   │
         ▼                                   │ opens a Herdr tab when asked
- Slack #alerts → a human reads and acts     ▼
+ ntfy alerts → a human reads and acts     ▼
                                        factory Issue · @implementer
 
  AGENT-WORKFLOWS (`agw`): check · review · research · prose · diagram · brain
@@ -141,8 +141,9 @@ a lost program.
 
 ## Notifications
 
-Uptime Kuma and HyperDX alerts, and background-job failures (`jobs-grade --slack`), go to Slack
-`#alerts`; a human reads and acts. Source model and thresholds: `docs/ops-signals.md`.
+Background-job failures (`jobs-grade --ntfy`) go to ntfy topic `alerts`, and the human-queue nudge to topic
+`factory`, both on the iPhone and the Mac; Uptime Kuma and HyperDX alerts still go to Slack `#alerts` until their own
+moves. A human reads and acts. Source model and thresholds: `docs/ops-signals.md`.
 
 ## Open facts to verify
 

@@ -503,7 +503,7 @@ biometric `op` (`make secrets-seed`), the Tailscale ACL push, any person-only
 decision — an agent on the mini enqueues instead of writing prose nobody reads.
 Two ways the request then gets in front of a human: the MacBook drains on its
 own schedule (`make human-queue`), or the mini **triggers the approval itself**
-as a native dialog there — **the default since 2026-09-15**; the Slack notify
+as a native dialog there — **the default since 2026-09-15**; the ntfy notify
 hook only fires when that push could not resolve the request.
 
 | Side | Command | Runs on |
@@ -573,14 +573,15 @@ hook; `--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only.
 `ask-human.sh` fires `~/.config/human-queue/notify-hook` (backgrounded, output
 discarded) with `<id> <text>` right after the request is durably on disk.
 `make setup` installs it on the cache backend only, as a symlink to
-`scripts/human-queue-notify-hook.sh`: one Slack line to `#agents` through Argo's
-Slack proxy (`POST /slack/channels/<id>/messages`, bearer from
-`secrets-run read op://common/api/SECRET`, channel id resolved by name from
-`GET /slack/channels`), with
-the question and the `make human-queue` hint.
+`scripts/human-queue-notify-hook.sh`: one ntfy message on topic `factory`
+(priority high, so the iPhone and the Mac both ring) with the question and the
+`make human-queue` hint. `POST <base-url>/factory`, bearer from
+`secrets-run read op://common/ntfy/TOKEN`; the base URL is private, so it comes
+from `NTFY_URL` or the `base-url` in `~/SourceRoot/homelab/config/ntfy/server.yml`,
+read at run time.
 
-- **Every failure is soft** — no token, no channel, Argo down: the hook exits 0
-  and the request is still queued. The queue is the source of truth; Slack is
+- **Every failure is soft** — no token, no base URL, ntfy down: the hook exits 0
+  and the request is still queued. The queue is the source of truth; ntfy is
   the nudge. The `no notify hook at …` note from `ask-human.sh` means the hook
   was never installed on this machine (`make setup`), not a failed push.
 - **No poller on the other end, still** — the notification tells the human a

@@ -123,10 +123,10 @@ poll_for_result() {
 # passes an explicit budget: `--wait 600`. Pushing is the default: the approval
 # dialog opens on the MacBook right after enqueueing (see push_request below),
 # and --wait is ignored — push resolves synchronously over one ssh round trip.
-# --no-push (or HUMAN_QUEUE_PUSH=0) enqueues only. The notify hook (the Slack
-# "Human needed" post) fires only when the push did not resolve the request —
+# --no-push (or HUMAN_QUEUE_PUSH=0) enqueues only. The notify hook (the ntfy
+# "Human needed" message) fires only when the push did not resolve the request —
 # MacBook unreachable, dialog unanswered — or pushing was turned off; a request
-# the owner clicked through never reaches #agents. --push is still accepted.
+# the owner clicked through never reaches ntfy. --push is still accepted.
 cmd_ask() {
   [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command>] [--wait <seconds>] [--no-push]"
   local text="$1"; shift

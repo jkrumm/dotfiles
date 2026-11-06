@@ -7,7 +7,7 @@
 //   jobs-grade            JSON array on stdout
 //   jobs-grade --table    human table, verdict line last (exit 0 / 2 like --summary)
 //   jobs-grade --summary  one line, exit 0 (all ok) / 2 (WARN) — what the heartbeat and doctor relay
-//   jobs-grade --slack    with --summary or --table: post to Slack #alerts when the set of not-ok jobs changes
+//   jobs-grade --ntfy     with --summary or --table: post to ntfy topic `alerts` when the set of not-ok jobs changes
 //                         (new failure, grade change, recovery). Best-effort: a failed post writes one stderr
 //                         line, never changes stdout or the exit code, and is retried on the next tick because
 //                         the state file is only written after a successful post.
@@ -23,9 +23,9 @@
 //
 // Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
 // JOBRUN_HERMES_CRON overrides ~/.hermes/cron/jobs.json.
-// --slack: JOBS_GRADE_SLACK_STATE (default ~/.local/state/jobs-grade/slack.json), JOBS_GRADE_SLACK_CHANNEL
-// (default the #alerts channel), JOBS_GRADE_SLACK_TOKEN (default: `secrets-run read` of the bot token),
-// JOBS_GRADE_SLACK_URL (default the Slack chat.postMessage endpoint; tests point it at a stub).
+// --ntfy: JOBS_GRADE_NTFY_STATE (default ~/.local/state/jobs-grade/ntfy.json), JOBS_GRADE_NTFY_TOPIC (default `alerts`),
+// JOBS_GRADE_NTFY_TOKEN (default: `secrets-run read op://common/ntfy/TOKEN`), JOBS_GRADE_NTFY_URL or NTFY_URL (default: the
+// base-url in ~/SourceRoot/homelab/config/ntfy/server.yml, read at run time because the host is private; tests point it at a stub).
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs"
 import { homedir, hostname } from "node:os"
 import { dirname, join } from "node:path"
@@ -340,20 +340,21 @@ export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
   return { line: `jobs WARN (${rows.length}): ${bad.map((r) => `${r.label}=${r.grade}`).join(", ")}`, code: 2 }
 }
 
-// --- Slack transitions ---------------------------------------------------------------------------
-const SLACK_MAX_CHARS = 1500
-const SLACK_DEFAULT_CHANNEL = "C0AS1LAUQ3C" // #alerts
-const SLACK_DEFAULT_URL = "https://slack.com/api/chat.postMessage"
-const SLACK_TOKEN_REF = "op://hermes/slack/bot-token"
+// --- ntfy transitions ----------------------------------------------------------------------------
+const NTFY_MAX_CHARS = 1500
+const NTFY_DEFAULT_TOPIC = "alerts"
+const NTFY_TOKEN_REF = "op://common/ntfy/TOKEN"
+// The server host is private and this repo is public: read it from the homelab repo's ntfy config at run time.
+const NTFY_CONFIG = () => join(homedir(), "SourceRoot/homelab/config/ntfy/server.yml")
 
-export const defaultSlackState = () => process.env.JOBS_GRADE_SLACK_STATE || join(homedir(), ".local/state/jobs-grade/slack.json")
+export const defaultNtfyState = () => process.env.JOBS_GRADE_NTFY_STATE || join(homedir(), ".local/state/jobs-grade/ntfy.json")
 const shortHost = () => hostname().split(".")[0]
 
-const clip = (text: string) => (text.length > SLACK_MAX_CHARS ? `${text.slice(0, SLACK_MAX_CHARS - 1)}…` : text)
+const clip = (text: string) => (text.length > NTFY_MAX_CHARS ? `${text.slice(0, NTFY_MAX_CHARS - 1)}…` : text)
 
-/** What to tell Slack, given the not-ok set already announced (`prev`) and the current rows.
+/** What to tell ntfy, given the not-ok set already announced (`prev`) and the current rows.
  *  `text` is null when nothing changed (same labels, same grades); `next` is the set to persist once the post lands. */
-export function slackTransition(prev: Record<string, string>, rows: Graded[], host: string = shortHost()): { text: string | null; next: Record<string, string> } {
+export function ntfyTransition(prev: Record<string, string>, rows: Graded[], host: string = shortHost()): { text: string | null; next: Record<string, string> } {
   const bad = rows.filter((r) => r.grade !== "ok")
   const next = Object.fromEntries(bad.map((r) => [r.label, r.grade]))
   const same = Object.keys(next).length === Object.keys(prev).length && Object.entries(next).every(([l, g]) => prev[l] === g)
@@ -367,7 +368,7 @@ export function slackTransition(prev: Record<string, string>, rows: Graded[], ho
   return { text: clip(`${head} ${bad.length} job(s) not ok — ${list}`), next }
 }
 
-function readSlackState(path: string): Record<string, string> {
+function readNtfyState(path: string): Record<string, string> {
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"))
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {}
@@ -377,40 +378,46 @@ function readSlackState(path: string): Record<string, string> {
   }
 }
 
-function slackToken(): string {
-  const fromEnv = process.env.JOBS_GRADE_SLACK_TOKEN
+function ntfyToken(): string {
+  const fromEnv = process.env.JOBS_GRADE_NTFY_TOKEN
   if (fromEnv) return fromEnv
   // launchd's PATH is minimal; secrets-run lives in ~/.local/bin
   const PATH = `${process.env.PATH ?? "/usr/bin:/bin"}:${join(homedir(), ".local/bin")}`
-  const r = Bun.spawnSync(["secrets-run", "read", SLACK_TOKEN_REF], { env: { ...process.env, PATH }, stdout: "pipe", stderr: "ignore", timeout: 10_000 })
+  const r = Bun.spawnSync(["secrets-run", "read", NTFY_TOKEN_REF], { env: { ...process.env, PATH }, stdout: "pipe", stderr: "ignore", timeout: 10_000 })
   const token = r.stdout.toString().trim()
-  if (r.exitCode !== 0 || !token) throw new Error("no slack token (secrets-run read failed)")
+  if (r.exitCode !== 0 || !token) throw new Error("no ntfy token (secrets-run read failed)")
   return token
 }
 
-async function postSlack(text: string): Promise<void> {
-  const res = await fetch(process.env.JOBS_GRADE_SLACK_URL || SLACK_DEFAULT_URL, {
+function ntfyBaseUrl(): string {
+  const fromEnv = process.env.JOBS_GRADE_NTFY_URL || process.env.NTFY_URL
+  if (fromEnv) return fromEnv.replace(/\/+$/, "")
+  const m = /^base-url:\s*"?([^"\s]+)"?\s*$/m.exec(existsSync(NTFY_CONFIG()) ? readFileSync(NTFY_CONFIG(), "utf8") : "")
+  if (!m) throw new Error(`no ntfy base url (NTFY_URL unset, ${NTFY_CONFIG()} unreadable)`)
+  return m[1].replace(/\/+$/, "")
+}
+
+async function postNtfy(text: string, recovered: boolean): Promise<void> {
+  const res = await fetch(`${ntfyBaseUrl()}/${process.env.JOBS_GRADE_NTFY_TOPIC || NTFY_DEFAULT_TOPIC}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${slackToken()}` },
-    body: JSON.stringify({ channel: process.env.JOBS_GRADE_SLACK_CHANNEL || SLACK_DEFAULT_CHANNEL, text }),
+    headers: { Authorization: `Bearer ${ntfyToken()}`, Title: "Background jobs", Tags: recovered ? "white_check_mark" : "warning" },
+    body: text,
     signal: AbortSignal.timeout(10_000),
   })
-  const body: unknown = await res.json().catch(() => null)
-  const reply = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null
-  if (res.status !== 200 || reply?.ok !== true) throw new Error(`http ${res.status}${typeof reply?.error === "string" ? ` ${reply.error}` : ""}`)
+  if (!res.ok) throw new Error(`http ${res.status}`)
 }
 
 /** Best-effort: announce a change in the not-ok set, then persist it. Never throws.
  *  Returns "failed" when the post or the state write failed (a failed write after a landed post re-posts next tick: acceptable). */
-export async function slackNotify(rows: Graded[], statePath: string = defaultSlackState()): Promise<"ok" | "unchanged" | "failed"> {
+export async function ntfyNotify(rows: Graded[], statePath: string = defaultNtfyState()): Promise<"ok" | "unchanged" | "failed"> {
   let next: Record<string, string>
   try {
-    const transition = slackTransition(readSlackState(statePath), rows)
+    const transition = ntfyTransition(readNtfyState(statePath), rows)
     if (transition.text === null) return "unchanged"
     next = transition.next
-    await postSlack(transition.text)
+    await postNtfy(transition.text, Object.keys(next).length === 0)
   } catch (e) {
-    console.error(`jobs-grade: slack post failed: ${(e as Error).message}`)
+    console.error(`jobs-grade: ntfy post failed: ${(e as Error).message}`)
     return "failed"
   }
   try {
@@ -420,7 +427,7 @@ export async function slackNotify(rows: Graded[], statePath: string = defaultSla
     renameSync(tmp, statePath)
     return "ok"
   } catch (e) {
-    console.error(`jobs-grade: slack state write failed: ${(e as Error).message}`)
+    console.error(`jobs-grade: ntfy state write failed: ${(e as Error).message}`)
     return "failed"
   }
 }
@@ -435,10 +442,10 @@ if (import.meta.main) {
     console.log(line)
     process.exit(code)
   }
-  const slackStatus = process.argv.includes("--slack") && (process.argv.includes("--summary") || process.argv.includes("--table"))
-    ? await slackNotify(judgeAgainstAwake(rows, readAwakeSeconds()))
+  const ntfyStatus = process.argv.includes("--ntfy") && (process.argv.includes("--summary") || process.argv.includes("--table"))
+    ? await ntfyNotify(judgeAgainstAwake(rows, readAwakeSeconds()))
     : null
-  const failedNote = slackStatus === "failed" ? " [slack post failed]" : ""
+  const failedNote = ntfyStatus === "failed" ? " [ntfy post failed]" : ""
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
     console.log(`${line}${failedNote}`)

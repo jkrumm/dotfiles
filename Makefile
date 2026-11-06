@@ -1243,7 +1243,7 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/astra.sh" \
 		DST="$(HOME)/.local/bin/astra"
-	@# ask-human.sh's push half: one Slack line to #agents per enqueued request.
+	@# ask-human.sh's push half: one ntfy message (topic factory) per enqueued request.
 	@# Cache backend only — the queue is written on the mini; on the MacBook the
 	@# human is the one enqueuing and needs no nudge.
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
@@ -2476,7 +2476,7 @@ disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 
-# The end-to-end probe for the job -> Slack chain (docs/background-jobs.md §Canary). Dev host
+# The end-to-end probe for the job -> ntfy chain (docs/background-jobs.md §Canary). Dev host
 # only. Converged by `make setup`. Teardown removes its state file too, or
 # jobs-grade would grade the retired label `unloaded` forever.
 .PHONY: jobrun-canary-setup jobrun-canary-teardown

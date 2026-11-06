@@ -1,10 +1,10 @@
 ---
-description: How a background-job or service failure reaches a human today, on both Macs. Covers the three alert paths (Uptime Kuma, HyperDX, jobs-grade, all ending in Slack), the jobrun/jobs-grade tiers T0 and T1, the source of truth per question, dead-man's-switch vs failure semantics, and the MacBook. Nothing auto-heals. The warden-era design is archived in docs/archive/ops-signals-2026-10-warden-era.md.
+description: How a background-job or service failure reaches a human today, on both Macs. Covers the three alert paths (Uptime Kuma, HyperDX, jobs-grade; jobs-grade ends in ntfy, Kuma and HyperDX still in Slack until their own moves), the jobrun/jobs-grade tiers T0 and T1, the source of truth per question, dead-man's-switch vs failure semantics, and the MacBook. Nothing auto-heals. The warden-era design is archived in docs/archive/ops-signals-2026-10-warden-era.md.
 ---
 
 # Ops signals — from a failing job to a human
 
-> **Nothing auto-heals.** Every alert ends in Slack; a human reads it and acts. The autonomous
+> **Nothing auto-heals.** Every alert ends in a message a human reads and acts on: ntfy topic `alerts` for job failures (Kuma and HyperDX still post to Slack until they move too). The autonomous
 > remediation loop (warden) was switched off 2026-10-27; its design is kept in
 > `docs/archive/ops-signals-2026-10-warden-era.md`. GitHub issues are no longer worked
 > automatically.
@@ -15,7 +15,7 @@ description: How a background-job or service failure reaches a human today, on b
 |-|-|-|
 | Uptime Kuma monitor | status change → provider `Slack - Alerts` | Slack |
 | HyperDX alert | alert and OK → `Slack #alerts` | Slack `#alerts` |
-| Background job (`jobrun` / Hermes cron) | run record → `jobs-grade` (the only grader) → `jobs-grade --summary --slack`, run inside the 300 s mini heartbeat | Slack `#alerts`, posted when the set of not-ok jobs changes (new failure, grade change, recovery) |
+| Background job (`jobrun` / Hermes cron) | run record → `jobs-grade` (the only grader) → `jobs-grade --summary --ntfy`, run inside the 300 s mini heartbeat | ntfy topic `alerts` (iPhone and Mac), posted when the set of not-ok jobs changes (new failure, grade change, recovery) |
 | KeepAlive service | `services` and `check_launchd_restarts` components of the 300 s heartbeat → composite Kuma push | Dead port or restart loop pages through Kuma → Slack |
 | MacBook | `~/.wakeup` runs `jobs-grade --notify` | macOS notification only |
 
@@ -42,8 +42,8 @@ failures are tickets, not pages.
 | **T0 record** | `jobrun` (wrapper) | Writes the run's start, finish, rc, duration, tail and run id to the state dir |
 | **T1 self-heal** | the job itself, plus launchd | In-job retry with backoff and a deadline, escalating its own ladder (netgear-watchdog is the model). Next-tick retry comes free from launchd; KeepAlive restarts after the 10 s throttle |
 
-Past T1 a failure is a Slack message. There is no T2 (automatic remediation) any more; T3 is the
-human reading `#alerts`, plus `human-queue` (`ask-human`) for physical, biometric or TCC work.
+Past T1 a failure is a message (ntfy for jobs, Slack for Kuma and HyperDX). There is no T2 (automatic remediation) any more; T3 is the
+human reading the alert, plus `human-queue` (`ask-human`) for physical, biometric or TCC work.
 
 ## 4. Source of truth (one per question)
 
@@ -59,7 +59,7 @@ human reading `#alerts`, plus `human-queue` (`ask-human`) for physical, biometri
 |-|-|-|-|
 | Ran, failed | rc≠0, deadline hit | `jobrun` (T0) → grade | `consecutive_fail`, `last_rc` |
 | Ran, "succeeded" while a step failed | a backup rotation | the job: each step must propagate rc | Wrapper-level detection is impossible; this is the owner repo's bug |
-| Didn't run: plist unloaded, exit 78, binary gone, a launchd firing missed | — | **The grader, not the job.** `jobs-grade` flags `now − last_started > every + grace` and cross-checks `launchctl print gui/501/<label>` | Run by the heartbeat (WARN, Slack on change) |
+| Didn't run: plist unloaded, exit 78, binary gone, a launchd firing missed | — | **The grader, not the job.** `jobs-grade` flags `now − last_started > every + grace` and cross-checks `launchctl print gui/501/<label>` | Run by the heartbeat (WARN, ntfy on change) |
 | Machine dark or heartbeat dead | — | **Kuma** (outside-in) | The only layer that survives the mini being off |
 | Hung, still running | a deadlocked run | `jobrun --timeout` (TERM, then KILL); KeepAlive services through `/health` | launchd skips `StartInterval` firings while the job runs, so a hang otherwise looks exactly like "didn't run" |
 | Crash-looping service | KeepAlive restart storm | `check_launchd_restarts` | launchd has no `StartLimitBurst` equivalent: it retries forever at the 10 s throttle, so this check is the start limiter |

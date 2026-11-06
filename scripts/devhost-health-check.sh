@@ -1370,12 +1370,12 @@ check_runaways() {
 
 # Graded background jobs (jobrun state dir -> scripts/lib/jobs-grade.ts, the only grading
 # logic). WARN-only in the composite by design (exit 2, never DOWN), so Kuma stays calm
-# (ops-signals.md §2/§3); job failures reach Slack #alerts through `jobs-grade --slack`, which
+# (ops-signals.md §2/§3); job failures reach ntfy topic `alerts` through `jobs-grade --ntfy`, which
 # posts on a state change. A grader that cannot run is also a WARN, never a page.
 check_jobs() {
   local bun_dir out rc=0
   bun_dir=$(/bin/bash "$(dirname "${BASH_SOURCE[0]}")/lib/bun-bin.sh" 2>/dev/null) || { echo "jobs: bun not found, not graded"; return 2; }
-  out=$("$bun_dir/bun" "${JOBS_GRADE_TS:-$(dirname "${BASH_SOURCE[0]}")/lib/jobs-grade.ts}" --summary --slack) || rc=$?
+  out=$("$bun_dir/bun" "${JOBS_GRADE_TS:-$(dirname "${BASH_SOURCE[0]}")/lib/jobs-grade.ts}" --summary --ntfy) || rc=$?
   case "$rc" in
     0|2) echo "$out"; return "$rc" ;;
     *)   echo "jobs: jobs-grade failed (rc=$rc), not graded"; return 2 ;;
