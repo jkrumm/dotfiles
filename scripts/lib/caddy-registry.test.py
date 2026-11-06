@@ -28,6 +28,21 @@ def block(body: str) -> str:
     return "x.test {\n" + body + "\n}\n"
 
 
+def on_dev_host() -> bool:
+    marker = os.environ.get("DOTFILES_SECRETS_BACKEND_FILE") or os.path.expanduser("~/.config/secrets/backend")
+    try:
+        with open(marker) as f:
+            return f.read().strip() == "cache"
+    except OSError:
+        return False
+
+
+class DevHostHasCaddy(unittest.TestCase):
+    def test_caddy_installed(self):
+        if not CADDY and on_dev_host():
+            self.fail("caddy is not installed on the dev host: make caddy-dns-build")
+
+
 @unittest.skipUnless(CADDY, "caddy not installed")
 class Registry(unittest.TestCase):
     def test_plain_port_row_is_unchanged(self):

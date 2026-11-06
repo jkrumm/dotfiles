@@ -13,6 +13,8 @@ ok()  { echo "  ✓ $1"; }
 bad() { echo "  ✗ $1"; fails=$((fails + 1)); }
 has() { grep -qF -- "$3" <<<"$2" && ok "$1" || bad "$1 — '$3' not in: $2"; }
 
+# the real host's marker, read before HOME is pointed at the scratch dir (dev host = cache)
+dev_backend=$(cat "${DOTFILES_SECRETS_BACKEND_FILE:-$HOME/.config/secrets/backend}" 2>/dev/null)
 S="$TMP/home/SourceRoot"
 mkdir -p "$TMP/bin" "$TMP/state" "$S/dotfiles/scripts" "$S/myrepo/.git" "$TMP/xdg/secrets" "$TMP/home/.local/bin"
 echo cache >"$TMP/xdg/secrets/backend"
@@ -133,7 +135,10 @@ spawn work myrepo --role implementer; failopen "factory without the verb yet" "f
 mv "$TMP/home/.local/bin/factory" "$TMP/factory.away"
 spawn work myrepo --role implementer; failopen "factory missing" "factory is not installed"
 mv "$TMP/factory.away" "$TMP/home/.local/bin/factory"
-if command -v timeout >/dev/null || command -v gtimeout >/dev/null; then
+if ! command -v timeout >/dev/null && ! command -v gtimeout >/dev/null \
+   && [ "$dev_backend" = cache ]; then
+  bad "timeout: neither timeout nor gtimeout on the dev host: brew install coreutils"
+elif command -v timeout >/dev/null || command -v gtimeout >/dev/null; then
   reply 0 "$(role_json implementer opus high)"; touch "$STATE/factory-sleep"
   t0=$SECONDS
   spawn work myrepo --role implementer; failopen "timeout" "no answer within 2 s"

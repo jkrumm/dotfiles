@@ -6,15 +6,27 @@
 # read, written or reloaded — the same rule the generator's header spells out.
 # The fake token has the 40-character shape the Cloudflare module checks at validate time.
 # Needs `brew`, `caddy` and the cloudflare DNS module (`make caddy-dns-build`);
-# without them the suite skips instead of failing, like caddy-registry.test.py.
+# without them the suite skips off the dev host (marker file ~/.config/secrets/backend = cache,
+# DOTFILES_SECRETS_BACKEND_FILE overrides) and fails on it, like caddy-registry.test.py.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GEN="$HERE/caddy-tailnet.sh"
 
-if ! command -v brew >/dev/null 2>&1 || ! command -v caddy >/dev/null 2>&1 \
-   || ! caddy list-modules 2>/dev/null | grep -q 'dns.providers.cloudflare'; then
-  echo "skip: caddy-tailnet generator needs brew + caddy with dns.providers.cloudflare"
+missing=""
+command -v brew >/dev/null 2>&1 || missing="brew is not installed"
+if ! command -v caddy >/dev/null 2>&1; then
+  missing="caddy is not installed: make caddy-dns-build"
+elif ! caddy list-modules 2>/dev/null | grep -q 'dns.providers.cloudflare'; then
+  missing="caddy lacks dns.providers.cloudflare: make caddy-dns-build"
+fi
+if [ -n "$missing" ]; then
+  # On the dev host (secrets backend marker = cache) a skip would hide a broken `brew upgrade caddy`.
+  if [ "$(cat "${DOTFILES_SECRETS_BACKEND_FILE:-$HOME/.config/secrets/backend}" 2>/dev/null)" = cache ]; then
+    echo "FAIL: $missing" >&2
+    exit 1
+  fi
+  echo "skip: $missing"
   exit 0
 fi
 
