@@ -96,7 +96,7 @@ investigation ships a dev stack there; go straight to prod otherwise, and say so
    counter that's legitimately zero right now).
 4. Screenshot with the chrome-devtools MCP — **not** the `/browse` haiku fork,
    which (observed 3×) ignores the save path, drops credentials into files and
-   returns 900 px captures. Spawn a Sonnet `general-purpose` agent with these
+   returns 900 px captures. Spawn a `general-purpose` agent with `model: sonnet` with these
    rules baked in: `secrets-run read op://…/AGENT_EMAIL|AGENT_PASSWORD` into
    shell vars only, never a file, never printed; `take_snapshot` to find the
    login fields; `resize_page` 1440×1800 and verify via `evaluate_script`;

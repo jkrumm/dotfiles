@@ -1,7 +1,8 @@
 ---
 name: review-verifier
 description: Judge one review finding against the code. Read-only. Spawned only by the reviewer agent at tier deep.
-model: sonnet
+model: haiku
+effort: high
 tools: Read, Grep, Glob
 omitClaudeMd: true
 ---

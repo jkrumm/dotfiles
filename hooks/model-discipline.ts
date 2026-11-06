@@ -130,7 +130,7 @@ if (import.meta.main) {
         "A worker on Fable is blocked in Claude Code.",
         "",
         "Fable is the interactive-orchestrator model, not a worker model — this estate",
-        "has no legitimate use of it here. Spawn with no model override (Sonnet pin",
+        "has no legitimate use of it here. Spawn with no model override (the pinned model",
         "applies) or model: opus with an [opus: reason] description for novel-hard logic.",
       ].join("\n")
     );
@@ -141,7 +141,7 @@ if (import.meta.main) {
       [
         "An Opus worker needs a stated reason.",
         "",
-        "Workers run on the Sonnet pin. Reach for Opus only for novel-hard logic and",
+        "Workers run on their pinned model. Reach for Opus only for novel-hard logic and",
         "say why in the call's description: description: \"... [opus: <one-clause reason>]\".",
         "Otherwise drop the model override.",
       ].join("\n")
@@ -157,7 +157,7 @@ if (import.meta.main) {
           "",
           "A fork always inherits the parent's model — that is architectural, no",
           "override changes it. Spawn a named agent (subagent_type) instead; it runs on",
-          "the Sonnet pin with its own cache.",
+          "its pinned model with its own cache.",
         ].join("\n")
       );
     }

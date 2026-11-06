@@ -1,6 +1,6 @@
 ---
 name: analyze
-description: Deep static analysis (dead code, duplication, circular deps, complexity) via fallow in a native subagent
+description: Find what linters miss across a whole project: dead code, unused exports and packages, duplication, circular imports, complexity hotspots. Use after a refactor or removal, or when asked to clean up a codebase.
 ---
 
 # Analyze — Deep Static Analysis
@@ -31,8 +31,8 @@ inline execution.
 ## Execution
 
 One `Agent` call (`subagent_type: general-purpose`, description `fallow analysis`) whose prompt is the
-block below, with `[SCOPE]` replaced by the user's argument. The subagent runs on the pinned
-subagent model; do not set `model`.
+block below, with `[SCOPE]` replaced by the user's argument. The subagent runs on
+`general-purpose`'s Haiku high; do not set `model`.
 
 ````text
 Run fallow static analysis in the current directory.

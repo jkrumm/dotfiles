@@ -71,6 +71,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Prove a change works (UI, traces, endpoints) | `@verifier` |
 | Library / API / version facts | `/research` — never from memory |
 | Code review | `/review` |
+| Dead code, unused exports or packages, duplication, circular imports, after a refactor or removal | `/analyze` |
 
 The lanes — the factory's Issue (`rd issue`) and `@implementer` — are the only ways
 to start *another agent* (`docs/agent-platform.md`); `Explore`, `@verifier`,
@@ -82,7 +83,7 @@ inline.
 
 - **Model ids live only in the route table** — `agw routes`. Rationale
   `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`. Never write one in prose.
-- **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`, which skips Explore: `agents/Explore.md` pins it, and `verifier` too, to Haiku high);
+- **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`, which skips Explore; `agents/*.md` put `Explore`, `verifier`, `review-verifier` and `general-purpose` on Haiku high, `implementer` on Sonnet);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.
 - **Development runs on the Max subscriptions only** — Herdr sessions, `rd work`,

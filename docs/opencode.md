@@ -46,7 +46,7 @@ server over HTTP, configured by that process (`packages/opencode-host` in agent-
 --headless`; reach for it only for browser work) in `opencode.json`'s `mcp`;
 `plugins/protect-branches.js` throws on whatever `hooks/protect-branches.ts` denies;
 `agent/{implementer,verifier}.md` are rendered from `agents/` (frontmatter differs,
-body is verbatim; `reviewer` and `review-verifier` are Claude Code only and skipped via `SKIP` in the script). Instructions stay the always-on rules plus the four small
+body is verbatim; `reviewer`, `review-verifier`, `Explore` and `general-purpose` are Claude Code only and skipped via `SKIP` in the script). Instructions stay the always-on rules plus the four small
 stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
 `tanstack-*`, `visx-charts`, `makefile-conventions`, ~40k chars) are **not** listed
 because OpenCode ignores `paths:` and would load them on every turn of every repo;
