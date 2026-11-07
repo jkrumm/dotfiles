@@ -33,6 +33,12 @@ offline. It is also the vault's only second copy of any kind.
   `obsidian-excalidraw-plugin` from the community store on first open;
   `.obsidian/community-plugins.json` is the tracked list.
 
+- **Sync auth uses a deploy key, not 1Password.** `~/.ssh/id_ed25519_brain_sync`
+  (a write deploy key on `jkrumm/brain` only, titled `brain-sync-macbook`)
+  replaced the 1Password agent for `brain-sync.sh` on 2026-11-07. The agent
+  refuses while 1Password is locked, so about one tick in ten failed and the
+  vault lagged. Revoke: delete the key file and the deploy key on GitHub.
+
 Discipline: pull before writing. Skip it and you rebase against the mini's 03:30
 auto-commit — recoverable, just annoying.
 

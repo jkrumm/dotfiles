@@ -42,6 +42,7 @@ export GIT_TERMINAL_PROMPT=0
 # hold the lock and every later tick would quietly skip with no heartbeat at
 # all: dead sync, no red light, until the missed-beat alert. BatchMode kills the
 # passphrase prompt, ConnectTimeout kills the black hole.
+CALLER_SSH_COMMAND="${GIT_SSH_COMMAND:-}"
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}"
 
 # This MacBook has NO key files in ~/.ssh — GitHub auth goes through the
@@ -54,6 +55,16 @@ export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeou
 OP_AGENT_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 if [ -S "$OP_AGENT_SOCK" ]; then
   export SSH_AUTH_SOCK="$OP_AGENT_SOCK"
+fi
+
+# The 1Password agent refuses while 1Password is locked, so about one MacBook
+# tick in ten failed with "access rights" (measured 2026-11-07: 20 of 184 in two
+# days) and the vault lagged behind. A dedicated deploy key for this one repo
+# (write, created 2026-11-07, title "brain-sync-macbook") needs no agent. When
+# the file exists it wins; IdentityAgent none keeps ssh from asking 1Password.
+BRAIN_SYNC_KEY="$HOME/.ssh/id_ed25519_brain_sync"
+if [ -z "$CALLER_SSH_COMMAND" ] && [ -f "$BRAIN_SYNC_KEY" ]; then
+  export GIT_SSH_COMMAND="ssh -i $BRAIN_SYNC_KEY -o IdentityAgent=none -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10"
 fi
 
 # Belt to that braces: bound the network calls themselves. `timeout` is
