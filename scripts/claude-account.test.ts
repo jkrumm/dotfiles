@@ -1235,7 +1235,7 @@ describe("CLI (isolated HOME)", () => {
     expect(r.rc).toBe(0)
     const args = readFileSync(sshLog, "utf8").trim().split("\n")
     expect(args.length).toBe(1)
-    expect(args[0]).toMatch(/BatchMode=yes .*ConnectTimeout=5 (iumac|mini) .*claude-account usage --json/)
+    expect(args[0]).toMatch(/BatchMode=yes .*ConnectTimeout=5 (iumac account-usage$|mini .*claude-account usage --json)/)
     expect(loadCache(dir).samples.iu).toMatchObject({ s: 21, w: 44, src: "peer" })
     // a dead peer: one log line, and the run behaves exactly as it did before the import existed
     seed(60 * 60_000)
@@ -1260,7 +1260,8 @@ describe("CLI (isolated HOME)", () => {
     // ssh: the remote command names `hc exec` when it goes through the peer's own core (ok payload unless STUB_PEER_CORE=down:
     // lib/core-up.sh says the core is not up, exit 99); a plain script read answers the unreadable payload (no Keychain over ssh).
     const sshStub = join(bin, "ssh-peer")
-    writeFileSync(sshStub, `#!/bin/sh\ncase "$*" in\n *"hc exec"*) [ "$STUB_PEER_CORE" = down ] && exit 99; cat "${okOut}";;\n *) cat "${unreadableOut}";;\nesac\n`)
+    const sshSeen = join(bin, "ssh-peer.log")
+    writeFileSync(sshStub, `#!/bin/sh\necho "$*" >> "${sshSeen}"\ncase "$*" in\n *"hc exec"*|*" account-snapshot-core") [ "$STUB_PEER_CORE" = down ] && exit 99; cat "${okOut}";;\n *) cat "${unreadableOut}";;\nesac\n`)
     chmodSync(sshStub, 0o755)
     const run = (env: Record<string, string>) => {
       const r = cli(["health", "--json"], env)
@@ -1283,6 +1284,9 @@ describe("CLI (isolated HOME)", () => {
     expect(fallback.text).toMatch(/^NOTE .*plain ssh/m)
     // the stderr note never reaches the JSON on stdout
     expect(() => JSON.parse(cli(["health", "--json"], { CLAUDE_ACCOUNTS_HC: "/usr/bin/false", CLAUDE_ACCOUNTS_SSH: sshStub, STUB_PEER_CORE: "down" }).out)).not.toThrow()
+    // every send to the MacBook is a bare verb: no shell metacharacters, quotes or substitutions
+    const toMac = readFileSync(sshSeen, "utf8").split("\n").filter((l) => / iumac /.test(l))
+    for (const l of toMac) expect(l.split(" iumac ")[1]).toMatch(/^[a-z0-9 -]+$/)
   })
 
   test("refresh --all asks for a re-login of a dead login once per 24 h (stub dialog script)", async () => {

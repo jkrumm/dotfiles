@@ -187,9 +187,15 @@ const PEER_USAGE_TIMEOUT_MS = 20_000
 
 /** The peer's `claude-account usage --json` (a pure file read there: it never refreshes, so no loop). Throws when unreachable or garbled. */
 function fetchPeerUsage(): unknown {
-  const r = spawnSync(sshBin(), [...SSH_OPTS, ...peerMachine().peer.ssh, `${HOME_BIN} usage --json`], { encoding: "utf8", timeout: PEER_USAGE_TIMEOUT_MS })
+  const r = spawnSync(sshBin(), [...SSH_OPTS, ...peerMachine().peer.ssh, peerCmd(peerMachine().peer.name, "usage", `${HOME_BIN} usage --json`)], { encoding: "utf8", timeout: PEER_USAGE_TIMEOUT_MS })
   if (r.error || r.status !== 0) throw new Error(`ssh ${peerMachine().peer.ssh.join(" ")} failed (${r.error?.message ?? `rc=${r.status}`})`)
   return JSON.parse(r.stdout)
+}
+
+/** The MacBook's key runs fixed verbs only (word-split, no shell syntax); the mini takes the shell command as before. */
+const MACBOOK_VERBS = { usage: "account-usage", snapshot: "account-snapshot", core: "account-snapshot-core", push: "ask-push" } as const
+function peerCmd(peerName: string, verb: keyof typeof MACBOOK_VERBS, shellCmd: string, arg?: string): string {
+  return peerName === "macbook" ? [MACBOOK_VERBS[verb], arg].filter(Boolean).join(" ") : shellCmd
 }
 
 const PEER_SCRIPT = `${HOME_BIN} usage --json; echo '@@'; ${HOME_BIN} expiry --json; echo '@@'; ${PENDING_SH}`
@@ -229,10 +235,10 @@ function peerViaCore(name: string, nowMs: number) {
   return parseSnapshot(r.stdout, nowMs)
 }
 /** (2) of the above: ssh to the peer, then its own core. null when the hop, the core (lib/core-up.sh: not up) or the read fails. */
-function peerViaItsCore(ssh: string[], nowMs: number) {
+function peerViaItsCore(ssh: string[], nowMs: number, peerName = "mini") {
   const script = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; ${PEER_SCRIPT}`
   const remote = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 99; hc exec --timeout 30 sh -c ${shq(script)}`
-  const r = spawnSync(sshBin(), [...SSH_OPTS, ...ssh, remote], { encoding: "utf8", timeout: 40_000 })
+  const r = spawnSync(sshBin(), [...SSH_OPTS, ...ssh, peerCmd(peerName, "core", remote)], { encoding: "utf8", timeout: 40_000 })
   if (r.error || r.status !== 0 || !r.stdout.includes("@@\n")) return null
   return parseSnapshot(r.stdout, nowMs)
 }
@@ -247,9 +253,9 @@ function machineSnapshot(argv: string[] | null, nowMs: number, peerName?: string
     const r = spawnSync("sh", ["-c", PEER_SCRIPT.replaceAll(HOME_BIN, `"${process.execPath}" "${process.argv[1]}"`)], { encoding: "utf8", timeout: 30_000 })
     return r.status !== 0 && !r.stdout ? { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[] } : parseSnapshot(r.stdout, nowMs)
   }
-  const viaCore = peerName ? (peerViaCore(peerName, nowMs) ?? peerViaItsCore(argv, nowMs)) : null
+  const viaCore = peerName ? (peerViaCore(peerName, nowMs) ?? peerViaItsCore(argv, nowMs, peerName)) : null
   if (viaCore) return { ...viaCore, via: "core" }
-  const r = spawnSync(sshBin(), [...SSH_OPTS, ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
+  const r = spawnSync(sshBin(), [...SSH_OPTS, ...argv, peerCmd(peerName ?? "mini", "snapshot", PEER_SCRIPT)], { encoding: "utf8", timeout: 30_000 })
   if (r.status !== 0 && !r.stdout) return { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[], via: "ssh" }
   return { ...parseSnapshot(r.stdout, nowMs), via: "ssh" }
 }
@@ -275,7 +281,7 @@ async function health(argv: string[]): Promise<number> {
     if (!onMini) {
       // The dialogs the mini could not deliver while this Mac slept: push them again now that it is awake.
       for (const p of theirs.pendingIds) if (p.ageMs < 24 * 3600_000) {
-        spawnLogged("ssh", [...SSH_OPTS, ...peer.ssh, `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`])
+        spawnLogged("ssh", [...SSH_OPTS, ...peer.ssh, peerCmd(peer.name, "push", `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`, p.id)])
       }
       notifyIfChanged(rows, now)
     }

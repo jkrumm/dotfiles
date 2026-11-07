@@ -167,13 +167,13 @@ notify() { # <text> — best effort
   local title="Claude login $id" rc=0
   if (( dry )); then
     if [[ "$here" == macbook ]]; then step osascript - "$title" "$1"
-    else step ssh -o BatchMode=yes -o ConnectTimeout=8 iumac "osascript - $(login_shquote "$title") $(login_shquote "$1")"; fi
+    else step ssh -o BatchMode=yes -o ConnectTimeout=8 iumac notify; fi
     return 0
   fi
   if [[ "$here" == macbook ]]; then
     printf '%s\n' "$NOTIFY_OSA" | osascript - "$title" "$1" >/dev/null 2>&1 || rc=$?
   else
-    printf '%s\n' "$NOTIFY_OSA" | ssh -o BatchMode=yes -o ConnectTimeout=8 iumac "osascript - $(login_shquote "$title") $(login_shquote "$1")" >/dev/null 2>&1 || rc=$?
+    printf '%s\n%s\n' "$title" "$1" | ssh -o BatchMode=yes -o ConnectTimeout=8 iumac notify >/dev/null 2>&1 || rc=$?
   fi
   (( rc == 0 )) || stamp "notification could not be shown (rc $rc)" >&2
   return 0
@@ -539,7 +539,11 @@ if [[ "$machine" != "$here" ]]; then
   # reach the other machine (mini -> iumac, MacBook -> mini); it starts the login itself
   host=mini; [[ "$machine" == macbook ]] && host=iumac
   vis_arg=""; (( visible )) && vis_arg=" --visible"
-  step ssh -o BatchMode=yes -o ConnectTimeout=8 "$host" "$REMOTE_PATH; $REMOTE_SCRIPT $id --machine $machine$vis_arg"
+  if [[ "$host" == iumac ]]; then
+    step ssh -o BatchMode=yes -o ConnectTimeout=8 "$host" "relogin $id$vis_arg"
+  else
+    step ssh -o BatchMode=yes -o ConnectTimeout=8 "$host" "$REMOTE_PATH; $REMOTE_SCRIPT $id --machine $machine$vis_arg"
+  fi
   exit $?
 fi
 

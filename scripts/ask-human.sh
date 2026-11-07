@@ -2,9 +2,8 @@
 set -euo pipefail
 
 # ask-human — enqueue present-human work from the mini (or any machine with no
-# path back to a human). The mini can now `ssh iumac` (dedicated key, see
-# ssh_config), so a network path to the MacBook exists — but SSH gives it
-# reach, not a fingerprint. This channel is for what actually still needs a
+# path back to a human). The mini can `ssh iumac` (dedicated key, see
+# ssh_config) for a fixed set of verbs; SSH gives it reach, not a fingerprint. This channel is for what actually still needs a
 # *present human*: biometric `op` (`make secrets-seed`), the Tailscale ACL
 # push, or any decision only a person can make. Before this, an agent on the
 # mini signalled blocked-on-human work by editing prose handover docs, which
@@ -16,15 +15,14 @@ set -euo pipefail
 # approval itself — the DEFAULT since 2026-09-15 (owner: "I don't ever want to
 # hear again it needs me; execute it yourself, I'm here and can approve"):
 # `ask` pushes right away (or `push <id>` for an already-enqueued request) and
-# opens `ssh iumac` — the mini's own dedicated,
-# restricted key, see docs/remote-dev.md → *mini → iumac* — and runs
-# `human-queue.sh gui-run` there, which shows the exact request in a native
+# opens `ssh iumac` — the mini's own dedicated key, which runs only fixed
+# verbs, see docs/remote-dev.md → *mini → iumac* — and sends the `gui-run`
+# verb, which runs `human-queue.sh gui-run` there and shows the exact request in a native
 # macOS dialog on the MacBook and only executes on a click. There is still no
 # path that skips a present human: the dialog is a second gate next to the
-# typed-'yes' TTY gate `run` already requires, not a bypass of it — it exists
-# precisely because that ssh key already lets the mini run arbitrary commands
-# on the MacBook non-interactively, and turns that reach back into something a
-# human approves per request. The result lands back here either way (written
+# typed-'yes' TTY gate `run` already requires, not a bypass of it: `gui-run` is
+# the human-approved path for anything beyond the key's fixed verbs, one
+# request at a time. The result lands back here either way (written
 # locally by `push`, or written by `human-queue.sh` over ssh after a manual
 # drain) for a waiting agent to pick up. No new credential beyond what already
 # exists.
@@ -291,13 +289,12 @@ write_local_result() {
   notify_sweep || true
 }
 
-# Triggers the approval itself: ssh to the MacBook (its own dedicated,
-# restricted key — see docs/remote-dev.md → *mini → iumac*; no agent
-# forwarding, so this borrows no other credential) and run `human-queue.sh
-# gui-run` there, piping the request's OWN .req file to it over stdin — never
+# Triggers the approval itself: ssh to the MacBook (its own dedicated key,
+# which runs only fixed verbs — see docs/remote-dev.md → *mini → iumac*; no
+# agent forwarding, so this borrows no other credential) and send the `gui-run`
+# verb, which runs `human-queue.sh gui-run` there, piping the request's OWN .req file to it over stdin — never
 # as a command-string argument, same reason write_result on the MacBook side
-# pipes rather than interpolates. PATH is set explicitly first: a non-login,
-# non-interactive ssh command may not see /opt/homebrew/bin.
+# pipes rather than interpolates. The gate on the MacBook sets PATH.
 #
 # Exit codes: the command's own exit code on done, 1 on denied, 75 on
 # unanswered (dialog timed out, or too long to show — request stays pending,
@@ -313,8 +310,7 @@ push_request() {
   [[ -f "$req_file" ]] || die "no such request: $id"
   [[ -f "$res_file" ]] && die "request $id already has a result — refusing to push twice"
 
-  # shellcheck disable=SC2016
-  local remote_cmd='export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; bash "$HOME/SourceRoot/dotfiles/scripts/human-queue.sh" gui-run'
+  local remote_cmd='gui-run'
 
   # `|| rc=$?`, never a bare `rc=$?` after the assignment: under `set -e` a failed
   # ssh would end the script right there, with ssh's 255 instead of the documented

@@ -118,9 +118,8 @@ per share to opt in.
 ## The reverse reach — mini → iumac on :2222
 
 `ssh iumac` from the mini lands on a userland sshd on the MacBook's `:2222`
-(MDM owns the system `:22`), restricted to `restrict,pty`, no agent forwarding.
-Full setup, the SSH-identity trap (`ssh iumac '<cmd>'` carries none by default,
-since `.zshrc` is not read by a remote command shell) and the ACL grant: `docs/remote-dev.md` §mini → iumac.
+(MDM owns the system `:22`), a forced-command key that runs fixed verbs only, no agent forwarding.
+Full setup, the verb list, the identity model (`ssh iumac` carries none; git pulls on the MacBook go through `ask-human --cmd`) and the ACL grant: `docs/remote-dev.md` §mini → iumac.
 
 ---
 

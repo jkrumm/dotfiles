@@ -99,7 +99,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | Code / a repo | `rd`, or git |
 | Vault pages | brain-sync through GitHub |
 | Anything a mini-side agent/LaunchAgent reads | put it **on the mini** — the SMB mount is client-side and dies with the MacBook |
-| A file/state pull the other direction | `ssh iumac` / `rsync … iumac:…` from the mini (`usage-tracker` stats, syncing `brain`) — MacBook-side `op` goes through `ask-human ask … --cmd …` (dialog, then Touch ID), never a bare `ssh iumac 'op …'` |
+| A file/state pull the other direction | `rsync … iumac:<path>` from the mini (`usage-tracker` stats dirs); `ssh iumac` runs fixed verbs only — anything else MacBook-side (`op`, git, installers) goes through `ask-human ask … --cmd …` (dialog, then Touch ID) |
 
 If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
 `dotfiles/AGENTS.md` → *File shuttle* for the deterministic check.
@@ -114,7 +114,7 @@ make human-queue-count    # just the count, on the MacBook
 ```
 
 Two ways a request reaches a human: the mini pushes it right away (the default
-— `ssh iumac` runs `human-queue.sh gui-run` there, showing the exact string in
+— `ssh iumac gui-run` runs `human-queue.sh gui-run` there, showing the exact string in
 a native dialog that only executes on a click), or, with `--no-push` /
 `HUMAN_QUEUE_PUSH=0` or an unreachable MacBook, it queues and the MacBook drains
 it with `make human-queue` (typed `yes` on a real TTY). Still no path that skips

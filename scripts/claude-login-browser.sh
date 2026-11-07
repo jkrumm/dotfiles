@@ -9,10 +9,12 @@
 #
 # Where the login runs decides how the browser is reached:
 #   macbook  `open -a <app> <url>` — the callback lands on localhost here.
-#   mini     the browser is on the MacBook: `ssh -N -R <port>:localhost:<port> iumac` forwards the browser's
-#            localhost callback back to the CLI on the mini, then `ssh iumac open -a <app> '<url>'`. The tunnel closes
-#            when the login process is gone, when the CLI stops listening (login finished), or after a generous idle
-#            window with no connection (CLAUDE_LOGIN_TUNNEL_IDLE_S, default 2700). Not a hard timeout.
+#   mini     the browser is on the MacBook: `ssh iumac open-url` (stdin: the app name, then the URL) opens the page
+#            there, and `ssh -N -R <port>:localhost:<port> iumac` would forward the browser's localhost callback
+#            back to the CLI on the mini. The mini's key does not grant that reverse forward today, so the printed
+#            URL plus the pasted code is the normal path; the opener already speaks the `open-url` verb, so the
+#            forward works as soon as it is granted. The tunnel closes when the login process is gone, when the CLI
+#            stops listening (login finished), or after a generous idle window with no connection (CLAUDE_LOGIN_TUNNEL_IDLE_S, default 2700). Not a hard timeout.
 # Any failure (no port in the URL, forward refused, ssh down) prints the URL: the CLI's own prompt still takes a
 # pasted code, which stays the fallback.
 #
@@ -89,13 +91,12 @@ fi
 
 # ── the mini: the browser lives on the MacBook ─────────────────────────────────────────────────
 port=$(login_url_port "$url") || { fallback "no loopback callback port in the URL, cannot forward it to the MacBook"; exit 1; }
-remote_open="open"
-for w in "${open_args[@]}"; do remote_open="$remote_open $(login_shquote "$w")"; done
+open_stdin=$(printf '%s\n%s\n' "$app" "$url")
 
 # Own connection (ControlPath=none): the forward must die with this ssh process, never join a shared master.
 tunnel=("$SSH" -N -R "127.0.0.1:$port:localhost:$port" -o BatchMode=yes -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none
         -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=8 "$MAC_HOST")
-opener=("$SSH" -o BatchMode=yes -o ConnectTimeout=8 "$MAC_HOST" "$remote_open")
+opener=("$SSH" -o BatchMode=yes -o ConnectTimeout=8 "$MAC_HOST" open-url)
 
 if (( dry )); then
   say "claude-login: dry run, callback port $port, browser ${app:-system default}"
@@ -115,7 +116,7 @@ for ((i = 0; i < GRACE_S; i++)); do
 done
 kill -0 "$tunnel_pid" 2>/dev/null || { fallback "could not forward port $port to $MAC_HOST (is its sshd up? is the port taken there?)"; exit 1; }
 
-if ! "${opener[@]}"; then
+if ! printf '%s\n' "$open_stdin" | "${opener[@]}"; then
   kill "$tunnel_pid" 2>/dev/null
   fallback "could not open the URL on $MAC_HOST"
   exit 1

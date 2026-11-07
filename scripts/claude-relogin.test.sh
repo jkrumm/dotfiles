@@ -37,6 +37,7 @@ mk() { printf '#!/bin/bash\n%s\n%s\n' "$rec" "$2" > "$TMP/bin/$1"; chmod +x "$TM
 mk ssh 'case " $* " in
   *" -N "*) echo $$ > "$TMP_DIR/tunnel.pid"; [ "${STUB_TUNNEL:-ok}" = fail ] && exit 1
             [ "${STUB_TUNNEL:-ok}" = dies ] && { sleep 2; exit 1; }; exec sleep 60 ;;
+  *" notify "*|*" open-url "*) cat >> "$TMP_DIR/ssh-stdin"; [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
   *) [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
 esac'
 mk open '[ "${STUB_OPENBIN:-ok}" = fail ] && exit 1; exit 0'
@@ -129,7 +130,7 @@ for c in ssh open hc osascript claude claude-account launchctl nc; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
-reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/tunnel.pid" "$TMP/claude.runs" "$TMP/doc-sets.jsonl"; }
+reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/ssh-stdin" "$TMP/tunnel.pid" "$TMP/claude.runs" "$TMP/doc-sets.jsonl"; }
 calls() { grep -v -e "^lsof" -e "^launchctl\[print\]" -e "^nc\[" "$LOG"; } # a watchdog left over from an earlier case may still poll lsof; that is noise here
 
 URL='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
@@ -199,16 +200,15 @@ assert_contains "tunnel forwards the callback port back to the mini" "[-N][-R][1
 assert_contains "tunnel: own connection, fails loudly" "[ExitOnForwardFailure=yes]" "$tunnel_line"
 assert_contains "tunnel: no shared control master" "[ControlPath=none]" "$tunnel_line"
 assert_contains "tunnel goes to the MacBook" "[iumac]" "$tunnel_line"
-remote=$(sed -n 's/^ssh.*\[iumac\]\[\(.*\)\]$/\1/p' <<<"$open_line")
-assert_eq "remote command is one shell string starting with open" "open " "${remote:0:5}"
-assert_eq "the remote shell sees open -a Helium <url> intact" "[-a][Helium][$URL]" "$(sh -c "printf '[%s]' ${remote#open }")"
+assert_contains "opener is the open-url verb" "[iumac][open-url]" "$open_line"
+assert_eq "open-url stdin: app name, then the URL" "Helium|$URL" "$(paste -sd'|' "$TMP/ssh-stdin")"
 assert_contains "user told where it opened" "Helium" "$(cat "$TMP/msgs")"
 for _ in 1 2 3 4 5 6 7 8; do kill -0 "$(cat "$TMP/tunnel.pid")" 2>/dev/null || break; sleep 1; done
 kill -0 "$(cat "$TMP/tunnel.pid")" 2>/dev/null && bad "tunnel closes after the login process is gone" || ok "tunnel closes after the login process is gone"
 
 reset
 CLAUDE_LOGIN_ACCOUNT=iu CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$$ bash "$BROWSER_SH" "$URL"
-assert_contains "iu: Google Chrome on the MacBook" "'Google Chrome'" "$(sed -n 2p "$LOG")"
+assert_contains "iu: Google Chrome on the MacBook" "Google Chrome" "$(cat "$TMP/ssh-stdin")"
 kill "$(cat "$TMP/tunnel.pid")" 2>/dev/null
 
 echo "helper failures print the URL and keep the paste path"
@@ -252,7 +252,7 @@ echo "helper --dry-run runs nothing"
 reset; out=$(CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" --dry-run "$URL" 2>&1)
 assert_eq "no stub called" "" "$(calls)"
 assert_contains "prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
-assert_contains "prints the quoted remote open" "'open '\\''-a'\\'' '\\''Helium'\\''" "$out"
+assert_contains "prints the open-url verb" "'iumac' 'open-url'" "$out"
 
 # ── relogin ─────────────────────────────────────────────────────────────────────────────────────
 echo "relogin --ask"
@@ -281,8 +281,10 @@ bash "$RELOGIN" me --visible >/dev/null
 assert_contains "MacBook --visible: Terminal via osascript, command as argv" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane]" "$(calls)"
 as mini; reset
 bash "$RELOGIN" me --machine macbook >/dev/null
-assert_contains "mini -> MacBook: one ssh hop to iumac" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][export PATH=" "$(calls)"
-assert_contains "...running the relogin there" 'claude-relogin.sh" me --machine macbook]' "$(calls)"
+assert_contains "mini -> MacBook: one ssh hop to iumac, the relogin verb" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][relogin me]" "$(calls)"
+reset; bash "$RELOGIN" me --machine macbook --visible >/dev/null
+assert_contains "...with --visible" "[iumac][relogin me --visible]" "$(calls)"
+assert_not_contains "...no shell string to the MacBook" "export PATH" "$(calls)"
 as macbook; reset
 bash "$RELOGIN" me --machine mini >/dev/null
 assert_contains "MacBook -> mini: hop to mini" "[mini][export PATH=" "$(calls)"
@@ -403,7 +405,10 @@ assert_eq "the herdr-app doc is read for the space, then once more to name the t
 assert_contains "terminal swept after success: hc rm of the address it created, no other" "hc[rm][t9]" "$c"
 assert_eq "...exactly one rm" 1 "$(count 'hc\[rm\]')"
 assert_not_contains "...never a kill" "hc[kill]" "$c"
-assert_contains "notification over ssh to the MacBook" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][osascript - 'Claude login me' 'Claude login me: renewed, valid until 2027-01-01']" "$c"
+iumac_cmds=$(sed -n 's/^ssh.*\[iumac\]\[\(.*\)\]$/\1/p' <<<"$c")
+assert_eq "every send to iumac is a bare verb (no shell metacharacters)" "" "$(grep -vE '^[a-z0-9 -]+$' <<<"$iumac_cmds")"
+assert_contains "notification over ssh to the MacBook: the notify verb" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][notify]" "$c"
+assert_eq "...title and text on stdin" "Claude login me|Claude login me: renewed, valid until 2027-01-01" "$(paste -sd'|' "$TMP/ssh-stdin")"
 reset; STUB_DOC_VALUE='{"spaces":[{"id":"spAPP","folder":"'"$TMP/space-repo"'","tabs":[{"id":"tb-relogin-me","name":"3"}]},{"id":"spOther","folder":"/elsewhere"}]}' STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
 c=$(calls)
 assert_contains "the app's own space entry for the folder wins" "[--label][herdr.space=spAPP][--label][herdr.tab=tb-relogin-me]" "$c"
@@ -411,23 +416,23 @@ assert_eq "...the tab is named 'relogin me' (doc.set, compare-and-set on the ver
 reset; STUB_PANE_RESULT="fail 1" bash "$RELOGIN" me >/dev/null; rc=$?
 c=$(calls)
 assert_eq "failed login: rc 1, nothing removed or killed" "1/0/0" "$rc/$(count 'hc\[rm\]')/$(count 'hc\[kill\]')"
-assert_contains "...failure notification to the MacBook" "Claude login me failed - retry with: claude-relogin me" "$c"
+assert_contains "...failure notification to the MacBook" "Claude login me failed - retry with: claude-relogin me" "$(cat "$TMP/ssh-stdin" 2>/dev/null)"
 reset; STUB_PANE_RESULT="unchanged 2026-12-01" bash "$RELOGIN" me >/dev/null; rc=$?
 assert_eq "unchanged login: rc 1, terminal stays" "1/0" "$rc/$(count 'hc\[rm\]')"
 reset; STUB_HC_GET=gone bash "$RELOGIN" me >/dev/null; rc=$?
 c=$(calls)
 assert_eq "terminal closed by the user: rc 1, nothing removed" "1/0" "$rc/$(count 'hc\[rm\]')"
-assert_contains "...and the owner is told, never silent" "Claude login me: the login terminal was closed before the login finished" "$c"
+assert_contains "...and the owner is told, never silent" "Claude login me: the login terminal was closed before the login finished" "$(cat "$TMP/ssh-stdin" 2>/dev/null)"
 reset; STUB_HC_GET=finished bash "$RELOGIN" me >/dev/null
-assert_contains "a finished terminal without a result counts as gone" "the login terminal was closed before the login finished" "$(calls)"
+assert_contains "a finished terminal without a result counts as gone" "the login terminal was closed before the login finished" "$(cat "$TMP/ssh-stdin" 2>/dev/null)"
 reset; STUB_HC_GET=fail bash "$RELOGIN" me >/dev/null 2>&1
 c=$(calls)
 assert_not_contains "hc failing to answer is not 'gone'" "was closed before" "$c"
-assert_contains "...did-not-finish notification, terminal left open" "the login terminal is still open" "$c"
+assert_contains "...did-not-finish notification, terminal left open" "the login terminal is still open" "$(cat "$TMP/ssh-stdin" 2>/dev/null)"
 reset; STUB_HC_GET=garbage bash "$RELOGIN" me >/dev/null 2>&1
 assert_not_contains "hc answering garbage is not 'gone' either" "was closed before" "$(calls)"
 reset; STUB_PANE_RESULT="" bash "$RELOGIN" me >/dev/null 2>&1
-assert_contains "no result within the maximum wait, terminal live: notified, not removed" "the login terminal is still open" "$(calls)"
+assert_contains "no result within the maximum wait, terminal live: notified, not removed" "the login terminal is still open" "$(cat "$TMP/ssh-stdin" 2>/dev/null)"
 assert_eq "...nothing removed" 0 "$(count 'hc\[rm\]')"
 reset; STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me --visible >/dev/null
 c=$(calls)
@@ -582,7 +587,7 @@ assert_contains "macbook dry run: success notification" "'osascript' '-' 'Claude
 assert_contains "macbook dry run: Terminal fallback and its close" "close of that window id" "$out"
 as mini; reset; out=$(bash "$RELOGIN" me --dry-run 2>&1)
 assert_contains "mini dry run: watcher sweeps the terminal" "'hc' 'rm'" "$out"
-assert_contains "mini dry run: notification over ssh" "osascript - " "$out"
+assert_contains "mini dry run: notification over ssh" "'ssh' '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=8' 'iumac' 'notify'" "$out"
 assert_contains "iu dry run: config dir unset" "'-u' 'CLAUDE_CONFIG_DIR' 'USER=" "$(bash "$RELOGIN" iu --dry-run 2>&1)"
 assert_contains "me dry run: config dir set" "CLAUDE_CONFIG_DIR=$HOME/.claude-me" "$(bash "$RELOGIN" me --dry-run 2>&1)"
 reset; out=$(bash "$RELOGIN" me --ask --dry-run 2>&1)

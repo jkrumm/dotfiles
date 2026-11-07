@@ -78,4 +78,12 @@ case "$msg" in *"0.1.17"*) ;; *) fail "mismatch message: $msg" ;; esac
 born > "$T/table"; PEER=0.1.18 check
 [ "$rc" = 0 ] || fail "same peer version must be healthy: rc=$rc $msg"
 
+# 7. the peer version over plain ssh: the MacBook (iumac) is sent the bare verb, the mini the hc command
+_core_bounded() { case "$2" in /usr/bin/ssh) printf '%s\n' "${@: -1}" > "$T/ssh-cmd"; echo "hc 0.1.18" ;; *) return 1 ;; esac; }
+v=$(CORE_PEER_SSH_HOST=iumac core_peer_version /nonexistent)
+[ "$v" = 0.1.18 ] && [ "$(cat "$T/ssh-cmd")" = hc-version ] || fail "iumac must get the hc-version verb: v=$v cmd=$(cat "$T/ssh-cmd")"
+grep -qE '^[a-z0-9 -]+$' "$T/ssh-cmd" || fail "iumac command carries shell syntax"
+v=$(CORE_PEER_SSH_HOST=mini core_peer_version /nonexistent)
+case "$(cat "$T/ssh-cmd")" in *'hc" --version'*) ;; *) fail "mini keeps the hc command: $(cat "$T/ssh-cmd")" ;; esac
+
 echo "core-health.test.sh: ok"

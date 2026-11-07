@@ -356,13 +356,37 @@ macOS ships no Tailscale SSH server.
 
 - **The key** is `~/.ssh/id_ed25519_iumac` on the mini (mode 600, no passphrase,
   never enters 1Password or the cache), installed from
-  `config/ssh/authorized_keys.iumac` by `make authorized-keys` as `restrict,pty`.
-  **No agent forwarding** is the load-bearing restriction — without it the mini
-  could borrow the human's 1Password GitHub/signing key on every connection. The
+  `config/ssh/authorized_keys.iumac` by `make authorized-keys` as a forced
+  command (`scripts/iumac-gate.sh`) with `restrict`: the key runs only the fixed
+  verbs below, reading `$SSH_ORIGINAL_COMMAND` word-split and never evaluated,
+  and refuses any shell metacharacter. No agent forwarding, no port forwarding,
+  no pty: the mini cannot borrow the human's 1Password GitHub/signing key. The
   target skips the mini itself: both halves there turn an outbound-only
   credential into an inbound one. Verify positively — `ssh -A iumac` leaves
   `SSH_AUTH_SOCK` unset remotely and `-R` is refused (`-L` is **not** a valid
   test; a local forward needs no server-side setup).
+- **The verbs** (least privilege: callers send exactly these words, no quoting,
+  no `;`, `$` or quotes; payloads travel on stdin):
+
+  | Verb | What it does on the MacBook |
+  |-|-|
+  | `true` | probe |
+  | `gui-run` | stdin = request JSON; `human-queue.sh gui-run` (native dialog, runs only on a click) |
+  | `ask-push <id>` | `ask-human.sh push <id>` for a pending request |
+  | `notify` | stdin: title line, then text; native notification |
+  | `open-url` | stdin: app name (or empty), then an https URL; `open` |
+  | `relogin <id> [--visible]` | `claude-relogin.sh <id> --machine macbook [--visible]` |
+  | `account-usage` | `claude-account usage --json` |
+  | `account-snapshot` | `scripts/claude-account-snapshot.sh` (plain-ssh fallback) |
+  | `account-snapshot-core` | the same through the MacBook's own core; exit 99 = core not up |
+  | `hc-version` | `hc --version` |
+
+  File pulls use `rsync … iumac:<path>` for the usage-tracker dirs. Anything
+  else MacBook-side goes through `ask-human.sh ask '…' --cmd '…'`: the human
+  sees the exact string and approves it. Installers that write to the MacBook
+  (ntfy-mac's `make install-macbook`-style rsync push, usage-tracker's
+  `iu-portal-setup`) are not served by this key; run them from the MacBook's own
+  terminal or via `ask-human --cmd`.
 - **The door is our own userland sshd on :2222.** iumac's MDM pins the Remote
   Login SACL (`com.apple.access_ssh`) to `IT-Admin` and re-drops the account
   every check-in, so **:22 accepts the key then closes the session with no sshd
@@ -381,7 +405,7 @@ macOS ships no Tailscale SSH server.
   and any target consulting it *hangs* rather than fails. `op` on the far side
   raises Touch ID on the MacBook and resolves once approved (verified
   2026-09-14, `op://Private/*` included); it fails fast (exit 1) only when
-  1Password there is not signed in. Go through `ask-human.sh … --push`, never bare.
+  1Password there is not signed in. Go through `ask-human.sh … --push` (`--cmd`), never bare.
 - **TCC: stage files out, do not grant Full Disk Access.** The door reads home
   root, `~/SourceRoot`, `~/.claude`, `/tmp` and is blocked from `~/Downloads`,
   `~/Desktop`, `~/Documents` and cloud folders — `cp ~/Downloads/x ~/xfer/`, then
@@ -392,14 +416,12 @@ macOS ships no Tailscale SSH server.
   `tailscale set --hostname` does not move MagicDNS on a registered device (only
   the admin console does), and the mismatch fails at name resolution while
   looking like a broken key.
-- **Honest cost:** a mini compromise now reaches the MacBook's files and user
-  session, but not `op://Private/*`, which needs a biometric prompt a stolen key
-  cannot answer. Full model: `dotfiles-private/docs/access-model.md`.
+- **Scope:** the key reaches the verbs above and the usage-tracker rsync pulls;
+  `op://Private/*` needs a biometric prompt a stolen key cannot answer. Full
+  model: `dotfiles-private/docs/access-model.md`.
 - **Also the transport for `ask-human.sh … --push`** (see *human-queue*, below):
-  it runs `human-queue.sh gui-run` over this same key, non-interactively. That
-  is exactly the "arbitrary commands non-interactively" reach this section
-  already describes — `gui-run` doesn't widen it, it puts a human dialog in
-  front of it for this one path.
+  it sends the `gui-run` verb, which shows the exact string in a human dialog
+  and runs it only on a click.
 
 ### File shuttle — `~/Shuttle` over SMB
 
@@ -555,10 +577,9 @@ tries). The Herdr sidebar's human-queue rows carry ✓ (done) and × (drop), whi
   bytes from what's *displayed*, same as `run`'s `print_req`. A command longer
   than ~2500 chars after that stripping never reaches the dialog at all — no
   "Run" button is offered for a string that can't be shown in full. The dialog
-  is a **second** gate next to the typed-yes TTY gate, not a bypass: it exists
-  because the ssh key behind `--push` already lets the mini run arbitrary
-  commands non-interactively on the MacBook, and turns that reach back into
-  something a human approves per request, by reading the exact string. A
+  is a **second** gate next to the typed-yes TTY gate, not a bypass: `gui-run`
+  is the one verb of the key behind `--push` that carries an arbitrary string,
+  and a human approves each request by reading the exact string. A
   misbehaving mini can put a string in front of a human either way, never open a
   shell on its own.
 - **The default drain walks the queue instead of printing it**, prompting
@@ -796,10 +817,11 @@ pointed at a read-only token, and only the dry-run saw it.
 
 ## ssh iumac identity
 
-- **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
-  default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
-  is unset and every `git@github.com:` remote there fails `Permission denied
-  (publickey)`. That reads like a broken tunnel and is not one. `ssh-agent.zsh`
-  (loaded from `~/.zshenv`, gated on the `op` backend) fixes it; the gate is the
-  backend and **not** the socket's existence, because the same socket path
-  exists on the mini, where exporting it hangs.
+- **`ssh iumac` carries no SSH identity, by design.** The MacBook-side shell
+  does not export the 1Password agent for incoming ssh sessions, and the key
+  runs fixed verbs only, so nothing there reads `git@github.com:` remotes. Git
+  pulls on the MacBook go through `ask-human.sh ask '…' --cmd 'git -C … pull'`
+  (the human approves, the command runs in their own session with their agent).
+  `ssh-agent.zsh` (loaded from `~/.zshenv`) is gated on the `op` backend, not on
+  the socket's existence, because the same socket path exists on the mini, where
+  exporting it hangs.

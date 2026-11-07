@@ -67,9 +67,10 @@ Match host mini exec "grep -qx op ~/.config/secrets/backend"
     IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 
 # The IU work laptop. Reverse of `Host mini`: the mini dials OUT to the
-# MacBook for rsync/scp pulls, usage-tracker stats, brain/dotfiles sync — auth
-# is the dedicated mini->iumac key (config/ssh/authorized_keys), not the 1P
-# agent, because macOS ships no Tailscale SSH server for this leg.
+# MacBook for usage-tracker rsync pulls and a fixed set of verbs (forced command
+# scripts/iumac-gate.sh; list in docs/remote-dev.md) — auth is the dedicated
+# mini->iumac key (config/ssh/authorized_keys.iumac), not the 1P agent, because
+# macOS ships no Tailscale SSH server for this leg.
 #
 # IdentityAgent none is NOT optional on the mini: SSH_AUTH_SOCK there still
 # points at the 1Password agent socket, and any target that consults it hangs

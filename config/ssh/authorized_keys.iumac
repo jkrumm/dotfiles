@@ -14,11 +14,24 @@
 # to tell the two machines apart, rather than a second, independent hostname
 # check that could drift from that one.
 #
-# `restrict` turns off port/agent forwarding, X11 and user-rc; agent
-# forwarding off is the load-bearing part — without it the mini could borrow
-# the human's 1Password-held GitHub/commit-signing key on every connection.
-# `pty` is re-enabled after `restrict` so interactive shells still work;
-# scp/rsync/sftp/git are unaffected by `restrict`. No `from=`: source
-# restriction is the tailnet ACL's job (only tag:mac reaches tcp:22), and a
-# Tailscale IP must not enter git.
-restrict,pty ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIABPkPsMROlF6nF0127jSEkNFlJ+Iqtkpy0T3nuMEOoJ mini->iumac
+# FORCED COMMAND, NO PTY. `restrict` turns off pty allocation, port, agent and
+# X11 forwarding and user-rc; nothing is re-enabled. `command=` pins every
+# connection this key makes to scripts/iumac-gate.sh, a verb gate: it reads
+# the requested command from $SSH_ORIGINAL_COMMAND, never evaluates it, and
+# runs only the fixed operations the mini needs — a reachability probe, the
+# human-queue dialog, notifications and URL opens, claude re-login, account
+# snapshots, the iu-portal scrape and usage-tracker's rsync pulls — each with
+# validated arguments. Anything else (shells, git, op, installers) is refused
+# with exit 126. Least privilege: the mini's outbound credential carries
+# exactly the operations it is used for. The gate also drops the 1Password
+# agent socket before it runs anything.
+#
+# sshd runs the command through the user's shell, so $HOME expands there; the
+# escaped quotes keep the path one word.
+#
+# `make authorized-keys` replaces any earlier line for this key by its key
+# blob (so an older, broader line is pruned), keeps a timestamped backup and
+# self-tests the gate afterwards; `make authorized-keys-rollback` restores the
+# previous file. No `from=`: source restriction is the tailnet ACL's job (only
+# tag:mac reaches tcp:22), and a Tailscale IP must not enter git.
+restrict,command="/bin/bash \"$HOME/SourceRoot/dotfiles/scripts/iumac-gate.sh\"" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIABPkPsMROlF6nF0127jSEkNFlJ+Iqtkpy0T3nuMEOoJ mini->iumac

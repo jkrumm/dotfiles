@@ -558,9 +558,14 @@ _setup-appearance-sync:
 		$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.appearance-sync" PLIST_DIR="$(DOTFILES_DIR)/scripts"; \
 	fi
 
-.PHONY: authorized-keys remote-access _setup-remote-access
-# Installs trusted public keys into ~/.ssh/authorized_keys (append-if-missing;
-# never clobbers or duplicates an existing entry). Deliberately NOT sudo and
+.PHONY: authorized-keys authorized-keys-rollback remote-access _setup-remote-access
+# Installs trusted public keys into ~/.ssh/authorized_keys through
+# scripts/authorized-keys-sync.sh: each source key REPLACES any target line with
+# the same key blob (not append-if-missing), so a key whose options changed
+# never leaves its older, broader line behind. Unrelated lines are kept. The
+# new file is validated with ssh-keygen before an atomic move, the previous one
+# is kept as ~/.ssh/authorized_keys.bak-<timestamp> (newest 5), and
+# `make authorized-keys-rollback` restores the newest. Deliberately NOT sudo and
 # touches nothing else — no sshd config, no Screen Sharing toggle — so it is
 # safe to run standalone on a machine that only needs a key, where the rest of
 # `remote-access`'s sudo/sharing side effects are unwanted. `remote-access`
@@ -579,34 +584,46 @@ _setup-appearance-sync:
 # first (see config/ssh/authorized_keys.iumac's header and
 # dotfiles-private/docs/access-model.md).
 #
-# The grep matches a bare `ssh-...` line OR an authorized_keys OPTIONS-prefixed
-# line (`restrict,pty ssh-ed25519 ...`, `command=... ssh-ed25519 ...`,
+# The .iumac key is a FORCED-COMMAND key: `restrict,command="... iumac-gate.sh"`
+# pins every connection to the verb gate in scripts/iumac-gate.sh (no pty, no
+# forwarding, no agent). After installing it the recipe self-tests the gate
+# locally (`true` must exit 0, `id` must be refused with 126) and rolls the
+# file back if either check fails.
+#
+# The sync recognises a bare `ssh-...` line OR an authorized_keys
+# OPTIONS-prefixed line (`restrict,command=... ssh-ed25519 ...`,
 # `no-agent-forwarding ssh-ed25519 ...`, `from="..." ssh-ed25519 ...`) — a plain
-# `^ssh-` anchor silently dropped any key carrying options, which is exactly the
-# shape the mini->iumac key needs (`restrict,pty`).
+# `^ssh-` anchor silently drops any key carrying options.
 authorized-keys:
 	@mkdir -p "$(HOME)/.ssh"; chmod 700 "$(HOME)/.ssh"
-	@touch "$(HOME)/.ssh/authorized_keys"; chmod 600 "$(HOME)/.ssh/authorized_keys"
-	@grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys" | while IFS= read -r key; do \
-		grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
-	done
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	SOURCES="$(DOTFILES_DIR)/config/ssh/authorized_keys"; \
+	IUMAC=0; \
 	if [ "$$BACKEND" = "cache" ]; then \
-		grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys.mini" | while IFS= read -r key; do \
-			grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
-		done; \
-	else \
-		echo "    · authorized_keys.mini skipped — this is a present-human machine (backend!=cache); that key is the MacBook's own OUTBOUND credential and must never also be an inbound one here"; \
-	fi
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" = "cache" ]; then \
+		SOURCES="$$SOURCES $(DOTFILES_DIR)/config/ssh/authorized_keys.mini"; \
 		echo "    · authorized_keys.iumac skipped — this is the mini (backend=cache); that key is the mini's own OUTBOUND credential and must never also be an inbound one here"; \
 	else \
-		grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys.iumac" | while IFS= read -r key; do \
-			grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
-		done; \
+		echo "    · authorized_keys.mini skipped — this is a present-human machine (backend!=cache); that key is the MacBook's own OUTBOUND credential and must never also be an inbound one here"; \
+		SOURCES="$$SOURCES $(DOTFILES_DIR)/config/ssh/authorized_keys.iumac"; \
+		IUMAC=1; \
+	fi; \
+	$(DOTFILES_DIR)/scripts/authorized-keys-sync.sh "$(HOME)/.ssh/authorized_keys" $$SOURCES || exit 1; \
+	if [ "$$IUMAC" = 1 ]; then \
+		SSH_ORIGINAL_COMMAND=true /bin/bash "$(DOTFILES_DIR)/scripts/iumac-gate.sh" >/dev/null 2>&1; OKRC=$$?; \
+		SSH_ORIGINAL_COMMAND=id /bin/bash "$(DOTFILES_DIR)/scripts/iumac-gate.sh" >/dev/null 2>&1; DENYRC=$$?; \
+		if [ "$$OKRC" != 0 ] || [ "$$DENYRC" != 126 ]; then \
+			echo "    ✗ iumac gate self-test failed (true -> $$OKRC, id -> $$DENYRC); rolling authorized_keys back"; \
+			$(DOTFILES_DIR)/scripts/authorized-keys-sync.sh --rollback "$(HOME)/.ssh/authorized_keys"; \
+			exit 1; \
+		fi; \
+		echo "    ✓ iumac gate self-test (true allowed, id refused)"; \
 	fi
 	@echo "    ✓ authorized_keys ($$(grep -cE '^(ssh-|restrict|command=|no-|from=)' "$(HOME)/.ssh/authorized_keys" 2>/dev/null) trusted key(s))"
+
+# Restores the newest ~/.ssh/authorized_keys.bak-* (the replaced file is kept
+# as authorized_keys.pre-rollback). Exit 1 when there is no backup.
+authorized-keys-rollback:
+	@$(DOTFILES_DIR)/scripts/authorized-keys-sync.sh --rollback "$(HOME)/.ssh/authorized_keys"
 
 # Opt-in per machine — NOT in the default `setup` chain, because enabling an SSH
 # server is a deliberate per-host decision. Run `make remote-access` on a Mac you
@@ -772,7 +789,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2402,6 +2419,17 @@ human-queue-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@$(DOTFILES_DIR)/scripts/human-queue.test.sh
 
+.PHONY: iumac-gate-test authorized-keys-sync-test
+iumac-gate-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/iumac-gate.sh $(DOTFILES_DIR)/scripts/claude-account-snapshot.sh $(DOTFILES_DIR)/scripts/iumac-gate.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/iumac-gate.test.sh
+	@$(DOTFILES_DIR)/scripts/iumac-gate.test.sh
+
+authorized-keys-sync-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/authorized-keys-sync.sh $(DOTFILES_DIR)/scripts/authorized-keys-sync.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/authorized-keys-sync.test.sh
+	@$(DOTFILES_DIR)/scripts/authorized-keys-sync.test.sh
+
 # Hook regression suite. Hooks are symlinked live into ~/.claude/hooks, so a bug
 # here gates real tool calls immediately — run after any hook edit.
 .PHONY: hooks-test
@@ -3370,6 +3398,7 @@ help:
 	@echo ""
 	@echo "  Remote dev"
 	@echo "  make authorized-keys            Install trusted SSH keys only — no sudo, no sshd/sharing changes (safe on the IU MacBook)"
+	@echo "  make authorized-keys-rollback   Restore the newest ~/.ssh/authorized_keys backup (keeps the replaced file as .pre-rollback)"
 	@echo "  make remote-access              Dev-host only: sshd + Screen Sharing + authorized keys (needs sudo)"
 	@echo "  make git-headless               Dev-host only: write ~/.gitconfig-headless (no 1Password signing)"
 	@echo "  make tailnet-sshd-setup         MacBook: userland sshd on :2222 for the mini's reverse reach"

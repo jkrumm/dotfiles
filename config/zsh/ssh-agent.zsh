@@ -1,12 +1,15 @@
-# 1Password SSH agent for NON-INTERACTIVE shells — `ssh iumac -- <cmd>`.
+# 1Password SSH agent for NON-INTERACTIVE local shells.
 #
 # conf.d/secrets.zsh already exports SSH_AUTH_SOCK, but .zshrc is not read by a
-# remote command shell, so an agent-driven `ssh iumac 'git pull'` lands with it
-# UNSET. Every git remote on the MacBook is `git@github.com:` and the machine
-# holds no private key on disk (`ls ~/.ssh/id_*` is empty) — every identity
-# comes from 1Password. The failure is therefore not "ssh iumac is down", it is
-# `Permission denied (publickey)` one hop further in, which reads like a broken
-# tunnel and sends you to the wrong layer. Diagnosed 2026-09-07.
+# command shell (launchd jobs, `zsh -c`), so those start with it UNSET. Every
+# git remote on the MacBook is `git@github.com:` and the machine holds no
+# private key on disk — every identity comes from 1Password — so a local job
+# that runs git needs the agent socket exported here.
+#
+# An INCOMING ssh session never gets it. The mini's key into this machine runs
+# only the verbs scripts/iumac-gate.sh allows, none of which needs a git
+# identity; the session is cut off from the local agent by design (least
+# privilege), and the gate unsets SSH_AUTH_SOCK itself as well.
 #
 # GATED ON THE `op` BACKEND, NOT ON THE SOCKET EXISTING. The socket path exists
 # on the MINI too — the desktop app has run there — and exporting it on a
@@ -23,6 +26,9 @@
   [[ -r "$marker" ]] || return 0
   read -r backend < "$marker" || return 0
   [[ "$backend" == "op" ]] || return 0
+
+  # An incoming ssh session never gets the local 1Password agent socket.
+  [[ -n "${SSH_CONNECTION:-}" ]] && return 0
 
   sock="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
   [[ -S "$sock" ]] || return 0

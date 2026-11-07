@@ -57,9 +57,16 @@ for m in json.load(sys.stdin).get("machines",[]):
     now=$(/bin/date +%s)
     if [[ -n "${v:-}" && "${at:-0}" =~ ^[0-9]+$ ]] && (( now - at < ttl )); then echo "$v"; return 0; fi
   fi
-  # shellcheck disable=SC2016  # $HOME must expand on the peer
+  # iumac accepts fixed verbs only (its gate runs hc --version for `hc-version`)
+  local remote_cmd
+  if [[ "$host" == iumac ]]; then
+    remote_cmd="hc-version"
+  else
+    # shellcheck disable=SC2016  # $HOME must expand on the peer
+    remote_cmd='"$HOME/.local/bin/hc" --version'
+  fi
   v=$(_core_bounded 15 /usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" \
-    '"$HOME/.local/bin/hc" --version' 2>/dev/null | /usr/bin/awk '{ print $2; exit }') || v=""
+    "$remote_cmd" 2>/dev/null | /usr/bin/awk '{ print $2; exit }') || v=""
   if [[ -n "$v" && -n "$cache" ]]; then
     printf '%s %s\n' "$(/bin/date +%s)" "$v" > "$cache" 2>/dev/null || true
   fi

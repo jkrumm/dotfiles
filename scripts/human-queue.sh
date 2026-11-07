@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # human-queue — MacBook-side drain of the async present-human queue an agent on
-# the mini writes with `ask-human.sh`. The mini can now `ssh iumac` (a
-# dedicated, restricted key — see ssh_config), so a network path back exists;
-# that is not what this queue is for. SSH gives the mini reach, not a
+# the mini writes with `ask-human.sh`. The mini can `ssh iumac` (a
+# dedicated key that runs only fixed verbs — see ssh_config); that is not what
+# this queue is for. SSH gives the mini reach, not a
 # fingerprint — this is for work that needs a *present human*: biometric `op`
 # (`make secrets-seed`), the Tailscale ACL push, or any decision only a person
 # can make, none of which an agent on the mini can do for itself no matter how
@@ -22,11 +22,10 @@ set -euo pipefail
 # string locally with the human's full privileges. There is no path that skips
 # the human: a compromised or misbehaving mini can put a string in front of a
 # human, never open a shell on its own. The dialog is a second gate next to the
-# typed-yes TTY gate, not a bypass of it — it exists because the ssh key the
-# mini already holds (`~/.ssh/id_ed25519_iumac`, see docs/remote-dev.md → *mini
-# → iumac*) already lets it run arbitrary commands non-interactively on this
-# machine; `gui-run` is what turns that reach into something a present human
-# still has to approve, one request at a time, by reading the exact string.
+# typed-yes TTY gate, not a bypass of it — `gui-run` is the one verb of the mini's
+# key (`~/.ssh/id_ed25519_iumac`, see docs/remote-dev.md → *mini → iumac*) that
+# can carry an arbitrary string, and a present human approves it, one request
+# at a time, by reading the exact string.
 #
 # No LaunchAgent drains this automatically, and that is deliberate, not an
 # oversight: the machine reaching the mini is the human's own MacBook, and the

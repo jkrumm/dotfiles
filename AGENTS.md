@@ -156,7 +156,7 @@ health URL and no OTel `service.name` — this repo runs no service. Kuma:
 
 - Symlinks: edit at either end, but **never the live `~/.claude/settings.json`** (merged).
 - Every always-on rule also needs adding to `config/opencode/opencode.json` `instructions`.
-- Core restart/update, TCC grants, `ssh mini 'claude …'`, `ssh iumac` identity → *Machines & remote dev*.
+- Core restart/update, TCC grants, `ssh mini 'claude …'`, `ssh iumac` verbs → *Machines & remote dev*.
 - `op read`/`op run` on the mini hangs; use `secrets-run` → *Secrets*.
 - Logs live in `~/Library/Logs`, never `/tmp` → *Odds and ends*.
 - `docs/architecture.md` must list everything that runs, or `make doctor` exits 1.
@@ -197,7 +197,7 @@ Facts to hold:
   (`~/.local/share/herdr-core/active/`, official installer); on the mini `com.jkrumm.herdr-core` is only a one-shot
   starter, the MacBook's Herdr app starts its own. No wrapper at `~/.local/bin`, no Homebrew core: `docs/herdr-core.md`
   §How the core runs now.
-- **`ssh iumac '<cmd>'` carries no SSH identity by default**: `git@github.com:` there fails `Permission denied (publickey)` and reads like a broken tunnel. `docs/remote-dev.md` §ssh iumac identity.
+- **`ssh iumac` runs fixed verbs only** (forced-command gate `scripts/iumac-gate.sh`; list in `docs/remote-dev.md` §mini → iumac) and carries no SSH identity. File pulls: `rsync … iumac:<path>`; anything else MacBook-side: `ask-human.sh ask … --cmd`. Installers that write to the MacBook run from its own terminal.
 - **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
   keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
   billing, and still looks healthy in `claude agents`. `rd work` spawns *through* the launchd core (a GUI-session

@@ -447,7 +447,8 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
    helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
    Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`. On the mini the
    browser is on the MacBook: it starts `ssh -N -R 127.0.0.1:<port>:localhost:<port> iumac` (loopback only) so the
-   browser's localhost callback lands on the mini's CLI, then `ssh iumac open -a <app> '<url>'`. The tunnel is its own
+   browser's localhost callback lands on the mini's CLI (the key grants no reverse forward today, so the printed URL plus
+   the pasted code is the normal path), and `ssh iumac open-url` (stdin: app, URL) opens the page. The tunnel is its own
    ssh connection. The login process (`claude-relogin --in-pane`) owns it and kills it on any exit (trap on
    EXIT/INT/TERM); a detached watchdog covers an owner that vanished, closing it when the CLI stops listening or after 45
    minutes without a connection (an idle watchdog, not a deadline). If the tunnel dies while the login still waits, the
@@ -538,7 +539,7 @@ The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one A
 | `plan/<id>` WARN "not detectable" | Keychain item unreadable (locked) or without `rateLimitTier` | unlock the GUI session and rerun; `claude-account expiry --json` shows `tier` |
 | a stale expiry or 401 right after a fresh login, `security find-generic-password -s 'Claude Code-credentials…'` without `-a` shows `"acct"<blob>="unknown"` | a Keychain twin: a process that ran without `USER` filed a second item under acct `unknown` next to the real one (acct = `$USER`) | lookups here pass `-a $USER`; delete the twin: `security delete-generic-password -s 'Claude Code-credentials' -a unknown` (add the `-<hash>` suffix for a non-default account) |
 | notification `login finished but the Keychain login did not change` | the CLI exited 0 but the item the reader sees was not rewritten (Keychain twin above, a locked Keychain, a login in the wrong browser profile) | check the twin row above, then `claude-relogin <id> --visible` |
-| log `refresh: peer usage unavailable` / `unreadable` | the other machine is asleep or unreachable over ssh, or answered garbage | nothing: the run continues on its own endpoint; `ssh mini claude-account usage --json` (MacBook) / `ssh iumac …` (mini) shows why |
+| log `refresh: peer usage unavailable` / `unreadable` | the other machine is asleep or unreachable over ssh, or answered garbage | nothing: the run continues on its own endpoint; `ssh mini claude-account usage --json` (MacBook) / `ssh iumac account-usage` (mini) shows why |
 | `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
 | `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
 | `pick/*` all `iu`, reason `interactive-fallback` or `spill` | `me` has no fresh sample or is auth-failed | `claude-account usage`, `claude-account refresh --ids me` |
