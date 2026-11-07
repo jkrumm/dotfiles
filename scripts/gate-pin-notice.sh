@@ -126,6 +126,12 @@ for r in "${ranges[@]}"; do text+=$'\n'"  $r"; done
 text+=$'\n'"Review the diff, then re-pin from your epos-tool-athena clone on the mini: $REPIN_CMD"
 
 expires=never; (( fallback )) && expires=7d
-"$ASK_HUMAN" ask "$text" --cmd "$REPIN_CMD" --key "$KEY" --expires "$expires" >/dev/null
-printf '%s' "$sig" > "$SIGFILE"
-echo "    ! deploy gate pin drift: re-pin requested via human-queue (key $KEY)"
+# `ask` exits non-zero when only the MacBook push fails (unreachable); the request is still queued, which is what counts.
+"$ASK_HUMAN" ask "$text" --cmd "$REPIN_CMD" --key "$KEY" --expires "$expires" >/dev/null || true
+if "$ASK_HUMAN" list --json 2>/dev/null | grep -q "\"key\":\"$KEY\""; then
+  printf '%s' "$sig" > "$SIGFILE"
+  echo "    ! deploy gate pin drift: re-pin requested via human-queue (key $KEY)"
+else
+  echo "    ! deploy gate pin drift, but the human-queue request could not be enqueued" >&2
+  exit 1
+fi

@@ -109,6 +109,15 @@ printf 'queue v2\n' > "$REPO/scripts/human-queue.sh"; commit "queue v2"
 "$NOTICE" >/dev/null
 assert_eq "fallback: pinned change -> one item" 1 "$(pending)"
 
+# An unreachable MacBook (push fails, ask exits non-zero) still leaves a queued item and a clean exit.
+write_pins
+"$NOTICE" >/dev/null
+assert_eq "re-pinned again -> item cleared" 0 "$(pending)"
+printf 'ask v3\n' > "$REPO/scripts/ask-human.sh"; commit "ask v3"
+HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=iumac.invalid "$NOTICE" >/dev/null 2>&1
+assert_eq "push unreachable: notice exits 0" 0 "$?"
+assert_eq "push unreachable: the item is queued" 1 "$(pending)"
+
 # The fallback list must cover the live gate's pins (skipped where no gate is installed).
 LIVE="$HOME/.local/libexec/prometheus-deploy-gate/config.json"
 if [[ -r "$LIVE" ]] && command -v python3 >/dev/null 2>&1; then
