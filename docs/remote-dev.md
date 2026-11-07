@@ -364,7 +364,10 @@ macOS ships no Tailscale SSH server.
   target skips the mini itself: both halves there turn an outbound-only
   credential into an inbound one. Verify positively — `ssh -A iumac` leaves
   `SSH_AUTH_SOCK` unset remotely and `-R` is refused (`-L` is **not** a valid
-  test; a local forward needs no server-side setup).
+  test; a local forward needs no server-side setup). After any change to the
+  key line, close the mini's multiplexed master first (`ssh -O exit iumac`):
+  a `ControlPersist` connection opened earlier keeps the options of the line it
+  authenticated with, so a test through it proves nothing.
 - **The verbs** (least privilege: callers send exactly these words, no quoting,
   no `;`, `$` or quotes; payloads travel on stdin):
 
