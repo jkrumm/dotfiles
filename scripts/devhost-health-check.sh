@@ -143,6 +143,14 @@ KUMA_DOOR_URL="${KUMA_DOOR_URL:-http://127.0.0.1:8795}"
 # side on a healthy machine — otherwise the only way to test the alarm is to
 # break the host.
 MEM_SWAP_PCT_MAX="${DEVHOST_MEM_SWAP_PCT_MAX:-25}"
+# Swap in use only FAILs past this share of RAM; between MAX and FAIL it is a WARN. Swap does not
+# drain when its cause goes away (2026-11-07: 9 GiB = 28 % stayed parked for hours after the
+# fseventsd leak was killed and held the monitor DOWN with pressure normal and 0 swapouts).
+MEM_SWAP_PCT_FAIL="${DEVHOST_MEM_SWAP_PCT_FAIL:-75}"
+# shellcheck disable=SC2034  # read by fseventsd_leak_note() in lib/fseventsd-mem.sh
+FSEVENTSD_MAX_MB="${DEVHOST_FSEVENTSD_MAX_MB:-10240}"
+TOP_BIN="${TOP_BIN:-/usr/bin/top}"
+PGREP_BIN="${PGREP_BIN:-/usr/bin/pgrep}"
 # Swapout RATE that pages: cumulative swapout pages -> MiB in the ~300 s window.
 # 2 GiB, because the 2026-09-27 storm ran 19-107 GiB per window against 0-0.9
 # GiB idle — an order of magnitude of daylight on either side. The caller for
@@ -717,6 +725,9 @@ check_dev_vhosts() {
   echo "dev vhosts up (cert ${days_left}d left, DNS in sync)"
 }
 
+# shellcheck source=lib/fseventsd-mem.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/fseventsd-mem.sh"
+
 check_memory() {
   # The single most likely thing to break this machine, and until now nothing
   # watched it. An OOM kill has already taken the terminal server once — and the monitor
@@ -773,17 +784,27 @@ check_memory() {
   # though: the 2026-09-27 storm sat at level 2 for eight hours while swapping
   # 19-107 GiB per 300 s, so the WARN text must not claim otherwise and the
   # actual thrashing signal is check_swapouts' rate.
+  local leak
+  leak=$(fseventsd_leak_note)
+  leak=${leak:+; $leak}
   if (( level >= 4 )); then
-    echo "memory pressure ${level_name} — the kernel is about to start jetsam-killing (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
+    echo "memory pressure ${level_name} — the kernel is about to start jetsam-killing (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)${leak}"
     return 1
   fi
   if (( level >= 2 )); then
-    echo "memory pressure ${level_name} (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
+    echo "memory pressure ${level_name} (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)${leak}"
     return 2
   fi
-  (( pct <= MEM_SWAP_PCT_MAX )) \
-    || { echo "swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM (max ${MEM_SWAP_PCT_MAX}%) — something is leaking"; return 1; }
-  echo "memory ok (pressure ${level_name}, swap ${used_mb}M = ${pct}% of ${phys_gb}G)"
+  if (( pct > MEM_SWAP_PCT_FAIL )); then
+    echo "swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM (max ${MEM_SWAP_PCT_FAIL}%) — something is leaking${leak}"
+    return 1
+  fi
+  if (( pct > MEM_SWAP_PCT_MAX )); then
+    echo "swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM (warn ${MEM_SWAP_PCT_MAX}%; parked pages, not thrashing — check_swapouts is the rate)${leak}"
+    return 2
+  fi
+  echo "memory ok (pressure ${level_name}, swap ${used_mb}M = ${pct}% of ${phys_gb}G)${leak}"
+  [[ -z "$leak" ]] || return 2
 }
 
 check_kernel_panics() {

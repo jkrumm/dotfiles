@@ -161,6 +161,33 @@ composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
 assert_contains "dead login, dead token: push is down" "status=down" "$composite"
 assert_contains "dead login: message" "billing API credits" "$composite"
 
+echo "check_memory: parked swap is a WARN, only a leak-sized share FAILs; fseventsd over the limit is named"
+cat > "$TMP/sysctl" <<'STUB'
+#!/bin/sh
+case "$*" in
+  *pressure_level*) echo "${STUB_PRESSURE:-1}" ;;
+  *swapusage*) echo "total = 40960.00M  used = ${STUB_SWAP_MB:-100}.00M  free = 1.00M  (encrypted)" ;;
+  *memsize*) echo 34359738368 ;;
+esac
+STUB
+printf '#!/bin/sh\n[ "${STUB_FSEVENTSD:-0}" = 0 ] && exit 1\necho 551\n' > "$TMP/pgrep"
+printf '#!/bin/sh\necho "MEM"\necho "${STUB_FSEVENTSD_MEM:-4544K}"\n' > "$TMP/top"
+chmod +x "$TMP/sysctl" "$TMP/pgrep" "$TMP/top"
+mem_run() { run_script DEVHOST_COMPONENTS="check_memory" SYSCTL_BIN="$TMP/sysctl" PGREP_BIN="$TMP/pgrep" TOP_BIN="$TMP/top" "$@"; composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log"); }
+mem_run STUB_SWAP_MB=100 STUB_FSEVENTSD=1
+assert_contains "idle host, small fseventsd: up" "status=up" "$composite"
+mem_run STUB_SWAP_MB=9300
+assert_contains "28% swap, pressure normal: still up (WARN)" "status=up" "$composite"
+assert_contains "28% swap: WARN text" "parked pages" "$composite"
+mem_run STUB_SWAP_MB=30000
+assert_contains "87% swap: down" "status=down" "$composite"
+mem_run STUB_SWAP_MB=100 STUB_FSEVENTSD=1 STUB_FSEVENTSD_MEM=61G
+assert_contains "fseventsd 61G: up (WARN), not a page" "status=up" "$composite"
+assert_contains "fseventsd 61G: named with the fix" "fseventsd holds 61G" "$composite"
+assert_contains "fseventsd 61G: killall, not kickstart" "sudo killall fseventsd" "$composite"
+mem_run STUB_SWAP_MB=100 STUB_FSEVENTSD=1 STUB_FSEVENTSD_MEM=9G
+assert_eq "fseventsd 9G: no note" 0 "$(printf '%s' "$composite" | /usr/bin/grep -c 'fseventsd holds')"
+
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')
 [[ -n "$list" ]] && ok "default list found" || bad "default list found"

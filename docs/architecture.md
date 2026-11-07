@@ -317,6 +317,8 @@ rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to
 | `com.iu.teamchat-vm-watch` | unspecified | teamchat VM (IuRoot, read-only mention) | unspecified | unspecified | IuRoot (teamchat) | not reviewed here |
 | `com.iu.prometheus-vpn-watcher` | in-process self-heal ladder (IuRoot, read-only mention) | the VPN | a desktop notification per the archived note `docs/archive/background-jobs-2026-10-warden-era.md` | unspecified | IuRoot | not reviewed here |
 
+**`fseventsd` leak (2026-11-06):** the system daemon (pid 551, up 5 days) grew to 61 GiB, 55 GiB compressed, filled the 64 GiB swap and held `MacMini Dev Host - Push` DOWN. The heartbeat's memory component now names it above 10 GiB (WARN). The restart is `sudo killall fseventsd` (launchd respawns it at a few MiB; run it through `ask-human`, the mini's sudo password is MacBook-only). `launchctl kickstart -k system/com.apple.fseventsd` does **not** work: SIP refuses it. If the leak returns, schedule that restart (it recurs every few days at this uptime) rather than waiting for the swap to fill. Whether worktree churn feeds the leak is unproven: only 6 worktrees exist now, too few to implicate them.
+
 Not a watcher: `com.jkrumm.hc-reap` is the janitor. It closes finished factory agent terminals and messages a dirty one; it grades nothing.
 
 **Open: other repos' pushers** (their scripts run without a bounded wrapper; not fixable from dotfiles, owner-repo follow-ups):
