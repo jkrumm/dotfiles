@@ -424,7 +424,8 @@ factory_host() { # <secs> <args…>
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
   # FACTORY_STDIN_B64 (base64, one line) is fed to the call's stdin instead of /dev/null (`rd issue --facts`).
   [[ -z ${FACTORY_STDIN_B64:-} ]] || stdin="<<<\"\$(printf %s '$FACTORY_STDIN_B64' | base64 -d)\""
-  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs factory$args $stdin"
+  # The token API: every call but `health` needs the owner's token, which secrets-run resolves from the deployed release's .env.tpl.
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs secrets-run run --env-file=\"\$HOME/.software-factory/current/.env.tpl\" -- factory$args $stdin"
 }
 
 # True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1

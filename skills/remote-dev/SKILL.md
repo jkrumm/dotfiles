@@ -36,7 +36,7 @@ and `@implementer`. `rd work` is the owner's own session. `agent-dispatch` and
 
 ### Looking at an agent
 
-The factory starts and babysits its agents; an orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one. To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
+The factory starts and babysits its agents; an orchestrator does not poll: it ends its turn after `factory issue defer <id> --attempt <n> --after issue_<m>` (or `--until`), and the factory wakes it when the Issues it waits for have closed. To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
 for helpers; `hc wait --help`). A wake can mean `blocked` (an approval/question UI): read it before answering.
 
 ### Scripting hc directly (stack rules on top of the `herdr` skill)

@@ -35,9 +35,9 @@ const HC_SPLIT = `\n${HC_MARK}\n`;
 // hc starts a stray core (no keychain) when none runs: ask lib/core-up.sh first (socket answers AND a launchd-born core), as rd's require_core does. Bounded when the host has a timeout.
 const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 1; t=$(command -v timeout || command -v gtimeout)`;
 const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
-// Hot: rebuild the server's fleet snapshot first (inside the same secrets-run), so the overview read is current.
-const pollCmd = (hot) => `{ ${SECRETS} sh -c '${hot ? "factory --format json fleet --refresh >/dev/null 2>&1; " : ""}${READS}'; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
-const CMD = pollCmd(false);
+// The overview is built from the Issues when it is read: there is no snapshot to rebuild first.
+const pollCmd = () => `{ ${SECRETS} sh -c '${READS}'; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
+const CMD = pollCmd();
 // A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.
 const PEEK_LINES = 8;
 const peekCmd = (addr) => `${HC_GUARD}; out=$(\${t:+"$t"} \${t:+8} hc read ${addr} 2>&1) || { echo "(hc read failed)"; exit 1; }; printf '%s\\n' "$out" | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;

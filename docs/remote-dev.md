@@ -150,7 +150,7 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
   spawn that gets no answer reports `uncertain` and points at `rd agents`; it is never retried. `read` and `say`
   see only the dev host's own terminals (a linked machine's `mini/t3` is dropped; `rd agents` lists them all).
 
-Waiting on a terminal: `hc wait <t>` (`--output X` for a program), never `sleep`. An agent the factory started is waited on with `factory session wait --on workers`.
+Waiting on a terminal: `hc wait <t>` (`--output X` for a program), never `sleep`. An agent the factory started is waited on with `factory issue defer <id> --attempt <n> --after issue_<m>` (a lead's verb: it ends its turn and the factory wakes it).
 
 `rd agents` prints one line per agent: `SOURCE  NAME  STATUS  CWD  ID`, the status being hc's own word (`working`,
 `idle`, `done`, `blocked`). **That text is a contract**: tooling greps it for agent names and `blocked`

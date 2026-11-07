@@ -1,6 +1,6 @@
 ---
 name: wave
-description: Turn a plan into factory Issues - the lead's playbook for a multi-step plan (docs/plan.yaml, the server files the rows), a one-off Issue (rd issue / factory issue new), splitting work into independent Issues, ordering with after/--after, and following them with factory issue list|show and factory status. Use for work too large for one context, staged migrations, plans saying "then in the next session", or N changes that should ship on their own.
+description: Turn a plan into factory Issues - the lead's playbook for a multi-step plan (docs/plan.yaml, the server files the rows), a one-off Issue (rd issue / factory issue new), splitting work into independent Issues, ordering with after/--after, and following them with factory issue list|show and factory read overview. Use for work too large for one context, staged migrations, plans saying "then in the next session", or N changes that should ship on their own.
 ---
 
 # Wave — turn a plan into Issues
@@ -68,12 +68,12 @@ factory issue new --repo <path> --title <text> --facts @file|- [--after <id> …
 
 ## Follow and steer
 
-- `factory issue list`, `factory issue show <id>` (facts, timeline, evidence, questions), `factory status` (asks, health).
+- `factory issue list`, `factory issue show <id>` (facts, timeline, evidence, questions), `factory read overview` (asks, health, counts).
 - `factory issue prio <id> <n>` orders the ready ones (higher first, none is 0).
 - `factory issue answer <id> <text>` answers an ask; `factory issue note <id> <text>` adds context.
-- `factory issue stop|resume|reopen <id>` when a lead must stop or restart; the owner stops a row by stopping its Issue.
+- `factory issue cancel|reopen <id>` when a lead must stop or the Issue should run again; the owner stops a row by cancelling its Issue.
 - **Done** is the Issue closing with its evidence (verify, review, ship). The plan file needs no ticking: the server derives row state from the Issues.
 
 ## Waiting
 
-Nothing polls. Commit the plan (and any hand-filed Issues), report the ids and end the turn; the factory's wake note and `factory status` bring the next step.
+Nothing polls. Commit the plan (and any hand-filed Issues), report the ids and end the turn; the factory's wake note and `factory read overview` bring the next step.

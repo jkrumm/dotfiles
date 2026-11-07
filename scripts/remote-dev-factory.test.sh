@@ -30,6 +30,8 @@ g init -q --bare -b master "$TMP/origin.git"
 g clone -q "$TMP/origin.git" "$TMP/co" 2>/dev/null
 echo a >"$TMP/co/f"; g -C "$TMP/co" add f; g -C "$TMP/co" commit -qm one; g -C "$TMP/co" push -q -u origin master 2>/dev/null
 
+# secrets-run resolves the factory token in production; here it only runs what follows `--`
+printf '#!/usr/bin/env bash\nwhile [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done; shift\nexec "$@"\n' >"$TMP/home/.local/bin/secrets-run"; chmod +x "$TMP/home/.local/bin/secrets-run"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 # a launchd-born core exists (lib/core-up.sh's first half) unless $STATE/no_core exists; PS_BIN keeps the real ps out
 printf '#!/usr/bin/env bash\n[ -f "${STATE:-/nonexistent}/no_core" ] || echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"\n' >"$TMP/bin/ps"; chmod +x "$TMP/bin/ps"; export PS_BIN="$TMP/bin/ps"
