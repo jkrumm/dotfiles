@@ -1,5 +1,5 @@
 # mini -> iumac — dedicated key for the mini's reverse reach into the MacBook
-# (rsync/scp pulls, usage-tracker, brain/dotfiles sync). Kept OUT of
+# (fixed verbs and the usage-tracker rsync pulls, via scripts/iumac-gate.sh). Kept OUT of
 # config/ssh/authorized_keys and in this file instead, because it must be
 # installed on the MacBook (iumac) ONLY, never on the mini itself: the mini
 # holds the matching PRIVATE key on disk (~/.ssh/id_ed25519_iumac), so

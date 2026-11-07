@@ -97,8 +97,6 @@ expect_allowed "gui-run" "gui-run" "human-queue|gui-run" "payload-1"
 assert_eq "gui-run: stdin passthrough" "payload-1" "$(cat "$REC/human-queue.stdin")"
 assert_eq "gui-run: SSH_AUTH_SOCK empty inside" "unset" "$(cat "$REC/human-queue.sock")"
 
-expect_allowed "ask-push" "ask-push 20261107T101500-abc.1_x" "ask-human|push|20261107T101500-abc.1_x"
-
 LONGT="$(printf 'T%.0s' $(seq 1 150))"
 LONGX="$(printf 'x%.0s' $(seq 1 500))"
 expect_allowed "notify" "notify" "osascript|-|Hello|body one body two" $'Hello\nbody one\nbody two'
@@ -154,11 +152,6 @@ expect_refused "newline" $'true\ntouch '"$MARK"
 expect_refused "scrape lookalike" 'cd ~/.local/share/iu-portal/tool && bun scrape.ts daily monthly --other'
 expect_refused "true extra arg" "true x"
 expect_refused "gui-run extra" "gui-run extra"
-expect_refused "ask-push no id" "ask-push"
-expect_refused "ask-push ../x" "ask-push ../x"
-expect_refused "ask-push a;b" "ask-push a;b"
-expect_refused "ask-push .." "ask-push .."
-expect_refused "ask-push two ids" "ask-push a b"
 expect_refused "notify extra" "notify x"
 expect_refused "open-url arg" "open-url https://example.com"
 expect_refused "open-url file://" "open-url" $'Safari\nfile:///etc/passwd'
@@ -206,9 +199,9 @@ expect_refused "rsync glob source" "rsync --server --sender -logDtpr . .claude/*
 
 echo "== decision log"
 LOGF="$H/Library/Logs/iumac-gate.log"
-run_gate "ask-push topsecret-id-123"
+run_gate "true"
+run_gate "gui-run topsecret-id-123"
 if [[ -f "$LOGF" ]]; then
-  assert_contains "log: verb + allow" "ask-push allow" "$(cat "$LOGF")"
   case "$(cat "$LOGF")" in *topsecret-id-123*) bad "log: no arguments" ;; *) ok "log: no arguments" ;; esac
   assert_contains "log: refusals recorded" "refuse" "$(cat "$LOGF")"
 else

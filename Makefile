@@ -586,9 +586,12 @@ _setup-appearance-sync:
 #
 # The .iumac key is a FORCED-COMMAND key: `restrict,command="... iumac-gate.sh"`
 # pins every connection to the verb gate in scripts/iumac-gate.sh (no pty, no
-# forwarding, no agent). After installing it the recipe self-tests the gate
-# locally (`true` must exit 0, `id` must be refused with 126) and rolls the
-# file back if either check fails.
+# forwarding, no agent). After installing it the recipe self-tests the exact
+# path the key line names (~/SourceRoot/dotfiles/scripts/iumac-gate.sh; tests
+# override it with IUMAC_GATE_SELFTEST_PATH): `true` must exit 0, `id` must be
+# refused with 126. On failure it undoes exactly what THIS run did, read from
+# AUTHORIZED_KEYS_SYNC_RESULT: restore the backup it made, remove the file it
+# created, or leave an already-installed file alone and fail.
 #
 # The sync recognises a bare `ssh-...` line OR an authorized_keys
 # OPTIONS-prefixed line (`restrict,command=... ssh-ed25519 ...`,
@@ -607,13 +610,20 @@ authorized-keys:
 		SOURCES="$$SOURCES $(DOTFILES_DIR)/config/ssh/authorized_keys.iumac"; \
 		IUMAC=1; \
 	fi; \
-	$(DOTFILES_DIR)/scripts/authorized-keys-sync.sh "$(HOME)/.ssh/authorized_keys" $$SOURCES || exit 1; \
+	RESULT=$$(mktemp); trap 'rm -f "$$RESULT"' EXIT; \
+	AUTHORIZED_KEYS_SYNC_RESULT="$$RESULT" $(DOTFILES_DIR)/scripts/authorized-keys-sync.sh "$(HOME)/.ssh/authorized_keys" $$SOURCES || exit 1; \
 	if [ "$$IUMAC" = 1 ]; then \
-		SSH_ORIGINAL_COMMAND=true /bin/bash "$(DOTFILES_DIR)/scripts/iumac-gate.sh" >/dev/null 2>&1; OKRC=$$?; \
-		SSH_ORIGINAL_COMMAND=id /bin/bash "$(DOTFILES_DIR)/scripts/iumac-gate.sh" >/dev/null 2>&1; DENYRC=$$?; \
+		GATE="$${IUMAC_GATE_SELFTEST_PATH:-$$HOME/SourceRoot/dotfiles/scripts/iumac-gate.sh}"; \
+		SSH_ORIGINAL_COMMAND=true /bin/bash "$$GATE" >/dev/null 2>&1; OKRC=$$?; \
+		SSH_ORIGINAL_COMMAND=id /bin/bash "$$GATE" >/dev/null 2>&1; DENYRC=$$?; \
 		if [ "$$OKRC" != 0 ] || [ "$$DENYRC" != 126 ]; then \
-			echo "    ✗ iumac gate self-test failed (true -> $$OKRC, id -> $$DENYRC); rolling authorized_keys back"; \
-			$(DOTFILES_DIR)/scripts/authorized-keys-sync.sh --rollback "$(HOME)/.ssh/authorized_keys"; \
+			echo "    ✗ iumac gate self-test failed at $$GATE (true -> $$OKRC, id -> $$DENYRC): the key line names that exact path, so run this from / pull ~/SourceRoot/dotfiles first"; \
+			read -r KIND ARG < "$$RESULT"; \
+			case "$$KIND" in \
+				backup) $(DOTFILES_DIR)/scripts/authorized-keys-sync.sh --rollback-to "$$ARG" "$(HOME)/.ssh/authorized_keys"; echo "    ↳ authorized_keys rolled back to the backup this run made" ;; \
+				created) rm -f "$(HOME)/.ssh/authorized_keys"; echo "    ↳ authorized_keys did not exist before this run; removed the new file" ;; \
+				*) echo "    ↳ authorized_keys was already in place before this run; left as is (nothing to roll back)" ;; \
+			esac; \
 			exit 1; \
 		fi; \
 		echo "    ✓ iumac gate self-test (true allowed, id refused)"; \
@@ -1350,7 +1360,7 @@ _setup-zshenv:
 			echo ""; \
 			echo "$$MARKER"; \
 			echo "# Managed by dotfiles (make setup). Carries the 1Password SSH agent"; \
-			echo "# into \`ssh iumac -- <cmd>\`, which reads ONLY this file — without it"; \
+			echo "# into non-interactive shells, which read ONLY this file — without it"; \
 			echo "# git on the MacBook has no identity at all. Self-gates on the 'op'"; \
 			echo "# secrets backend, so the headless mini picks up nothing (exporting"; \
 			echo "# that socket there hangs on a biometric prompt)."; \

@@ -350,7 +350,7 @@ sshd. Keep the router free of any WAN forward for 22/5900 — that bypasses both
 
 ### mini → iumac — the reverse reach, on :2222
 
-For pulling `usage-tracker` stats, `brain` and files off the MacBook. The ACL
+For pulling `usage-tracker` stats and running a fixed set of verbs on the MacBook. The ACL
 already grants `tag:mac → tag:mac` on `tcp:22`; what was missing is auth, since
 macOS ships no Tailscale SSH server.
 
@@ -372,7 +372,6 @@ macOS ships no Tailscale SSH server.
   |-|-|
   | `true` | probe |
   | `gui-run` | stdin = request JSON; `human-queue.sh gui-run` (native dialog, runs only on a click) |
-  | `ask-push <id>` | `ask-human.sh push <id>` for a pending request |
   | `notify` | stdin: title line, then text; native notification |
   | `open-url` | stdin: app name (or empty), then an https URL; `open` |
   | `relogin <id> [--visible]` | `claude-relogin.sh <id> --machine macbook [--visible]` |
@@ -381,8 +380,9 @@ macOS ships no Tailscale SSH server.
   | `account-snapshot-core` | the same through the MacBook's own core; exit 99 = core not up |
   | `hc-version` | `hc --version` |
 
-  File pulls use `rsync … iumac:<path>` for the usage-tracker dirs. Anything
-  else MacBook-side goes through `ask-human.sh ask '…' --cmd '…'`: the human
+  The gate serves `rsync` pulls of the four usage-tracker stats dirs only; the
+  forced command overrides `sftp` and `scp`, so no other path is readable.
+  Anything else MacBook-side goes through `ask-human.sh ask '…' --cmd '…'`: the human
   sees the exact string and approves it. Installers that write to the MacBook
   (ntfy-mac's `make install-macbook`-style rsync push, usage-tracker's
   `iu-portal-setup`) are not served by this key; run them from the MacBook's own
@@ -402,14 +402,15 @@ macOS ships no Tailscale SSH server.
 
 - `Host iumac` pins `Port 2222`, `IdentitiesOnly yes`, **`IdentityAgent none`** —
   not optional on the mini, where `SSH_AUTH_SOCK` points at the 1Password agent
-  and any target consulting it *hangs* rather than fails. `op` on the far side
-  raises Touch ID on the MacBook and resolves once approved (verified
-  2026-09-14, `op://Private/*` included); it fails fast (exit 1) only when
-  1Password there is not signed in. Go through `ask-human.sh … --push` (`--cmd`), never bare.
+  and any target consulting it *hangs* rather than fails. The key reaches only
+  the verbs above, so `op` and other MacBook-side commands run through
+  `ask-human.sh ask '…' --cmd '…'`: the human sees the exact string, approves
+  it, and the command runs in their own session (Touch ID for `op`).
 - **TCC: stage files out, do not grant Full Disk Access.** The door reads home
   root, `~/SourceRoot`, `~/.claude`, `/tmp` and is blocked from `~/Downloads`,
-  `~/Desktop`, `~/Documents` and cloud folders — `cp ~/Downloads/x ~/xfer/`, then
-  pull `iumac:xfer/x`. FDA on `/usr/sbin/sshd` is the most EDR-flagged TCC grant
+  `~/Desktop`, `~/Documents` and cloud folders — stage the file and ask via
+  `ask-human.sh ask --cmd`, or pull it from the MacBook side (the mini cannot
+  pull arbitrary paths). FDA on `/usr/sbin/sshd` is the most EDR-flagged TCC grant
   there is, cannot be scoped to this door (same binary as the system sshd), and
   undoes the low profile it exists for.
 - **Renaming a device: verify `DNSName`, not `HostName`** —

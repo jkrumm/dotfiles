@@ -93,7 +93,6 @@ argc=${#words[@]}
 
 [ -n "$verb" ] || refuse ""
 
-ID_RE='^[A-Za-z0-9._-]+$'
 RELOGIN_ID_RE='^[a-z0-9_-]+$'
 
 case "$verb" in
@@ -108,15 +107,6 @@ case "$verb" in
     log "$verb" allow
     export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
     exec bash "$H/SourceRoot/dotfiles/scripts/human-queue.sh" gui-run
-    ;;
-
-  ask-push)
-    [ "$argc" -eq 2 ] || refuse "$verb"
-    [[ "${words[1]}" =~ $ID_RE ]] || refuse "$verb"
-    case "${words[1]}" in . | ..) refuse "$verb" ;; esac
-    log "$verb" allow
-    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-    exec bash "$H/SourceRoot/dotfiles/scripts/ask-human.sh" push "${words[1]}"
     ;;
 
   notify)

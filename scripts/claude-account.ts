@@ -174,8 +174,8 @@ function usage(reg: Registry, json: boolean): void {
 }
 
 // ── health (wake check) ─────────────────────────────────────────────────────────────────────────────────────────
-const HOME_BIN = "$HOME/.local/bin/claude-account"
-const PENDING_SH = `for f in "$HOME"/.local/state/human-queue/*.req; do [ -e "$f" ] && grep -q claude-relogin "$f" || continue; b="\${f%.req}"; [ -e "$b.res" ] || echo "$(basename "$b") $(stat -f %m "$f")"; done`
+export const HOME_BIN = "$HOME/.local/bin/claude-account"
+export const PENDING_SH = `for f in "$HOME"/.local/state/human-queue/*.req; do [ -e "$f" ] && grep -q claude-relogin "$f" || continue; b="\${f%.req}"; [ -e "$b.res" ] || echo "$(basename "$b") $(stat -f %m "$f")"; done`
 /** The other machine: the mini reaches the MacBook over `ssh iumac`, the MacBook the mini over `ssh mini`. */
 function peerMachine() {
   const onMini = /mini/i.test(hostname())
@@ -193,12 +193,12 @@ function fetchPeerUsage(): unknown {
 }
 
 /** The MacBook's key runs fixed verbs only (word-split, no shell syntax); the mini takes the shell command as before. */
-const MACBOOK_VERBS = { usage: "account-usage", snapshot: "account-snapshot", core: "account-snapshot-core", push: "ask-push" } as const
-function peerCmd(peerName: string, verb: keyof typeof MACBOOK_VERBS, shellCmd: string, arg?: string): string {
-  return peerName === "macbook" ? [MACBOOK_VERBS[verb], arg].filter(Boolean).join(" ") : shellCmd
+const MACBOOK_VERBS = { usage: "account-usage", snapshot: "account-snapshot", core: "account-snapshot-core" } as const
+function peerCmd(peerName: string, verb: keyof typeof MACBOOK_VERBS, shellCmd: string): string {
+  return peerName === "macbook" ? MACBOOK_VERBS[verb] : shellCmd
 }
 
-const PEER_SCRIPT = `${HOME_BIN} usage --json; echo '@@'; ${HOME_BIN} expiry --json; echo '@@'; ${PENDING_SH}`
+export const PEER_SCRIPT = `${HOME_BIN} usage --json; echo '@@'; ${HOME_BIN} expiry --json; echo '@@'; ${PENDING_SH}`
 
 const parseJson = (t: string) => {
   try {
@@ -281,7 +281,7 @@ async function health(argv: string[]): Promise<number> {
     if (!onMini) {
       // The dialogs the mini could not deliver while this Mac slept: push them again now that it is awake.
       for (const p of theirs.pendingIds) if (p.ageMs < 24 * 3600_000) {
-        spawnLogged("ssh", [...SSH_OPTS, ...peer.ssh, peerCmd(peer.name, "push", `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`, p.id)])
+        spawnLogged("ssh", [...SSH_OPTS, ...peer.ssh, `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`])
       }
       notifyIfChanged(rows, now)
     }

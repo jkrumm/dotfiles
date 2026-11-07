@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { HOME_BIN, PEER_SCRIPT } from "./claude-account.ts"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
   mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
@@ -1584,5 +1585,17 @@ describe("plan tiers: Max has a 5 h window, Ultra only a weekly one", () => {
     const maxReg = ultraReg()
     maxReg.accounts.iu.plan = "max"
     expect(dueIds(maxReg, cacheOf(old, sample(1, 1)), NOW)).toEqual(["iu"])
+  })
+})
+
+describe("claude-account-snapshot.sh", () => {
+  test("its command text is PEER_SCRIPT (the ssh and core reads must agree)", () => {
+    const sh = readFileSync(join(import.meta.dir, "claude-account-snapshot.sh"), "utf8")
+    const body = sh.slice(sh.indexOf('"$HOME/.local/bin/claude-account"')).trim().replaceAll('"$HOME/.local/bin/claude-account"', HOME_BIN)
+    expect(body).toBe(PEER_SCRIPT)
+  })
+  test("exports PATH so `#!/usr/bin/env bun` resolves", () => {
+    const sh = readFileSync(join(import.meta.dir, "claude-account-snapshot.sh"), "utf8")
+    expect(sh).toContain('export PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH"')
   })
 })

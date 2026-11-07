@@ -130,6 +130,31 @@ case "$line" in *'command="/bin/bash \"$HOME/SourceRoot/dotfiles/scripts/iumac-g
 case "$line" in *pty*) bad "no pty option" "$line" ;; *) ok "no pty option" ;; esac
 case "$line" in *"restrict"*"ssh-ed25519 $IUMAC_BLOB"*) ok "options precede the key" ;; *) bad "options precede the key" ;; esac
 
+echo "== result file and --rollback-to"
+T="$TMP/t7/authorized_keys"
+R="$TMP/t7.result"
+printf '%s\n' "$OPTS $(pub a) v1" >"$TMP/s7a"
+printf '%s\n' "$OPTS $(pub a) v2" >"$TMP/s7b"
+AUTHORIZED_KEYS_SYNC_RESULT="$R" "$SYNC" "$T" "$TMP/s7a" >/dev/null
+assert_eq "new target: created" "created" "$(cat "$R")"
+AUTHORIZED_KEYS_SYNC_RESULT="$R" "$SYNC" "$T" "$TMP/s7a" >/dev/null
+assert_eq "no change: unchanged" "unchanged" "$(cat "$R")"
+AUTHORIZED_KEYS_SYNC_RESULT="$R" "$SYNC" "$T" "$TMP/s7b" >/dev/null
+res="$(cat "$R")"
+BAK="${res#backup }"
+case "$res" in "backup $T.bak-"*) ok "change: backup <path>" ;; *) bad "change: backup <path>" "$res" ;; esac
+assert_eq "named backup holds the replaced file" "1" "$(count_in "$BAK" "v1")"
+# a newer backup appears (another run) — --rollback-to still restores the named one
+cp "$T" "$T.bak-99999999999999"
+echo "$OPTS $(pub a) v3" >"$T"
+"$SYNC" --rollback-to "$BAK" "$T" >/dev/null; rc=$?
+assert_eq "rollback-to: exit 0" "0" "$rc"
+assert_eq "restores exactly the named backup" "1" "$(count_in "$T" "v1")"
+assert_eq "replaced file kept as .pre-rollback" "1" "$(count_in "$T.pre-rollback" "v3")"
+assert_eq "mode 600 after rollback-to" "600" "$(mode "$T")"
+"$SYNC" --rollback-to "$TMP/nope" "$T" >/dev/null 2>&1; rc=$?
+assert_eq "rollback-to missing backup: exit 1" "1" "$rc"
+
 echo
 echo "$pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]
