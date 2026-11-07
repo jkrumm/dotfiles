@@ -799,7 +799,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -823,8 +823,12 @@ logs: ## Bounded tail of the dotfiles-owned agent logs, then exit
 		[ -f "$$f" ] && { echo "== $$f"; tail -n 40 "$$f"; } || true; \
 	done
 
-deploy: ## Converge this machine onto the tracked config (wraps setup; nothing to ship)
+deploy: ## Converge this machine onto the tracked config (wraps setup; nothing to ship); on the mini, then tell the owner if a file the IuRoot deploy gate pins changed
 	@$(MAKE) --no-print-directory setup
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" = "cache" ]; then \
+		DOTFILES_DIR="$(DOTFILES_DIR)" bash $(DOTFILES_DIR)/scripts/gate-pin-notice.sh || echo "    ! gate-pin-notice failed (non-fatal)"; \
+	fi
 
 .PHONY: doctor
 doctor: ## Read-only health of this machine (+ the mini when run from the MacBook)
@@ -2416,6 +2420,14 @@ secrets-rotate-test:
 opbackup-auto-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/opbackup-auto.sh $(DOTFILES_DIR)/scripts/opbackup-auto.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/opbackup-auto.test.sh
+
+# gate-pin-notice regression suite: a pinned-file change enqueues one item, a
+# newer one replaces it, an unrelated change enqueues nothing. Hermetic.
+.PHONY: gate-pin-notice-test
+gate-pin-notice-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/gate-pin-notice.sh $(DOTFILES_DIR)/scripts/gate-pin-notice.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/gate-pin-notice.test.sh
+	@$(DOTFILES_DIR)/scripts/gate-pin-notice.test.sh
 
 # human-queue regression suite: gui-run's dialog outcomes (Run/Deny/timeout/
 # osascript failure), the AppleScript-injection and control-byte safety

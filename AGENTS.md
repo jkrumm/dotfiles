@@ -85,7 +85,7 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make check-linux` | The Linux-safe subset (shellcheck over every tracked bash script + the portable suites): what `.github/workflows/check.yml` runs on a hosted ubuntu runner for every PR and master push. A suite joins it only after it passes there. |
 | `make verify` | `make doctor`, under the repo-contract name. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
-| `make deploy` | `make setup` under the repo-contract name; prints what it does. |
+| `make deploy` | `make setup` under the repo-contract name; prints what it does. On the mini it then runs `scripts/gate-pin-notice.sh` (below). |
 | `make worktree-audit` / `worktree-prune` | List / reclaim clean, fully-merged git worktrees across `~/SourceRoot` + `~/IuRoot` — they pile up in four different parent dirs (repo-local, `.claude/worktrees/`, `~/IuRoot/worktrees/`, `~/IuRoot/.wt/`), so it asks git rather than assuming a location. |
 
 `make doctor` on **both** machines: LaunchAgent grading, the architecture-map
@@ -218,6 +218,14 @@ No poller, no path without a present human. An unreachable MacBook or unanswered
 ntfy notify). `--key K` replaces older pending requests with that key, a producer's success path calls
 `ask-human clear K`, and items expire (default 3d, `--expires`; `reap`); a lead that enqueued (`FACTORY_SESSION`) is told
 the result via `factory session note`, and the Herdr sidebar's ✓/× resolve a row. Detail: `docs/remote-dev.md`.
+
+**IuRoot deploy-gate pins.** The gate (`epos-tool-athena/deploy-gate`) pins by sha256 `scripts/ask-human.sh`, `scripts/human-queue.sh`,
+`scripts/lib/human-queue-json.sh` and `scripts/human-queue-notify-hook.sh` (the live list is `ask_human_pins` in
+`~/.local/libexec/prometheus-deploy-gate/config.json`). **Changing any of them needs the owner's re-pin** (`make deploy-gate-install`
+in his epos-tool-athena clone, owner-only): until then the gate's release dialog is silently off and `make verify` is red in every
+gated repo. After `make deploy`, `scripts/gate-pin-notice.sh` compares them with the pins and enqueues one human-queue item
+(key `gate-pin`, diff range + the re-pin command; a newer change replaces it, a re-pin clears it). It never runs the re-pin. Don't
+call such a commit "the owner's" or treat the red verify as unrelated.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
