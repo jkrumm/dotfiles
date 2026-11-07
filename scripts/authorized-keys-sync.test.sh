@@ -155,6 +155,15 @@ assert_eq "mode 600 after rollback-to" "600" "$(mode "$T")"
 "$SYNC" --rollback-to "$TMP/nope" "$T" >/dev/null 2>&1; rc=$?
 assert_eq "rollback-to missing backup: exit 1" "1" "$rc"
 
+# a legacy, non-timestamped backup name (bak-portfwd) sorts after every timestamp: it must neither hang the backup
+# naming nor be pruned or picked as "newest"
+echo "$OPTS $(pub a) legacy" >"$T.bak-portfwd"
+echo "$OPTS $(pub a) v4" >"$T"
+perl -e 'alarm 20; exec @ARGV' -- env AUTHORIZED_KEYS_SYNC_RESULT="$R" "$SYNC" "$T" "$TMP/s7b" >/dev/null 2>&1; rc=$?
+assert_eq "legacy bak-portfwd present: sync terminates and succeeds" "0" "$rc"
+case "$(cat "$R")" in "backup $T.bak-"[0-9]*) ok "legacy name present: new backup is numeric and sorts after the newest (a future-dated one included)" ;; *) bad "legacy name present: new backup is numeric" "$(cat "$R")" ;; esac
+assert_eq "legacy backup left alone" "1" "$(count_in "$T.bak-portfwd" "legacy")"
+
 echo
 echo "$pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]

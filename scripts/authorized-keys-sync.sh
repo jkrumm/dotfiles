@@ -31,7 +31,7 @@ die() { printf 'authorized-keys-sync: %s\n' "$*" >&2; exit 1; }
 
 newest_backup() { # <target> — path of the newest backup, empty when none
   local f newest=""
-  for f in "$1".bak-*; do
+  for f in "$1".bak-[0-9]*; do
     [ -f "$f" ] && newest="$f"
   done
   printf '%s' "$newest"
@@ -110,14 +110,16 @@ if [ -f "$target" ] && cmp -s "$tmp" "$target"; then
 fi
 
 if [ -f "$target" ]; then
-  # sorts after every existing backup, even when pruning freed a same-second name
-  stamp="$(date +%Y%m%d%H%M%S)"
+  # sorts after every existing backup (even when pruning freed a same-second name or the clock went backwards):
+  # when the timestamped name would not sort after the newest one, extend the newest name instead. Always terminates.
+  base="$target.bak-$(date +%Y%m%d%H%M%S)"
   newest="$(newest_backup "$target")"
+  if [ -n "$newest" ] && [[ ! "$base-000" > "$newest" ]]; then base="$newest"; fi
   n=0
-  bak="$target.bak-$stamp-$(printf '%03d' "$n")"
-  while [ -e "$bak" ] || { [ -n "$newest" ] && [[ ! "$bak" > "$newest" ]]; }; do
+  bak="$base-$(printf '%03d' "$n")"
+  while [ -e "$bak" ]; do
     n=$((n + 1))
-    bak="$target.bak-$stamp-$(printf '%03d' "$n")"
+    bak="$base-$(printf '%03d' "$n")"
   done
   cp -p "$target" "$bak" && chmod 600 "$bak" || die "backup failed; $target left untouched"
   result="backup $bak"
@@ -130,8 +132,8 @@ record "$result"
 
 # keep the newest backups only
 count=0
-for f in "$target".bak-*; do [ -f "$f" ] && count=$((count + 1)); done
-for f in "$target".bak-*; do
+for f in "$target".bak-[0-9]*; do [ -f "$f" ] && count=$((count + 1)); done
+for f in "$target".bak-[0-9]*; do
   [ "$count" -gt "$KEEP_BACKUPS" ] || break
   [ -f "$f" ] || continue
   rm -f "$f"
