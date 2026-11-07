@@ -24,7 +24,13 @@ mkdir -p "$TMP/bin" "$TMP/state"
 cat > "$TMP/bin/curl" <<STUB
 #!/bin/sh
 echo "\$*" >> "$TMP/curl.log"
-case "\$*" in *7793*) echo '{"heartbeat":{"ok":true,"tickAt":"t","queueMovedAt":"q"}}'; exit 0 ;; esac
+case "\$*" in *api/push/*) ;; *7793*)
+  # STUB_FACTORY_DOWN=1: refused every time; =N>1: refused the first N-1 calls, then answers (a restart gap).
+  if [ "\${STUB_FACTORY_DOWN:-0}" != 0 ]; then
+    n=\$(cat "$TMP/factory.calls" 2>/dev/null || echo 0); n=\$((n + 1)); echo "\$n" > "$TMP/factory.calls"
+    if [ "\${STUB_FACTORY_DOWN}" = 1 ] || [ "\$n" -lt "\${STUB_FACTORY_DOWN}" ]; then exit 7; fi
+  fi
+  echo '{"heartbeat":{"ok":true,"tickAt":"t","queueMovedAt":"q"}}'; exit 0 ;; esac
 [ "\${STUB_CURL_FAIL:-0}" = 1 ] && exit 22
 exit 0
 STUB
@@ -187,6 +193,28 @@ assert_contains "fseventsd 61G: named with the fix" "fseventsd holds 61G" "$comp
 assert_contains "fseventsd 61G: killall, not kickstart" "sudo killall fseventsd" "$composite"
 mem_run STUB_SWAP_MB=100 STUB_FSEVENTSD=1 STUB_FSEVENTSD_MEM=9G
 assert_eq "fseventsd 9G: no note" 0 "$(printf '%s' "$composite" | /usr/bin/grep -c 'fseventsd holds')"
+
+echo "factory monitor: a deploy restart gap does not page, a server that stays down does"
+factory_run() { rm -f "$TMP/factory.calls"; run_script DEVHOST_COMPONENTS="check_obsidian" FACTORY_PROBE_PAUSE=0 \
+  DEVHOST_DELIBERATE_RESTART_DIR="$TMP/restart-marks" "$@"; factory_push=$(/usr/bin/grep 'push/factory' "$TMP/curl.log"); }
+mkdir -p "$TMP/restart-marks"
+factory_run STUB_FACTORY_DOWN=3
+assert_contains "gap shorter than the retries: up" "status=up" "$factory_push"
+assert_eq "answered on the 3rd probe" 3 "$(cat "$TMP/factory.calls")"
+factory_run STUB_FACTORY_DOWN=1
+assert_contains "down with no mark: pages" "status=down" "$factory_push"
+assert_contains "down names the tries" "3 tries" "$factory_push"
+assert_eq "retried 3 times" 3 "$(cat "$TMP/factory.calls")"
+date +%s > "$TMP/restart-marks/com.jkrumm.software-factory"
+factory_run STUB_FACTORY_DOWN=1
+assert_contains "fresh mark: restarting, up" "status=up" "$factory_push"
+assert_contains "fresh mark: says restarting" "restarting" "$factory_push"
+assert_eq "fresh mark: no retry wait" 1 "$(cat "$TMP/factory.calls")"
+assert_eq "mark is read only, not consumed" 1 "$(wc -l < "$TMP/restart-marks/com.jkrumm.software-factory" | tr -d ' ')"
+echo $(( $(date +%s) - 3600 )) > "$TMP/restart-marks/com.jkrumm.software-factory"
+factory_run STUB_FACTORY_DOWN=1
+assert_contains "stale mark: pages" "status=down" "$factory_push"
+rm -f "$TMP/restart-marks/com.jkrumm.software-factory"
 
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')

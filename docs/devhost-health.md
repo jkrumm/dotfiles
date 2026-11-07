@@ -205,7 +205,13 @@ collie or without a seeded cache never fails the script.
   tickAt, queueMovedAt }`, `ok` meaning the tick advanced and the queue moved within 30
   minutes. `ok` → up (`tick …, queue moved …`); no answer, a 503, no `heartbeat` or `ok:
   false` → down with the factory's `reason` (else the curl failure); the DOWN push is
-  delivered and the script still exits 0. No URL file, no push. The monitor and the file are made from
+  delivered and the script still exits 0. The factory deploys by bootout+bootstrap, so a
+  probe can land in the restart gap (four deploys in five minutes paged on 2026-11-06): a
+  no-answer is retried (3 probes, 3 s each, 4 s apart, inside the 20 s side-monitor bound),
+  and a fresh `deliberate-restart/com.jkrumm.software-factory` mark (written by the
+  factory's `scripts/deploy.sh`, read only here, consumed by the launchd check) reports
+  `restarting` as up. No mark and still silent after the retries pages; a 503 or `ok: false`
+  answer is a verdict and is never retried. No URL file, no push. The monitor and the file are made from
   `homelab`, not here.
 - **Secrets-cache freshness** replaced a weekly agent (Mon 09:15) under which a
   cache going stale on a Tuesday was invisible for six days — six days of

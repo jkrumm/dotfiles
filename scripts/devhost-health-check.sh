@@ -1300,20 +1300,41 @@ check_jobs() {
 # fail this script. Kuma's own missed-heartbeat covers the case where the
 # monitor exists but this stops running.
 
+#
+# A deploy restarts the factory by bootout+bootstrap, so a probe can land in the
+# gap (four deploys in five minutes paged on 2026-11-06). A transport failure is
+# therefore not yet a verdict: a fresh deliberate-restart mark for the job
+# (read only — the launchd check owns consuming it) reports it as restarting,
+# otherwise the probe is retried (3 x 3 s + 2 x 4 s pauses = 17 s, inside
+# SIDE_MONITOR_TIMEOUT). Still silent after that, with no mark, is DOWN.
+FACTORY_LABEL="com.jkrumm.software-factory"
+FACTORY_PROBE_TRIES="${FACTORY_PROBE_TRIES:-3}"
+FACTORY_PROBE_PAUSE="${FACTORY_PROBE_PAUSE:-4}"
+
 factory_health_detail() {
   # A 503 still carries a body; only a transport failure leaves it empty.
-  local body
-  if body=$("$CURL_BIN" -s -m 5 "$FACTORY_HEALTH_URL" 2>/dev/null) && [[ -n "$body" ]]; then
-    if [[ "$("$JQ_BIN" -r '.heartbeat.ok // false' <<<"$body" 2>/dev/null)" == "true" ]]; then
-      "$JQ_BIN" -r '"tick \(.heartbeat.tickAt // "?"), queue moved \(.heartbeat.queueMovedAt // "?")"' <<<"$body" 2>/dev/null \
-        || echo "heartbeat ok"
+  local body try=1 marks
+  while :; do
+    if body=$("$CURL_BIN" -s -m 3 "$FACTORY_HEALTH_URL" 2>/dev/null) && [[ -n "$body" ]]; then
+      if [[ "$("$JQ_BIN" -r '.heartbeat.ok // false' <<<"$body" 2>/dev/null)" == "true" ]]; then
+        "$JQ_BIN" -r '"tick \(.heartbeat.tickAt // "?"), queue moved \(.heartbeat.queueMovedAt // "?")"' <<<"$body" 2>/dev/null \
+          || echo "heartbeat ok"
+        return 0
+      fi
+      "$JQ_BIN" -r '.heartbeat.reason // "no heartbeat in the factory health answer"' <<<"$body" 2>/dev/null \
+        || echo "factory health answer is not JSON"
+      return 1
+    fi
+    marks=$(_deliberate_marks "$FACTORY_LABEL" "$("$DATE_BIN" +%s)")
+    if (( marks > 0 )); then
+      echo "factory restarting (deliberate-restart mark), not answering at $FACTORY_HEALTH_URL"
       return 0
     fi
-    "$JQ_BIN" -r '.heartbeat.reason // "no heartbeat in the factory health answer"' <<<"$body" 2>/dev/null \
-      || echo "factory health answer is not JSON"
-    return 1
-  fi
-  echo "factory not answering at $FACTORY_HEALTH_URL"
+    (( try < FACTORY_PROBE_TRIES )) || break
+    try=$(( try + 1 ))
+    /bin/sleep "$FACTORY_PROBE_PAUSE"
+  done
+  echo "factory not answering at $FACTORY_HEALTH_URL (${FACTORY_PROBE_TRIES} tries)"
   return 1
 }
 
