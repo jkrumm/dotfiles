@@ -2360,13 +2360,14 @@ caddy-registry-test:
 backup-1password-test:
 	@python3 -I $(DOTFILES_DIR)/scripts/backup-1password.test.py
 
-# caddy-tailnet.sh extra FQDN doors: block shape, validation refusals, missing file (hermetic; scratch overrides only).
+# tailscale-serve.sh: CLI resolution via lib/tailscale-cli.sh, --check vs apply, sudo+socket on mutating calls (hermetic; stub CLI).
 .PHONY: tailscale-serve-test
 tailscale-serve-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tailscale-serve.sh $(DOTFILES_DIR)/scripts/tailscale-serve.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-serve.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/tailscale-serve.test.sh
 
+# caddy-tailnet.sh extra FQDN doors: block shape, validation refusals, missing file (hermetic; scratch overrides only).
 .PHONY: caddy-tailnet-test
 caddy-tailnet-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/caddy-tailnet.sh $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh

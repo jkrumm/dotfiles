@@ -57,6 +57,24 @@ has "apply: reset" "serve reset" "$log"
 has "apply: serve" "serve --bg --https=7730 http://127.0.0.1:4050" "$log"
 has "apply: funnel" "funnel --bg --https=8443 http://localhost:5173" "$log"
 
+# Brew variant (socket set, not root): reads go straight to the CLI with --socket,
+# mutating calls go through sudo with --socket. The stub sudo only logs and execs.
+if [ "$(id -u)" != 0 ]; then
+  mkdir -p "$TMP/bin"
+  printf '#!/usr/bin/env bash\necho "sudo $*" >> "$TS_LOG"\nexec "$@"\n' > "$TMP/bin/sudo"
+  chmod +x "$TMP/bin/sudo"
+  : > "$TMP/log"
+  PATH="$TMP/bin:/usr/bin:/bin" TAILSCALE_BIN="$TMP/ts" TAILSCALE_SOCKET="/sock" TS_LOG="$TMP/log" \
+    TS_SERVE_JSON="$TMP/empty.json" SECRETS_PRIVATE_REPO="$TMP/priv" /bin/bash "$SCRIPT" >/dev/null 2>&1
+  log=$(cat "$TMP/log")
+  has "socket: status read carries --socket" "--socket=/sock status --json" "$log"
+  has "socket: reset via sudo + --socket" "sudo $TMP/ts --socket=/sock serve reset" "$log"
+  has "socket: funnel via sudo + --socket" "sudo $TMP/ts --socket=/sock funnel --bg --https=8443" "$log"
+  grep -q "^sudo .*status" "$TMP/log" && bad "read-only call used sudo" || ok "read-only calls skip sudo"
+else
+  echo "  - SKIP sudo branch (running as root)"
+fi
+
 # Missing CLI: exit 2, no traceback.
 out=$(PATH="/usr/bin:/bin" TAILSCALE_BIN="" SECRETS_PRIVATE_REPO="$TMP/priv" /bin/bash -c "
   # force the probe to find nothing: re-source with no known paths
