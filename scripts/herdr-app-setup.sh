@@ -43,6 +43,9 @@ KEYS="$HOME_DIR/keys.json"
 if [ -f "$KEYS" ] && [ "$(jq -r '.global["cmd-shift-b"] // ""' "$KEYS")" = "layout.toggle:board" ]; then
   jq 'del(.global["cmd-shift-b"])' "$KEYS" > "$KEYS.tmp" && mv "$KEYS.tmp" "$KEYS" && say "✓ removed stale key cmd-shift-b (layout.toggle:board)"
 fi
+if [ -f "$KEYS" ] && [ "$(jq -r '.global["cmd-alt-b"] // ""' "$KEYS")" = "jk-keys.board" ]; then
+  jq 'del(.global["cmd-alt-b"])' "$KEYS" > "$KEYS.tmp" && mv "$KEYS.tmp" "$KEYS" && say "✓ removed stale key cmd-alt-b (jk-keys.board)"
+fi
 "$(dirname "$0")/herdr-app-keys.sh" "$HOME_DIR"
 
 # The mod was jk-waves: drop its stale link (only a symlink).

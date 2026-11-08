@@ -1,7 +1,7 @@
 // jk-pane: the shipped pane header (mods/pane), plus one thing. In a terminal that belongs to a factory session,
 // the header says what that agent is about: #issue or role, the Issue's title, its phase, its summary, from
 // shared("jk.factory.terminals"): app terminal address (`mini/<id>`) -> { issue, title, short, summary,
-// phase, role, state, repo }. Nothing publishes that feed until software-factory's integrations/ does; without an
+// phase, role, state, repo }. jk-glance publishes that feed (two extra reads in its poll); without an
 // entry the header is the shipped one.
 // A pane's header, for layouts that frame their panes:
 //   { "tab": "active", "pane": { "header": { "content": { "mod": "jk-pane" } } } }

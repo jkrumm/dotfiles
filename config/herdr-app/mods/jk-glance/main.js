@@ -3,14 +3,17 @@
 // Every 15 s ONE call on the mini reads `factory read needs` and `factory read overview` (token through secrets-run,
 // never argv) and the Console's base URL (FACTORY_CONSOLE_URL in the mini's ~/.config/factory/env). Each part parses on
 // its own and keeps its last good answer; no good poll for 2 min dims the block. All API text is data, never interpreted.
+// The same poll also reads the Issues and live sessions and publishes shared("jk.factory.terminals"), the feed jk-pane's
+// header shows (only when it changed).
 import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { exec, theme, machines } from "herdr";
+import { exec, theme, machines, shared, setShared } from "herdr";
 
 // The token comes from the factory's own env template through secrets-run, never argv.
 const SECRETS = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl --`;
 // `--format json` goes before the subcommand. Parts are split on a line holding only @@.
-const READS = "factory --format json read needs; echo; echo @@; factory --format json read overview; echo";
+const READS = "factory --format json read needs; echo; echo @@; factory --format json read overview; echo; echo @@; "
+  + "factory --format json read issues --state all --limit 40; echo; echo @@; factory --format json read sessions --live; echo";
 const URL_READ = `grep -m1 '^FACTORY_CONSOLE_URL=' "$HOME/.config/factory/env" | cut -d= -f2-`;
 const CMD = `{ ${SECRETS} sh -c '${READS}'; } 2>/dev/null; echo @@; ${URL_READ} 2>/dev/null`;
 
@@ -22,7 +25,9 @@ const TOOLTIP_MAX = 160;
 const asArray = (v) => (Array.isArray(v) ? v : []);
 const num = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 
-// "needs @@ overview @@ url": each part is null when it does not parse.
+const ADDR = /^t[0-9a-z]+$/;
+
+// "needs @@ overview @@ issues @@ sessions @@ url": each part is null when it does not parse.
 function parseNeeds(text) {
   let d;
   try { d = JSON.parse(String(text ?? "")); } catch { return null; }
@@ -40,10 +45,52 @@ function parseOverview(text) {
   return { working: num(d.counts.working), waiting: num(d.counts.waiting), queued: num(d.counts.queued) };
 }
 
+function parseJson(text) {
+  try {
+    const d = JSON.parse(String(text ?? ""));
+    return d && typeof d === "object" ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+const parseIssues = (text) => { const d = parseJson(text); return Array.isArray(d?.issues) ? d.issues.filter((c) => c && Number.isInteger(c.id)) : null; };
+const parseSessions = (text) => { const d = parseJson(text); return Array.isArray(d?.sessions) ? d.sessions.filter((s) => s && typeof s.id === "string") : null; };
+
 function parsePoll(stdout) {
   const parts = String(stdout ?? "").split(/^@@$/m);
-  const url = (parts[2] ?? "").trim().split("\n")[0].trim();
-  return { needs: parseNeeds(parts[0]), overview: parseOverview(parts[1]), base: parts.length >= 3 ? url : null };
+  const url = (parts[4] ?? "").trim().split("\n")[0].trim();
+  return { needs: parseNeeds(parts[0]), overview: parseOverview(parts[1]), issues: parseIssues(parts[2]), sessions: parseSessions(parts[3]),
+    base: parts.length >= 5 ? url : null };
+}
+
+// A repo's name from a session's working folder (a factory worktree resolves to its repo).
+function repoOf(path) {
+  const p = String(path ?? "").replace(/\/\.claude\/worktrees\/.*$/, "").replace(/\/+$/, "");
+  return p.split("/").pop() || null;
+}
+
+// What the pane header shows per terminal: app terminal address (`mini/<id>`) -> the Issue's words plus the session's own role.
+// Only these fields are shared (shared is persisted and every mod re-renders on a change): no insights, no elapsed time.
+function terminalsMap(issues, sessions) {
+  const byId = new Map(asArray(issues).map((c) => [c.id, c]));
+  const out = {};
+  const rows = asArray(sessions).filter((s) => s.terminal && ADDR.test(String(s.terminal.id)))
+    .sort((a, b) => String(a.terminal.id).localeCompare(String(b.terminal.id)));
+  for (const s of rows) {
+    const c = Number.isInteger(s.issue) ? byId.get(s.issue) : null;
+    out[`mini/${s.terminal.id}`] = {
+      issue: Number.isInteger(s.issue) ? s.issue : null,
+      title: c?.filedTitle ?? s.title ?? null,
+      short: c?.title ?? s.title ?? null,
+      summary: c?.summary ?? s.summary ?? null,
+      phase: c?.phase ?? null,
+      role: s.role ?? null,
+      state: s.state ?? null,
+      repo: c?.repoName ?? repoOf(s.repo),
+    };
+  }
+  return out;
 }
 
 const needsTotal = (needs) => (needs ? Object.values(needs.counts).reduce((s, n) => s + n, 0) : 0);
@@ -86,6 +133,9 @@ export default class JkGlance extends View {
     this.needs = null;
     this.overview = null;
     this.base = "";
+    this.issues = null;
+    this.sessions = null;
+    this.published = JSON.stringify(shared("jk.factory.terminals") ?? null);
     this.at = 0; // last good poll
     this.polling = false;
     cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
@@ -106,8 +156,20 @@ export default class JkGlance extends View {
       if (next?.needs) this.needs = next.needs;
       if (next?.overview) this.overview = next.overview;
       if (next?.base != null) this.base = next.base;
+      if (next?.issues) this.issues = next.issues;
+      if (next?.sessions) this.sessions = next.sessions;
+      // Both from this poll, or a new Issue's header would flicker through its session's words.
+      if (next?.issues && next?.sessions) this.publish();
       cx.notify();
     });
+  }
+
+  // The header feed, only when it changed.
+  publish() {
+    const json = JSON.stringify(terminalsMap(this.issues, this.sessions));
+    if (json === this.published) return;
+    this.published = json;
+    setShared("jk.factory.terminals", JSON.parse(json));
   }
 
   open(kind) {

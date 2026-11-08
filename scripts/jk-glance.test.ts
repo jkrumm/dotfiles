@@ -7,7 +7,7 @@ import { join } from "node:path"
 const src = readFileSync(join(import.meta.dir, "../config/herdr-app/mods/jk-glance/main.js"), "utf8")
 const block = /\/\/ <glance>[^\n]*\n([\s\S]*?)\/\/ <\/glance>/.exec(src)?.[1]
 if (!block) throw new Error("jk-glance: no <glance> block")
-const lib = new Function(`${block}; return { parseNeeds, parseOverview, parsePoll, needsTotal, newestItem, needsLabel, runningLabel, consoleLink }`)() as any
+const lib = new Function(`${block}; return { parseNeeds, parseOverview, parsePoll, terminalsMap, needsTotal, newestItem, needsLabel, runningLabel, consoleLink }`)() as any
 
 const needs = (counts: object, items: object[] = []) => JSON.stringify({ at: 1, items, counts })
 
@@ -31,12 +31,35 @@ test("parseOverview: valid, invalid, empty", () => {
 })
 
 test("parsePoll: parts parse on their own", () => {
-  const out = `${needs({ decision: 1 })}\n@@\nbroken\n@@\nhttps://c.example.com/\n`
+  const issues = '{"issues":[{"id":362,"title":"T"},{"id":"x"}]}'
+  const sessions = '{"sessions":[{"id":"lead-362-1","issue":362},{"id":5}]}'
+  const out = `${needs({ decision: 1 })}\n@@\nbroken\n@@\n${issues}\n@@\n${sessions}\n@@\nhttps://c.example.com/\n`
   const p = lib.parsePoll(out)
   expect(p.needs).not.toBeNull()
   expect(p.overview).toBeNull()
+  expect(p.issues).toEqual([{ id: 362, title: "T" }])
+  expect(p.sessions).toEqual([{ id: "lead-362-1", issue: 362 }])
   expect(p.base).toBe("https://c.example.com/")
+  const bad = lib.parsePoll(`${needs({})}\n@@\n{}\n@@\nnope\n@@\n{}\n@@\nhttps://c.example.com/\n`)
+  expect(bad.issues).toBeNull()
+  expect(bad.sessions).toBeNull()
   expect(lib.parsePoll("").base).toBeNull()
+  expect(lib.parsePoll(`${needs({})}\n@@\n{}\n@@\n`).base).toBeNull()
+})
+
+test("terminalsMap: session with terminal + Issue, no terminal, unparseable", () => {
+  const issues = [{ id: 362, filedTitle: "Filed", title: "Short", summary: "Sum", phase: "build", repoName: "dotfiles" }]
+  const sessions = [
+    { id: "lead-362-1", issue: 362, role: "lead", state: "idle", repo: "/x/dotfiles/.claude/worktrees/f", terminal: { id: "t1hd" } },
+    { id: "no-term", issue: 362, role: "worker" },
+    { id: "bad-addr", issue: 362, terminal: { id: "T 1;" } },
+  ]
+  expect(lib.terminalsMap(issues, sessions)).toEqual({
+    "mini/t1hd": { issue: 362, title: "Filed", short: "Short", summary: "Sum", phase: "build", role: "lead", state: "idle", repo: "dotfiles" },
+  })
+  const bare = lib.terminalsMap([], [{ id: "s", title: "S", repo: "/x/proj/.claude/worktrees/w", terminal: { id: "t2" } }])
+  expect(bare["mini/t2"]).toMatchObject({ issue: null, title: "S", short: "S", phase: null, repo: "proj" })
+  expect(lib.terminalsMap(null, null)).toEqual({})
 })
 
 test("newestItem picks the smallest ageMs", () => {
