@@ -1,6 +1,8 @@
 DOTFILES_DIR := $(shell pwd)
 CLAUDE_DIR   := $(HOME)/.claude
 SOURCEROOT   := $(HOME)/SourceRoot
+# The software-factory checkout: source of the Claude Code hooks (_render-settings) and the Herdr glance mod.
+FACTORY_DIR  ?= $(HOME)/SourceRoot/software-factory
 BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 
 # Resolve a Homebrew service's plist/label under EITHER name it may carry.
@@ -1422,6 +1424,19 @@ _render-settings:
 		&& mv "$$tmp" "$(SETTINGS_DIR)/settings.json" \
 		|| { rm -f "$$tmp"; exit 1; }; \
 		echo "    ✓ $(SETTINGS_DIR)/settings.json merged (template applied, allow + model/effort preserved, deny + defaultMode from template)"; \
+	fi
+	@# The six factory hooks come from the factory checkout, not the template: appended per event, each entry once
+	@# (identical entries are subtracted first, so a re-render or a stale inline copy never duplicates). Missing = warn, go on.
+	@hooks="$(FACTORY_DIR)/integrations/claude-code/hooks.json"; \
+	if [ ! -f "$$hooks" ]; then \
+		echo "    ! factory hooks not installed: $$hooks missing"; \
+	else \
+		tmp=$$(mktemp "$(SETTINGS_DIR)/.settings.XXXXXX") || exit 1; \
+		jq --slurpfile f "$$hooks" '.hooks = reduce ($$f[0].hooks | keys[]) as $$e ((.hooks // {}); .[$$e] = (((.[$$e] // []) - $$f[0].hooks[$$e]) + $$f[0].hooks[$$e]))' \
+			"$(SETTINGS_DIR)/settings.json" > "$$tmp" \
+		&& mv "$$tmp" "$(SETTINGS_DIR)/settings.json" \
+		|| { rm -f "$$tmp"; exit 1; }; \
+		echo "    ✓ factory hooks appended from $$hooks"; \
 	fi
 
 # One dir per registry account that has one (config/claude-accounts.json): shared

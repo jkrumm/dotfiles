@@ -51,9 +51,15 @@ Six events call the `factory` CLI (software-factory repo) for sessions `rd` spaw
 with `<event>` = `session-start`, `user-prompt-submit`, `stop`, `stop-failure`, `notification`, `session-end`.
 `rd work` sets `FACTORY_SESSION=<agent name>` at spawn (`docs/remote-dev.md`), so without it nothing runs and
 the owner's own sessions never see the hooks; without `factory` on `PATH`, or when it fails, the command still
-exits 0, so a session is never blocked. They live in the template's `hooks`, which `make setup` renders into
+exits 0, so a session is never blocked. The source is the software-factory repo,
+`integrations/claude-code/hooks.json` (the contract lives in that directory's README); this repo carries no copy.
+`_render-settings` appends each event's entries to the rendered `settings.json` after the template merge, via the jq
+merge in the Makefile (`FACTORY_DIR`, default `~/SourceRoot/software-factory`): entries identical to the factory's
+are subtracted first, so a re-render never duplicates them, and the other hooks stay. `make setup` renders into
 `~/.claude` and into every account dir in `config/claude-accounts.json` (`claude-accounts-setup` →
-`_render-settings`). The template wins on merge, so a hand-added live hook is dropped on the next `make setup`.
+`_render-settings`). With `hooks.json` missing the render prints `factory hooks not installed: <path> missing` and
+still succeeds, without the factory hooks. The template wins on merge, so a hand-added live hook is dropped on the
+next `make setup`.
 `factory hook` must print nothing to stdout on `SessionStart` and `UserPromptSubmit` (stdout becomes context).
 Tests: `scripts/factory-hooks.test.sh`.
 

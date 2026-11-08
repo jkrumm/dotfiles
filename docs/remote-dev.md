@@ -203,8 +203,10 @@ carries the pick reason. No Claude account with room pauses the spawn (`rd` refu
 enabled account.
 
 **Factory session key.** `rd work` also passes `FACTORY_SESSION=<agent name>` in the spawn's `env`
-(`spawn_env` in `scripts/remote-dev.sh`; the name is the terminal's name). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
+(`spawn_env` in `scripts/remote-dev.sh`; the name is the terminal's name). The software-factory hooks (source: software-factory `integrations/claude-code/hooks.json`, rendered into settings by `_render-settings`, `docs/hooks.md`) run
 only when it is set. Covered by `scripts/remote-dev-factory-env.test.sh`.
+
+**Contracts.** What `rd` calls on the factory (`health`, `role get`, `issue new`, `issue list`, `session note`) and its credential are documented in software-factory `integrations/rd/README.md`.
 
 **Role table (`--role`).** `rd work --role <role>` takes the tier and effort from the factory's role table:
 `factory role get <role> --format json` → `{"role","tier":"haiku|sonnet|opus","effort":"low|medium|high|xhigh|max"}`,

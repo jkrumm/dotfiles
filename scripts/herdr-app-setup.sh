@@ -8,7 +8,10 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status jk-details jk-glance jk-keys jk-tabs jk-new jk-pane)
+MODS=(jk-spaces jk-status jk-details jk-keys jk-tabs jk-new jk-pane)
+# jk-glance is the factory's own client piece: linked from the software-factory checkout, not carried here.
+FACTORY_DIR="${FACTORY_DIR:-$HOME/SourceRoot/software-factory}"
+GLANCE_SRC="$FACTORY_DIR/integrations/herdr/jk-glance"
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -31,6 +34,12 @@ link() { # src dst
 }
 
 for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
+# link replaces a symlink that points elsewhere (the old dotfiles copy included).
+if [ -d "$GLANCE_SRC" ]; then
+  link "$GLANCE_SRC" "$HOME_DIR/mods/jk-glance"; MODS+=(jk-glance)
+else
+  say "! jk-glance skipped: $GLANCE_SRC missing (set FACTORY_DIR to the software-factory checkout)"
+fi
 # jk-spaces reads its folders from here: one taxonomy for the app's sidebar.
 link "$DOTFILES_DIR/config/herdr-app/groups.json" "$HOME_DIR/groups.json"
 for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
