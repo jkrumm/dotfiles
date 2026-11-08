@@ -183,6 +183,7 @@ the weatherorb session workflow.
 | `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
 | `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
+| `com.jkrumm.iris-testflight-crashes` | iris | 3600s — `scripts/testflight-crashes.ts` from the deploy clone under `jobrun`: reads new TestFlight crash reports from App Store Connect and files one factory Issue per crash signature (`rd issue iris`) |
 | `com.jkrumm.finances` | finances | KeepAlive — the app from a release dir `~/.finances/releases/<sha>`, started through its `scripts/launch.sh` |
 | `com.jkrumm.finances-backup-push` | finances | 3600s — `scripts/backup-push.sh` from the release dir, pushes the vault backups |
 | `com.jkrumm.soloist` | home | KeepAlive — the audio tool `tools/audio/soloist.sh` under `secrets-run` |
