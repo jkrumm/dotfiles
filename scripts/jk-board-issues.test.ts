@@ -18,7 +18,7 @@ const lib = new Function(`${head}\n${block("tree")}\n${block("issues")}; return 
 type Fn<A extends unknown[], R> = (...args: A) => R
 interface Lib {
   CMD: string
-  pollCmd: Fn<[boolean], string>
+  pollCmd: Fn<[boolean?], string>
   byProject: Fn<[Card[], Map<string, Sess>], { repo: string; running: Card[]; queued: Card[] }[]>
   kanban: Fn<[Card[], Map<string, Sess>, string | null?], { id: string; label: string; cards: Card[] }[]>
   cardLines: Fn<[Partial<Card>], string[]>
@@ -116,16 +116,13 @@ test("the command reads overview, issues and sessions in one secrets-run (json f
   expect(CMD.indexOf("read sessions")).toBeLessThan(CMD.indexOf("echo '@@HC@@'"))
   expect(CMD.indexOf("echo '@@HC@@'")).toBeLessThan(CMD.indexOf("hc ls --json"))
   expect(CMD).not.toContain("factory fleet")
-  expect(lib.pollCmd(false)).toBe(CMD)
+  expect(lib.pollCmd()).toBe(CMD)
 })
 
-test("the hot command refreshes the fleet snapshot first, inside the same secrets-run", () => {
-  const hot = lib.pollCmd(true)
-  expect(hot).toContain("factory --format json fleet --refresh >/dev/null 2>&1")
-  expect(hot.indexOf("fleet --refresh")).toBeLessThan(hot.indexOf("read overview"))
-  expect(hot.indexOf("secrets-run")).toBeLessThan(hot.indexOf("fleet --refresh"))
-  expect(hot.match(/secrets-run run/g)).toHaveLength(1)
-  expect(hot.replace("factory --format json fleet --refresh >/dev/null 2>&1; ", "")).toBe(lib.CMD)
+test("hot polling reads the same command: the overview is built from the Issues, there is no snapshot to refresh", () => {
+  expect(lib.pollCmd(true)).toBe(lib.CMD)
+  expect(lib.CMD).not.toContain("fleet --refresh")
+  expect(lib.CMD.match(/secrets-run run/g)).toHaveLength(1)
 })
 
 test("the Issue id reaches the shell as an integer or not at all", () => {

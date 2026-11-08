@@ -15,9 +15,8 @@
 // Close), the owner's asks and open human queue as a strip, then equal columns NEEDS YOU / WORKING / WAITING / QUEUED /
 // DONE (`kanban`). A card click focuses the lead's agent. It polls like the sidebar but not while its block is hidden,
 // polls at once when shown again, and never publishes jk.factory.terminals (the sidebar instance does).
-// Hot mode: the server rebuilds its fleet snapshot every 30 s, so an answered ask would linger. For 3 min after the owner
-// clicks an ask, and while the focused Issue has an open ask, a 5 s timer polls with `fleet --refresh` first (DB and hc
-// reads, no model calls). Times are formatted by hand (this runtime's toLocale* ignores its options): HH:MM, no seconds.
+// Hot mode: so an answered ask does not linger, for 3 min after the owner clicks an ask, and while the focused Issue has
+// an open ask, a 5 s timer polls (DB and hc reads, no model calls). Times are formatted by hand (this runtime's toLocale* ignores its options): HH:MM, no seconds.
 // Header feed: after each good sessions answer the board publishes shared("jk.factory.terminals") (app terminal
 // address -> what that agent is about) for the jk-pane header, and only when it changed.
 // Hidden children: a session row lists the terminals that hang under it (hc's `parent`) as a tree: name,
@@ -525,7 +524,7 @@ export default class Board extends View {
     this.cleared = new Set(); // human-queue items the owner cleared here, hidden until a poll stops listing them
     this.focusIssue = null; // the Issue of the focused terminal, set in render
     this.refresh(cx);
-    cx.timer.every(HOT_POLL_MS, (cx) => { if (this.hot()) this.refresh(cx, true); });
+    cx.timer.every(HOT_POLL_MS, (cx) => { if (this.hot()) this.refresh(cx); });
     if (this.full) {
       // Not while the block is hidden; shown again with data older than POLL_MS, it polls within 2 s.
       cx.timer.every(2000, (cx) => { if (Date.now() - this.polledAt >= POLL_MS) this.refresh(cx); });
@@ -562,7 +561,7 @@ export default class Board extends View {
     return Boolean(findBlock(layout(), "boardfull")?.hidden);
   }
 
-  refresh(cx, hot = false) {
+  refresh(cx) {
     if (this.full && this.boardHidden()) return;
     if (this.polling || machines().find((m) => m.name === "mini")?.layout !== "ready") {
       cx.notify(); // the stale dimming follows the clock
@@ -571,7 +570,7 @@ export default class Board extends View {
     this.polling = true;
     this.polledAt = Date.now();
     cx.spawn(async (cx) => {
-      const r = await exec("sh", ["-c", pollCmd(hot)], { on: "mini" }).catch(() => null);
+      const r = await exec("sh", ["-c", pollCmd()], { on: "mini" }).catch(() => null);
       this.polling = false;
       this.tried = true;
       const next = r?.stdout ? parse(r.stdout) : null;
@@ -825,7 +824,7 @@ export default class Board extends View {
     cx.spawn(async (cx) => {
       const r = await exec("sh", ["-c", cmd], { on: "mini" }).catch(() => null);
       if (!r || r.code !== 0) this.cleared.delete(q.id);
-      this.refresh(cx, true);
+      this.refresh(cx);
       cx.notify();
     });
   }
