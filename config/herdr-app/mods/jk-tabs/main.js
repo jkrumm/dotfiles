@@ -1,7 +1,7 @@
-// jk-tabs: the shipped tabs mod (0.1.11), only change: + opens jk-new instead of new-menu.
+// jk-tabs: the shipped tabs mod (0.1.11), changes: + opens jk-new instead of new-menu; a factory lead's tab carries a link to its Issue in the Console.
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, exec } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -56,6 +56,8 @@ export default class Tabs extends View {
     const item = (c, i) => {
       const program = panes().find(p => p.tab === c.id && p.program?.agent)?.program ?? panes().find(p => p.tab === c.id)?.program;
       const name = /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
+      // A factory lead's tab links to its Issue in the Console (the feed is jk-glance's: jk.factory.terminals).
+      const link = panes().filter(p => p.tab === c.id).map(p => shared("jk.factory.terminals")?.[p.terminal]?.link).find(Boolean) ?? null;
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
         .border(1).border_color(c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover))
@@ -68,6 +70,8 @@ export default class Tabs extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
+        .when(Boolean(link), el => el.child(div().id(`console-${c.id}`).flex_none().text_color(t.dim).tooltip("Open in the Console").hover(x => x.text_color(t.foreground))
+          .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); exec("open", [link]).catch(() => {}); }).child(svg("mods/jk-pane/link.svg").size(12))))
         .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
         .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));

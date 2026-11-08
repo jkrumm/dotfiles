@@ -1,7 +1,7 @@
 // jk-pane: the shipped pane header (mods/pane), plus one thing. In a terminal that belongs to a factory session,
-// the header says what that agent is about: #issue or role, the Issue's title, its phase, its summary, from
-// shared("jk.factory.terminals"): app terminal address (`mini/<id>`) -> { issue, title, short, summary,
-// phase, role, state, repo }. jk-glance publishes that feed (two extra reads in its poll); without an
+// the header says what that agent is about: the Issue's title, its state, its summary, and a link to its place in the Console, from
+// shared("jk.factory.terminals"): app terminal address (`mini/<id>`) -> { title, summary, state, repo, link }.
+// jk-glance publishes that feed (two extra reads in its poll); without an
 // entry the header is the shipped one.
 // A pane's header, for layouts that frame their panes:
 //   { "tab": "active", "pane": { "header": { "content": { "mod": "jk-pane" } } } }
@@ -11,7 +11,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, shared } from "herdr";
+import { panes, props, run, theme, home, shared, exec } from "herdr";
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -24,13 +24,13 @@ function folder(cwd) {
   return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
 }
 
-// "#147", or the role of a non-lead ("#147 worker", "plan").
-function tag(f) {
-  return [f.issue != null ? `#${f.issue}` : null, f.role && f.role !== "lead" ? f.role : null].filter(Boolean).join(" ");
+// The Issue's state in the language's words ("working" -> "Working").
+function state(f) {
+  return f.state ? f.state[0].toUpperCase() + f.state.slice(1) : "";
 }
 
 function tip(f, cwd) {
-  return [f.title ?? f.short, f.summary, f.repo ? `Repo: ${f.repo}` : null, f.role ? `Role: ${f.role}` : null, cwd ? `Folder: ${folder(cwd)}` : null]
+  return [f.title, f.summary, f.repo ? `Repo: ${f.repo}` : null, cwd ? `Folder: ${folder(cwd)}` : null]
     .filter(Boolean).join("\n");
 }
 
@@ -78,10 +78,13 @@ export default class Pane extends View {
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(f), el => el.tooltip(tip(f, p.cwd)))
       .when(Boolean(pic), (el) => el.child(pic))
-      .when(Boolean(f) && Boolean(tag(f)), el => el.child(div().flex_none().text_color(t.muted).child(tag(f))))
-      .when(Boolean(f), el => el.child(div().flex_shrink(1).min_w(0).truncate().font_medium().text_color(t.foreground).child(f.short ?? f.title ?? "")))
-      .when(Boolean(f) && Boolean(f.phase), el => el.child(div().flex_none().max_w(120).truncate().text_color(t.dim).child(f.phase)))
+      .when(Boolean(f), el => el.child(div().flex_shrink(1).min_w(0).truncate().font_medium().text_color(t.foreground).child(f.title ?? "")))
+      .when(Boolean(f) && Boolean(f.state), el => el.child(div().flex_none().max_w(120).truncate().text_color(t.dim).child(state(f))))
       .when(Boolean(f), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(f.summary ?? "")))
+      .when(Boolean(f?.link), el => el.child(div().id(`ph-c-${pane}`).p(3).rounded(4).flex_none().text_color(t.dim).tooltip("Open in the Console")
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .on_click((_e, cx) => { cx.stop_propagation(); exec("open", [f.link]).catch(() => {}); })
+        .child(svg("mods/jk-pane/link.svg").size(14))))
       .when(!f, el => el
         .child(div().flex_none().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
         .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd))))
