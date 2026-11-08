@@ -125,12 +125,6 @@ argo.test {
 	reverse_proxy localhost:7715
 }
 
-# factory — the software-factory Console (loopback :7794): read-only plus the owner's answer verbs, never starts a session
-factory.test {
-	import local
-	reverse_proxy localhost:7794
-}
-
 # argo-live — the native Argo (com.jkrumm.argo, :7737, loopback): one Bun process serving the API under /api, the built
 # dashboard and the browser OTLP relay, so this door needs no path logic. `argo.test` above is the Vite dev server.
 argo-live.test {
