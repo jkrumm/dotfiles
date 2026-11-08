@@ -187,7 +187,7 @@ the weatherorb session workflow.
 | `com.jkrumm.finances` | finances | KeepAlive — the app from a release dir `~/.finances/releases/<sha>`, started through its `scripts/launch.sh` |
 | `com.jkrumm.finances-backup-push` | finances | 3600s — `scripts/backup-push.sh` from the release dir, pushes the vault backups |
 | `com.jkrumm.soloist` | home | KeepAlive — the audio tool `tools/audio/soloist.sh` under `secrets-run` |
-| `com.jkrumm.software-factory` | software-factory | KeepAlive (:7793, loopback) — the factory server (`factory` CLI) from a release dir `~/.software-factory/releases/<sha>`, started through its `scripts/launch.sh` (`secrets-run`, fails closed) |
+| `com.jkrumm.software-factory` | software-factory | KeepAlive (:7793, loopback; the Console on :7795, loopback, same process — read-only plus the owner's answer verbs, never starts a session; door `factory.test` / `https://factory.<DEV_DOMAIN>`, `config/Caddyfile`) — the factory server (`factory` CLI) from a release dir `~/.software-factory/releases/<sha>`, started through its `scripts/launch.sh` (`secrets-run`, fails closed) |
 | `com.jkrumm.homebridge` | home | KeepAlive — Homebridge for Apple Home, installed by `make homebridge` in the home repo |
 | `com.jkrumm.factory-door` | software-factory | KeepAlive (:8796, loopback, tailscale serve in front) — the alert door, same release dir as the factory server; files Issues over the socket, holds no token of the factory |
 | `com.jkrumm.vps-pg-backup` | vps | 03:15 daily — mini Postgres to the HomeLab, ends with a restore drill (`vps/docs/mini-postgres.md`) |
