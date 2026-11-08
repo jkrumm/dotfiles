@@ -2,11 +2,10 @@
 // because `<mod>.<command>` reaches shown copies only.
 //   keys.json "cmd-e": "jk-keys.brain-note"   the focused terminal's repo page from the brain vault,
 //                                             in $EDITOR, as a peek over the tab
-//   keys.json "cmd-alt-b": "jk-keys.board"    the full-screen Issues board in, and out again
 // Bound by scripts/herdr-app-keys.sh, never by hand. The key list is the file's job; this mod
 // only answers the commands.
 import { View, div } from "gpui-kit";
-import { exec, hc, focused, notify, run, nextCommand, terminals, layout, shared, setShared } from "herdr";
+import { exec, hc, focused, notify, run, nextCommand, terminals } from "herdr";
 
 // Run through bash -c so $HOME is the target machine's own (a terminal on `mini` edits the mini's vault checkout).
 const BRAIN_NOTE = 'exec bash "$HOME/SourceRoot/dotfiles/scripts/brain-note.sh"';
@@ -38,32 +37,7 @@ async function brainNote() {
   run("terminal.peek", { terminal: started });
 }
 
-// The full-screen board (layout block `boardfull`, jk-board with view=board) replaces the whole window content: the
-// sidebar, the work column and the right board column hide, it shows; the same key leaves it again and brings back
-// the board column only if it was open. Duplicated in jk-board's button (mods can't import each other; keep in step).
-const hidden = (id) => Boolean(findBlock(layout(), id)?.hidden);
-function findBlock(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = findBlock(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-function toggleBoard() {
-  if (hidden("boardfull")) {
-    setShared("jk.board.wasOpen", !hidden("board"));
-    for (const id of ["sidebar", "work", "board"]) run("layout.hide", { id });
-    run("layout.show", { id: "boardfull" });
-    return;
-  }
-  run("layout.hide", { id: "boardfull" });
-  run("layout.show", { id: "sidebar" });
-  run("layout.show", { id: "work" });
-  if (shared("jk.board.wasOpen") !== false) run("layout.show", { id: "board" });
-}
-
-const COMMANDS = { "brain-note": brainNote, board: async () => toggleBoard() };
+const COMMANDS = { "brain-note": brainNote };
 
 export default class JkKeys extends View {
   init(_props, cx) {

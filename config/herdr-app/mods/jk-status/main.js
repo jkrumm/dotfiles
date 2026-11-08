@@ -30,7 +30,7 @@ const RELOGIN_WATCH_MS = 15 * 60000;
 const healthKey = (x) => `${x.id}/${x.machine}/${x.check}`;
 
 // Uptime Kuma through Argo's live snapshot, read on the mini (the token is piped to curl, never
-// in argv). Same call as jk-board's Uptime tab; groups and paused monitors don't count.
+// in argv). Groups and paused monitors don't count.
 const KUMA = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run read op://common/api/SECRET) && printf 'Authorization: Bearer %s\\n' "$t" | curl -s -m 8 -H @- http://127.0.0.1:7737/api/uptime-kuma/monitors`;
 const KUMA_MS = 60000;
 
@@ -239,8 +239,7 @@ export default class JkStatus extends View {
       .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
       .child(div().flex_1())
-      .when(Boolean(this.kuma), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover)).text_color(t.dim)
-        .on_click(() => { setShared("jk.board.tab", "uptime"); run("layout.show", { id: "board" }); })
+      .when(Boolean(this.kuma), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).text_color(t.dim)
         .tooltip(this.kuma.down.length ? `Uptime Kuma down: ${this.kuma.down.join(", ")}` : "Uptime Kuma: every active monitor up")
         .child(div().child(`▲${this.kuma.up}`))
         .child(div().text_color(this.kuma.down.length ? t.blocked : t.dim).child(`▼${this.kuma.down.length}`))))

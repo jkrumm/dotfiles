@@ -10,10 +10,8 @@
 set -euo pipefail
 
 # jk-keys.brain-note: scripts/brain-note.sh as a peek (config/herdr-app/mods/jk-keys), the classic prefix+e.
-# jk-keys.board: the full-screen Issues board (layout block `boardfull`), in and out.
 BINDINGS=(
   "cmd-e jk-keys.brain-note"
-  "cmd-alt-b jk-keys.board"
 )
 
 HOME_DIR="${1:-${HERDR_APP_HOME:-$HOME/.config/herdr-app}}"

@@ -8,7 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status jk-details jk-board jk-keys jk-tabs jk-new jk-pane)
+MODS=(jk-spaces jk-status jk-details jk-glance jk-keys jk-tabs jk-new jk-pane)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -38,20 +38,17 @@ link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
 # The + menu's agents: the four Claude launchers (jk-new shows only these).
 link "$SRC/programs.json" "$HOME_DIR/programs.json"
 
-# keys.json is the app's own file (not tracked): add the key that toggles the board
-# column (herdr-app-keys.sh below binds cmd-alt-b, the full-screen board), never overwrite an existing binding (the old layout.toggle:waves is migrated).
+# keys.json is the app's own file (not tracked): drop the retired board toggle, only when it is exactly ours.
 KEYS="$HOME_DIR/keys.json"
-if [ -f "$KEYS" ]; then
-  CUR="$(jq -r '.global["cmd-shift-b"] // ""' "$KEYS")"
-  if [ "$CUR" = "layout.toggle:board" ]; then say "· key cmd-shift-b (ok)"
-  elif [ -z "$CUR" ] || [ "$CUR" = "layout.toggle:waves" ]; then
-    jq '.global["cmd-shift-b"] = "layout.toggle:board"' "$KEYS" > "$KEYS.tmp" && mv "$KEYS.tmp" "$KEYS" && say "✓ key cmd-shift-b → layout.toggle:board"
-  else say "- cmd-shift-b is taken ($CUR), board toggle not bound"; fi
+if [ -f "$KEYS" ] && [ "$(jq -r '.global["cmd-shift-b"] // ""' "$KEYS")" = "layout.toggle:board" ]; then
+  jq 'del(.global["cmd-shift-b"])' "$KEYS" > "$KEYS.tmp" && mv "$KEYS.tmp" "$KEYS" && say "✓ removed stale key cmd-shift-b (layout.toggle:board)"
 fi
 "$(dirname "$0")/herdr-app-keys.sh" "$HOME_DIR"
 
 # The mod was jk-waves: drop its stale link (only a symlink).
 if [ -L "$HOME_DIR/mods/jk-waves" ]; then rm "$HOME_DIR/mods/jk-waves"; say "✓ removed stale jk-waves link"; fi
+# The board mod is gone (jk-glance replaced it): drop its stale link (only a symlink).
+if [ -L "$HOME_DIR/mods/jk-board" ]; then rm "$HOME_DIR/mods/jk-board"; say "✓ removed stale jk-board link"; fi
 
 for mod in "${MODS[@]}"; do
   herdr-app check "$HOME_DIR/mods/$mod" >/dev/null || { echo "✗ herdr-app check $mod failed:"; herdr-app check "$HOME_DIR/mods/$mod"; exit 1; }

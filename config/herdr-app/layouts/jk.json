@@ -56,6 +56,17 @@
           ]
         },
         {
+          "id": "glance",
+          "type": "block",
+          "size": {
+            "px": 56
+          },
+          "background": "chrome",
+          "content": {
+            "mod": "jk-glance"
+          }
+        },
+        {
           "id": "sidebar-footer",
           "type": "block",
           "size": {
@@ -167,32 +178,6 @@
           }
         }
       ]
-    },
-    {
-      "id": "board",
-      "type": "block",
-      "size": {
-        "px": 320
-      },
-      "min": 240,
-      "max": 480,
-      "background": "chrome",
-      "resizable": true,
-      "content": {
-        "mod": "jk-board"
-      }
-    },
-    {
-      "id": "boardfull",
-      "type": "block",
-      "hidden": true,
-      "background": "chrome",
-      "content": {
-        "mod": "jk-board",
-        "props": {
-          "view": "board"
-        }
-      }
     },
     {
       "id": "keys",
