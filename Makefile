@@ -799,7 +799,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2361,6 +2361,12 @@ backup-1password-test:
 	@python3 -I $(DOTFILES_DIR)/scripts/backup-1password.test.py
 
 # caddy-tailnet.sh extra FQDN doors: block shape, validation refusals, missing file (hermetic; scratch overrides only).
+.PHONY: tailscale-serve-test
+tailscale-serve-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tailscale-serve.sh $(DOTFILES_DIR)/scripts/tailscale-serve.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-serve.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/tailscale-serve.test.sh
+
 .PHONY: caddy-tailnet-test
 caddy-tailnet-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/caddy-tailnet.sh $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh

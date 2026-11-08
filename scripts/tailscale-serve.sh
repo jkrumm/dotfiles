@@ -22,15 +22,32 @@
 # Usage: tailscale-serve.sh [--check]
 #   (default)  apply the declared state if it differs from what is live
 #   --check    report drift and exit 1 without touching anything
+#
+# The CLI and socket come from lib/tailscale-cli.sh (TAILSCALE_BIN overrides). On the
+# mini a bare `tailscale` reaches the dormant macsys daemon, so every call goes
+# through ts_run with an explicit --socket. Mutating calls (reset, serve, funnel)
+# need root on the brew daemon: ts_mut prefixes sudo when not already root.
 set -euo pipefail
+
+# shellcheck source=lib/tailscale-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
 
 PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}"
 CHECK_ONLY=false
 [ "${1:-}" = "--check" ] && CHECK_ONLY=true
 
-command -v tailscale >/dev/null 2>&1 || { echo "✗ tailscale CLI not found"; exit 2; }
+[ -n "$TAILSCALE_BIN" ] || { echo "✗ tailscale CLI not found"; exit 2; }
 
-MACHINE=$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["HostName"])')
+# Read-only calls work as a normal user; changes need root on the brew daemon.
+ts_mut() {
+    if [ -n "$TAILSCALE_SOCKET" ] && [ "$(id -u)" != 0 ]; then
+        sudo "$TAILSCALE_BIN" "--socket=$TAILSCALE_SOCKET" "$@"
+    else
+        ts_run "$@"
+    fi
+}
+
+MACHINE=$(ts_run status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["HostName"])')
 CONF="$PRIVATE_REPO/tailscale-serve.$MACHINE.conf"
 
 if [ ! -f "$CONF" ]; then
@@ -45,7 +62,7 @@ desired=$(grep -vE '^[[:space:]]*(#|$)' "$CONF" \
 
 # Live state, same shape. Web keys are "<magicdns-name>:<port>", so the port is
 # the last colon-separated field; funnel is a separate AllowFunnel map.
-live=$(tailscale serve status --json 2>/dev/null | python3 -c '
+live=$(ts_run serve status --json 2>/dev/null | python3 -c '
 import json, sys
 raw = sys.stdin.read().strip()
 cfg = json.loads(raw) if raw and raw != "null" else {}
@@ -75,16 +92,16 @@ fi
 # that no per-port `off` can address. Brief interruption is intentional and the
 # only way to converge; everything is re-added immediately below.
 echo "  applying..."
-tailscale serve reset
+ts_mut serve reset
 while IFS='|' read -r port target funnel; do
     [ -n "$port" ] || continue
     if [ "$funnel" = "yes" ]; then
-        tailscale funnel --bg "--https=$port" "$target" >/dev/null
+        ts_mut funnel --bg "--https=$port" "$target" >/dev/null
         echo "    ✓ :$port → $target (Funnel — public internet)"
     else
-        tailscale serve --bg "--https=$port" "$target" >/dev/null
+        ts_mut serve --bg "--https=$port" "$target" >/dev/null
         echo "    ✓ :$port → $target (tailnet only)"
     fi
 done <<< "$desired"
 
-echo "✓ applied — verify with: tailscale serve status"
+echo "✓ applied — verify with: make tailscale-serve-check"
