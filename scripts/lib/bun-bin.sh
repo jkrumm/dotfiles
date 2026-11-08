@@ -29,6 +29,24 @@ bun_bin_dir() {
   return 1
 }
 
+# bunx_path_dir BUN_DIR SHIM_DIR — print the directory to put in front of PATH so
+# `bunx` resolves. bun's `bunx` is a shim next to `bun`, and an install can lack it
+# (the mini's ~/.bun/bin held bun alone: `bun run typecheck` → `bunx tsc` died with
+# exit 127). Prints BUN_DIR when it, or a bunx elsewhere on PATH, already works;
+# otherwise writes SHIM_DIR/bunx (`exec bun x "$@"`, which is exactly what bunx is)
+# and prints SHIM_DIR.
+bunx_path_dir() {
+  local bun_dir="$1" shim_dir="$2"
+  if [ -x "$bun_dir/bunx" ] || PATH="$bun_dir:$PATH" command -v bunx >/dev/null 2>&1; then
+    printf '%s\n' "$bun_dir"
+    return 0
+  fi
+  mkdir -p "$shim_dir" || return 1
+  printf '#!/bin/sh\nexec "%s/bun" x "$@"\n' "$bun_dir" > "$shim_dir/bunx" || return 1
+  chmod +x "$shim_dir/bunx" || return 1
+  printf '%s\n' "$shim_dir"
+}
+
 # Executed (not sourced): print the resolved directory and exit on its code.
 # The collie-setup recipe captures it as `$(bash …/bun-bin.sh)`; sourcing it
 # only defines the function and prints nothing.

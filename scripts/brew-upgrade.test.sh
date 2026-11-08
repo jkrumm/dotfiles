@@ -73,6 +73,7 @@ case "\$1" in
     if [ "\$2" = "--cask" ]; then cat "$ST/outdated_c"; else cat "$ST/outdated_f"; fi ;;
   upgrade)
     [ -f "$ST/upgrade_fail" ] && exit 1
+    if [ -f "$ST/upgrade_hang" ]; then echo "Warning: A newer Command Line Tools release is available"; sleep 60; fi
     if [ -f "$ST/upgrade_unpins" ]; then grep -vxF caddy "$ST/pinned" > "$ST/pinned.n"; mv "$ST/pinned.n" "$ST/pinned"; fi
     exit 0 ;;
   services) cat "$ST/services_json" ;;
@@ -117,6 +118,8 @@ export PATH="$BIN:/usr/bin:/bin:/usr/sbin:/sbin"
 export HOME="$TMP/home"
 export BREW_SERVICE_PLISTBUDDY="$BIN/PlistBuddy"
 export BREW_UPGRADE_STAMP="$TMP/stamp/last-success"
+export BREW_UPGRADE_IDLE_SECS=2 BREW_UPGRADE_POLL_SECS=1 HOMEBREW_LOGS="$TMP/hblogs"
+LOCK="$HOME/.local/state/brew-upgrade/lock"
 
 # reset: a quiet machine — nothing installed, nothing outdated, no tailscale, no
 # colima plist, backend unset, op absent.
@@ -291,6 +294,49 @@ assert_contains "FDA absent names the path" "$OUT" "✗ op: no Full Disk Access 
 reset; set_backend op; touch "$ST/sqlite_fail"; run
 assert_eq "unreadable db is unassertable, not a failure" "$RC" 0
 assert_contains "unreadable db message" "$OUT" "TCC db unreadable from here"
+
+echo "concurrent runs"
+reset; put outdated_f jq
+# a live brew-upgrade holder: a process whose command line names brew-upgrade
+printf '#!/bin/sh\nsleep 30\n' > "$TMP/brew-upgrade-fake.sh"
+/bin/sh "$TMP/brew-upgrade-fake.sh" & holder=$!
+mkdir -p "$(dirname "$LOCK")"; echo "$holder" > "$LOCK"
+run
+assert_eq "second run refuses: exits 1" "$RC" 1
+assert_contains "second run names the holder" "$OUT" "another brew-upgrade is already running (pid $holder"
+assert_not_contains "refused run never touches brew" "$(brewlog)" "update"
+assert_eq "refused run leaves the holder's lock" "$(cat "$LOCK")" "$holder"
+run --dry-run
+assert_eq "dry-run ignores the lock" "$RC" 0
+pkill -P "$holder" 2>/dev/null; kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+run
+assert_eq "dead holder is stale: run proceeds" "$RC" 0
+assert_eq "lock released on exit" "$([ -e "$LOCK" ] && echo yes || echo no)" no
+sleep 30 & other=$!
+echo "$other" > "$LOCK"
+run
+assert_eq "live pid that is not brew-upgrade is stale (pid reuse)" "$RC" 0
+kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
+reset; put outdated_f jq; touch "$ST/upgrade_fail"; run
+assert_eq "lock released after a failed upgrade" "$([ -e "$LOCK" ] && echo yes || echo no)" no
+
+echo "stalled brew upgrade"
+reset; put outdated_f jq; touch "$ST/upgrade_hang"
+start=$(date +%s); run; took=$(( $(date +%s) - start ))
+assert_eq "stalled upgrade exits 1" "$RC" 1
+assert_contains "stall is reported" "$OUT" "brew upgrade stalled"
+assert_contains "pending CLT update is named" "$OUT" "Command Line Tools update"
+assert_contains "brew output is still shown" "$OUT" "newer Command Line Tools release"
+[ "$took" -lt 30 ] && ok "watchdog fires well before the 60 s hang ($took s)" || bad "watchdog too slow ($took s)"
+assert_eq "stalled run writes no stamp" "$([ -e "$BREW_UPGRADE_STAMP" ] && echo yes || echo no)" no
+assert_eq "lock released after a stall" "$([ -e "$LOCK" ] && echo yes || echo no)" no
+assert_eq "no hung brew child left behind" "$(pgrep -f "$BIN/brew upgrade" | wc -l | tr -d ' ')" 0
+reset; put outdated_f jq; touch "$ST/upgrade_hang"
+mkdir -p "$HOMEBREW_LOGS"; ( while :; do : > "$HOMEBREW_LOGS/jq.log"; sleep 0.3; done ) & feeder=$!
+start=$(date +%s); RC=0; OUT=$(BREW_UPGRADE_IDLE_SECS=3 timeout 8 /bin/bash "$SB/scripts/brew-upgrade.sh" 2>&1) || RC=$?
+kill "$feeder" 2>/dev/null; wait "$feeder" 2>/dev/null; pkill -P $$ -x sleep 2>/dev/null
+assert_not_contains "fresh Homebrew build-log writes keep the run alive" "$OUT" "brew upgrade stalled"
+rm -rf "$HOMEBREW_LOGS"
 
 echo "unit: fixup_for / in_array / tcc_allows (extracted verbatim)"
 for fn in fixup_for in_array tcc_allows; do

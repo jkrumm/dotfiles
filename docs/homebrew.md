@@ -98,6 +98,15 @@ machine is protected before `caddy-dns-build` has run even once.
 | `make brew-upgrade` | Converge pins, upgrade outdated **homebrew/core formulae**, then assert the invariants above |
 | `make brew-upgrade-dry` | True no-op preview — reports what *would* be pinned/upgraded and touches nothing |
 
+A real `make brew-upgrade` takes a pid lock (`~/.local/state/brew-upgrade/lock`) and refuses
+a second concurrent run, naming the holder; `--dry-run` and `--pins-only` ignore it. The
+upgrade itself runs under an idle watchdog: no output and no write under
+`~/Library/Logs/Homebrew` for `BREW_UPGRADE_IDLE_SECS` (default 20 min) kills the whole
+brew process tree and fails the run, instead of holding the brew lock for hours (a source
+build wedged 2h40m on 2026-09-20 right after brew warned of a pending Command Line Tools
+update; the message names that cause when brew printed the warning). Install the pending
+CLT/macOS update (`make mini-macos-update`), then re-run.
+
 Casks and third-party-tap formulae are **reported, never auto-upgraded** —
 casks are vendor binaries (Homebrew ships the metadata, the bits come from the
 vendor), which is where the release-age cooldown genuinely applies. Those go

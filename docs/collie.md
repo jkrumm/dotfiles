@@ -90,7 +90,9 @@ checkout in place, from a paired phone (`POST /api/update` pulls the newest rele
 tag), which would walk past the commit pin. `collie-setup.sh` keeps a bare clone
 cache, checks the pinned commit out into `~/.local/share/collie/<ref12>/`, builds it
 (`bun run cli/main.ts build`, the fetched source building itself, not an older
-binary), asserts `bin/collie version` is `<version>+<commit>`, and then **deletes
+binary; bun is resolved by `scripts/lib/bun-bin.sh`, and a `bunx` shim is generated under
+`~/.local/share/collie/shims/` when the install has none, so the build's `bunx tsc` works
+from any non-login environment), asserts `bin/collie version` is `<version>+<commit>`, and then **deletes
 `.git`**. Upstream classifies a tree like that as `unknown/loose-binary` and declines
 to update it. One directory per pinned commit; the previous one stays for a rollback,
 older ones are pruned. The bridge keeps its state (paired devices, local credential)

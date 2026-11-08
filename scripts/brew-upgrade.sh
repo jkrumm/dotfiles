@@ -146,6 +146,42 @@ done
 command -v brew >/dev/null 2>&1 \
   || { echo "✗ brew not found — this script requires Homebrew" >&2; exit 1; }
 
+# --- one real run at a time -----------------------------------------------------
+# Homebrew has no mutex across `brew upgrade` invocations here: 2026-09-20 a manual
+# run started while an unattended one from 08:39 was still going, both burned ~100 %
+# CPU on formula locks the other held, and the manual one printed "Pouring node" and
+# then nothing for six minutes. A pid lock (macOS ships no flock) says so at once.
+# Only a REAL run takes it: --dry-run reads, --pins-only is seconds and runs from
+# `make setup`. The holder's command line is checked too, so a stale pid that the OS
+# has since handed to something else does not refuse every future run.
+BREW_UPGRADE_LOCK="${BREW_UPGRADE_LOCK:-$HOME/.local/state/brew-upgrade/lock}"
+lock_held=0
+release_lock() {
+  (( lock_held )) || return 0
+  [[ "$(cat "$BREW_UPGRADE_LOCK" 2>/dev/null)" == "$$" ]] && rm -f "$BREW_UPGRADE_LOCK"
+  lock_held=0
+}
+acquire_lock() {
+  local holder tries=0
+  mkdir -p "$(dirname "$BREW_UPGRADE_LOCK")"
+  until ( set -C; printf '%s\n' "$$" >"$BREW_UPGRADE_LOCK" ) 2>/dev/null; do
+    holder=$(cat "$BREW_UPGRADE_LOCK" 2>/dev/null) || holder=""
+    if [[ "$holder" =~ ^[0-9]+$ ]] && kill -0 "$holder" 2>/dev/null \
+        && [[ "$(ps -o command= -p "$holder" 2>/dev/null)" == *brew-upgrade* ]]; then
+      echo "✗ another brew-upgrade is already running (pid $holder, lock $BREW_UPGRADE_LOCK) — refusing a second run" >&2
+      echo "    watch it: tail -f ~/Library/Logs/brew-upgrade-mini.log   (or wait for it to exit and re-run)" >&2
+      exit 1
+    fi
+    rm -f "$BREW_UPGRADE_LOCK"  # stale: holder gone, or the pid was reused
+    (( ++tries < 5 )) || { echo "✗ could not take $BREW_UPGRADE_LOCK" >&2; exit 1; }
+  done
+  lock_held=1
+}
+if (( ! DRY_RUN && ! PINS_ONLY )); then
+  acquire_lock
+  trap release_lock EXIT
+fi
+
 if (( ! PINS_ONLY )); then
   echo "  brew update..."
   brew update --quiet
@@ -265,6 +301,79 @@ if (( ${#outdated_casks[@]} > 0 )); then
   echo "  · vendor binaries, release-age cooldown applies: $names — use /upgrade-deps"
 fi
 
+# --- the upgrade, under an idle watchdog ----------------------------------------
+# 2026-09-20 an unattended run sat 2h40m at `==> Upgrading oven-sh/bun/bun`: an
+# idle `brew build.rb` child on a pty at 0 % CPU, an empty build log, the parent
+# ruby spinning, the brew lock held the whole time. Brew printed a "newer Command
+# Line Tools release is available" warning just before it wedged — a source build
+# on a macOS the CLT predates. So the upgrade runs with its output in a file and
+# is killed (whole process tree) when neither that file nor ~/Library/Logs/Homebrew
+# has been written for BREW_UPGRADE_IDLE_SECS (default 20 min — a bottle pour or a
+# slow compile still writes within that; a wedge never does). Loud failure beats a
+# held lock. This is a brew build, not an agent run, so agent-limits.md's "no
+# wall-clock ceiling" does not apply; the idle rule is the one it prescribes anyway.
+BREW_UPGRADE_IDLE_SECS="${BREW_UPGRADE_IDLE_SECS:-1200}"
+BREW_UPGRADE_POLL_SECS="${BREW_UPGRADE_POLL_SECS:-5}"
+BREW_LOGS_DIR="${HOMEBREW_LOGS:-$HOME/Library/Logs/Homebrew}"
+
+file_mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
+
+# Newest mtime under the Homebrew build-log dir (0 when none).
+newest_build_log() {
+  [[ -d "$BREW_LOGS_DIR" ]] || { echo 0; return; }
+  find "$BREW_LOGS_DIR" -type f -exec stat -f %m {} + 2>/dev/null | sort -n | tail -1 | grep . || echo 0
+}
+
+# `kill_tree SIG PID` — PID and every descendant, children first. pgrep -P walks the
+# real parent links, so the orphaned build.rb child goes too; no pattern kill.
+kill_tree() {
+  local sig=$1 pid=$2 child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do kill_tree "$sig" "$child"; done
+  kill "-$sig" "$pid" 2>/dev/null || true
+}
+
+brew_upgrade_watched() {
+  local out bpid tpid rc=0 now last idle stalled=0 build
+  out=$(mktemp "${TMPDIR:-/tmp}/brew-upgrade.XXXXXX")
+  brew upgrade "$@" >"$out" 2>&1 &
+  bpid=$!
+  tail -f -n +1 "$out" &
+  tpid=$!
+  trap 'kill_tree TERM "$bpid"; kill "$tpid" 2>/dev/null; release_lock; exit 143' INT TERM
+  while kill -0 "$bpid" 2>/dev/null; do
+    sleep "$BREW_UPGRADE_POLL_SECS"
+    now=$(date +%s)
+    last=$(file_mtime "$out")
+    idle=$(( now - last ))
+    if (( idle >= BREW_UPGRADE_IDLE_SECS )); then
+      build=$(newest_build_log)
+      (( build > last )) && idle=$(( now - build ))
+      if (( idle >= BREW_UPGRADE_IDLE_SECS )); then
+        stalled=1
+        kill_tree TERM "$bpid"
+        sleep 2
+        kill_tree KILL "$bpid"
+        break
+      fi
+    fi
+  done
+  wait "$bpid" 2>/dev/null || rc=$?
+  sleep 1  # let tail flush the last lines
+  kill "$tpid" 2>/dev/null || true
+  wait "$tpid" 2>/dev/null || true
+  trap - INT TERM
+  if (( stalled )); then
+    echo "  ✗ brew upgrade stalled: no output and no Homebrew build log written for $(( BREW_UPGRADE_IDLE_SECS / 60 )) min — killed, brew lock released" >&2
+    if grep -q 'newer Command Line Tools' "$out"; then
+      echo "    brew warned of a pending Command Line Tools update — a source build on this macOS wedges until it is installed (make mini-macos-update), then re-run" >&2
+    fi
+    rm -f "$out"
+    return 1
+  fi
+  rm -f "$out"
+  return "$rc"
+}
+
 if (( DRY_RUN )); then
   if (( ${#upgradable[@]} > 0 )); then
     echo "  would upgrade (dry-run): ${upgradable[*]}"
@@ -279,7 +388,7 @@ if (( ${#upgradable[@]} == 0 )); then
   echo "  · nothing to upgrade — every outdated formula is held, third-party, or a cask"
 else
   echo "  upgrading: ${upgradable[*]}"
-  brew upgrade --formula "${upgradable[@]}" \
+  brew_upgrade_watched --formula "${upgradable[@]}" \
     || { echo "  ✗ brew upgrade failed" >&2; exit 1; }
   echo "  ✓ upgraded ${#upgradable[@]} formula(e)"
 fi

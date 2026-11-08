@@ -85,7 +85,7 @@ build_root_for() { echo "$HOME_DIR/${COLLIE_REF:0:12}"; }
 
 # --- checkout + build ---------------------------------------------------------------------
 ensure_build() {
-  local root marker cache bun_dir
+  local root marker cache bun_dir bunx_dir
   root=$(build_root_for)
   marker="$root/.pinned-ref"
   if [ "$(cat "$marker" 2>/dev/null || true)" = "$COLLIE_REF" ] && [ -x "$root/bin/collie" ] && [ -f "$root/web/dist/index.html" ]; then
@@ -95,6 +95,11 @@ ensure_build() {
   bun_dir=$(bash "$DOTFILES_DIR/scripts/lib/bun-bin.sh") \
     || die "bun not found on PATH, ~/.bun/bin or the Homebrew prefixes — run: brew bundle install"
   note "· bun from $bun_dir"
+  # Collie's build runs `bun run typecheck` → `bunx tsc`; an install with bun but no bunx
+  # shim dies with exit 127. Resolve it here, not in the caller's environment.
+  # shellcheck source=lib/bun-bin.sh
+  source "$DOTFILES_DIR/scripts/lib/bun-bin.sh"
+  bunx_dir=$(bunx_path_dir "$bun_dir" "$HOME_DIR/shims") || die "could not provide bunx (shim dir $HOME_DIR/shims)"
 
   mkdir -p "$HOME_DIR"
   cache="$HOME_DIR/git"
@@ -118,7 +123,7 @@ ensure_build() {
   # The fetched source builds itself (the same step upstream's bootstrap shim runs): the old
   # binary's build code never touches the new tree. Only the tail is shown; the log is kept.
   mkdir -p "$(dirname "$LOG")"
-  if ! (cd "$root" && PATH="$bun_dir:$PATH" bun run cli/main.ts build > "$HOME_DIR/build.log" 2>&1); then
+  if ! (cd "$root" && PATH="$bunx_dir:$bun_dir:$PATH" bun run cli/main.ts build > "$HOME_DIR/build.log" 2>&1); then
     tail -20 "$HOME_DIR/build.log" >&2
     rm -rf "$root"
     die "collie build failed (full log: $HOME_DIR/build.log)"
