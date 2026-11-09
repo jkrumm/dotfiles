@@ -64,6 +64,7 @@ case "$1 $2" in
   "session get") if [ -f "$STATE/session-reply-$3" ]; then cat "$STATE/session-reply-$3"; exit 0; fi; cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
   "issue new") [ -t 0 ] || cat >"$STATE/issue-stdin" 2>/dev/null; cat "$STATE/issue-reply" 2>/dev/null || echo "issue 7 queued"; exit "$(cat "$STATE/issue-rc" 2>/dev/null || echo 0)" ;;
   "issue list") echo "7 queued myrepo"; exit 0 ;;
+  "issue schema") echo "Filing an Issue: facts keys why what change acceptance"; exit 0 ;;
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
@@ -175,6 +176,10 @@ is "and starts nothing on hc" "$hruns" ""
 reset
 rd issue nosuchrepo "T"
 [ "$rc" -ne 0 ] && ok "unknown repo refused" || bad "unknown repo accepted"
+reset; rd issue --help
+is "issue --help: exit 0" "$rc" 0
+has "issue --help prints the factory contract" "$out" "facts keys why what change acceptance"
+is "issue --help files nothing" "$(grep -c "issue new" <<<"$fcalls")" 0
 reset; rd issues
 has "issues lists" "$out" "7 queued myrepo"
 

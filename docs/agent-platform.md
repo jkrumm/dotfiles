@@ -31,7 +31,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
 |-|-|
-| Lanes (Issue, `@implementer`), lean global CLAUDE.md, `/wave` as the Issue-filing playbook, OpenCode parity | **landed** (dotfiles W1–W2) |
+| Lanes (Issue, `@implementer`), lean global CLAUDE.md, the factory CLI describing its own Issue filing contract (`rd issue --help`), OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
 | Worker engine: model registry, review angles, one source for model ids | **landed**, now in agent-workflows (the predecessor service retired 2026-10-29, Wave 11) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |

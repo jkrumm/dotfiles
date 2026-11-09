@@ -8,7 +8,7 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 
 | Tier | Mechanism | Use when |
 |-|-|-|
-| 1 | Parallel `/check` calls (`agw`) in **one turn** | Independent verifiable *reads and checks* (`check`); `/review` runs in-session (host commands plus a foreground reviewer agent), not as a parallel call. Independent *changes* are factory Issues (`/wave` is the playbook) |
+| 1 | Parallel `/check` calls (`agw`) in **one turn** | Independent verifiable *reads and checks* (`check`); `/review` runs in-session (host commands plus a foreground reviewer agent), not as a parallel call. Independent *changes* are factory Issues |
 | 2 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`); keep it thin |
 | 3–4 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |
 
@@ -40,7 +40,7 @@ Everything routed through `agw` exists only on the mini.
 | `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`agw review prepare|submit|dispose|covered`, reviewer agent in-session) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
 | MCP · subagent | `/browse` (chrome-devtools, haiku) · `/analyze` (fallow in a native subagent) |
 | inline — git | `/commit` (`--split`/`--amend`) |
-| inline — build | `/wave` · `/upgrade-deps` · `/archify` |
+| inline — build | `/upgrade-deps` · `/archify` |
 | inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (hc + the Herdr app) · `/router` (`routerctl`) |
 | inline — writing | `/brain` · `/distill` |
 

@@ -890,7 +890,14 @@ cmd_reap() {
 # factory's exit code is ours. --facts is read here (the file may be on this machine) and handed over on stdin.
 cmd_issue() {
   local name=${1:-} title=${2:-} key="" facts="" have_facts=0 usage="usage: issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]"
-  [[ -n $name && -n $title ]] || die "$usage"
+  case $name in
+    -h|--help|help)
+      # The factory owns the filing contract (facts keys, example, limits, rd versus direct): print its text, not a copy.
+      factory_host "$FACTORY_CALL_S" issue schema
+      return ;;
+  esac
+  [[ -n $name && -n $title ]] || die "$usage
+the filing contract (facts keys, example): rd issue --help, or factory issue schema"
   shift 2
   local -a fargs=()
   while (( $# )); do
@@ -942,7 +949,7 @@ usage() {
                               (a verb that takes no more arguments exits 2 on extras)
     rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]
                               file an Issue with the software factory (its lead builds, reviews, deploys, verifies);
-                              no factory, no Issue (exit code passed through). rd issues lists them
+                              no factory, no Issue (exit code passed through). rd issue --help prints the facts contract. rd issues lists them
     rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
     rd read <agent> [src]     read an agent's output without attaching (src: history lines, or 'visible')
     rd say <agent> <text…>    send a prompt to a running agent (refused while it is blocked on a dialog)

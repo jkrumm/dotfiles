@@ -65,7 +65,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Work | Route |
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
-| Work for a repo that should ship on its own, incl. N independent changes | `rd issue <repo> <title>` / `factory issue new` — the factory's lead builds, reviews, deploys and verifies; `/wave` is the playbook for splitting a plan into Issues |
+| Work for a repo that should ship on its own, incl. N independent changes | `rd issue <repo> <title>` / `factory issue new` — the factory's lead builds, reviews, deploys and verifies; the filing contract is `rd issue --help` (`factory issue schema`) |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
 | Prove a change works (UI, traces, endpoints) | `@verifier` |

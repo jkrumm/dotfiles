@@ -1,6 +1,6 @@
 # Retire classic herdr: everything on herdr-core + the Herdr app
 
-> Superseded: the old wave path (the wave, fan, merge and close verbs of `rd`, and their gate and merge scripts) was removed in reset 8b. This plan is history; its mentions of them are past tense. New work is a factory Issue (`/wave` skill).
+> Superseded: the old wave path (the wave, fan, merge and close verbs of `rd`, and their gate and merge scripts) was removed in reset 8b. This plan is history; its mentions of them are past tense. New work is a factory Issue (`rd issue --help`).
 
 **Goal:** classic herdr is gone from both machines and from every live file an agent could follow. Each consumer
 is ported to the herdr-core API (`hc schema`, `hc events`, core docs) or to `herdr-app do …`, replaced by a native
