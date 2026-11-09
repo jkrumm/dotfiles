@@ -180,6 +180,9 @@ reset; rd issue --help
 is "issue --help: exit 0" "$rc" 0
 has "issue --help prints the factory contract" "$out" "facts keys why what change acceptance"
 is "issue --help files nothing" "$(grep -c "issue new" <<<"$fcalls")" 0
+reset; rd issue myrepo --help
+[ "$rc" -ne 0 ] && ok "a flag as the title is refused" || bad "filed an Issue titled --help"
+is "nothing filed for a flag title" "$(grep -c "issue new" <<<"$fcalls")" 0
 reset; rd issues
 has "issues lists" "$out" "7 queued myrepo"
 

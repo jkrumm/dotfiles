@@ -898,6 +898,7 @@ cmd_issue() {
   esac
   [[ -n $name && -n $title ]] || die "$usage
 the filing contract (facts keys, example): rd issue --help, or factory issue schema"
+  [[ $title != -* ]] || die "rd issue: the title '$title' looks like a flag. $usage"
   shift 2
   local -a fargs=()
   while (( $# )); do
