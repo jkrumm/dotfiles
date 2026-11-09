@@ -318,13 +318,34 @@ rewrite those links).
 - `make herdr-core-status`: version, `core_up`, responsibility.
 - `make op-tcc-probe` (MacBook): `op` in a Herdr terminal raises no AppData dialog; re-run after every core update.
 
-**Updates.** `make herdr-core-update` runs the official `hc update` (it may ask to be run a second time; the target runs
-it again), then verifies `hc --version`, `core_up`, that the terminal count did not change and the responsibility check.
-Run it by hand in a quiet window (`hc ls` shows what is live), on each machine. Running terminals keep running, but an
-update can end the programs inside them (upstream herdr-core #133): `hc-resume` types `claude --resume <id>` into the
-login shells that remain, only where the foreground is positively a login shell. There is no unattended update job: the
-Herdr app also updates linked machines' cores, and a second updater would race it. Read the release notes first
-(`/upgrade-deps`, Machine mode: herdr-core).
+**Updates.** `make herdr-core-update`, on each machine, runs `scripts/herdr-core-preflight.sh` first and then the official
+`hc update` (run again when hc asks). Preflight, read-only: latest vs installed (equal = exit 0, nothing to do); the release
+notes; the tarball's SHA-256 and its `Herdr Core.app` designated requirement against the installed bundle's; the live
+agents. Afterwards it checks `hc --version`, `core_up`, the terminal count, responsibility, that the requirement did not
+change, and runs `make tcc-probe`.
+
+*Can a running core be updated with agents live?* Mechanically yes: `hc update` swaps the bundle and restarts `serve`; the
+holder (`herdr-core hold`) is a separate process and keeps every terminal (`hc update --help`: "terminals keep running").
+What is not guaranteed is the **program inside** a terminal: a reporter lost 15 Claude sessions on a remote machine to an
+app-triggered 0.1.14 to 0.1.18 update (herdr-core #133, open); upstream could not reproduce it on Linux. We have no
+first-hand bundle-to-bundle data yet (the 2026-11-05 resumes came from the Homebrew cutover). So the preflight refuses
+while any terminal has `status: working` (a turn in flight; `FORCE=1` is the owner's call), and `hc-resume` types `claude
+--resume <id>` into login shells that remain, only where the foreground is positively a login shell. The invoking
+session counts too: run it from a plain terminal, not from the agent being updated. 0.1.19 changes nothing for existing
+terminals ("opened before this update keep the old behavior"), so there is no reason to recreate them.
+
+*The app is the realistic trigger.* The Herdr app checks hourly, has no off switch (herdr-app #207), and on the first
+start after an app update also updates linked machines' cores, mini included: exactly the #133 path, at a time you did not
+pick. Update the cores yourself in the quiet window first; the app then finds nothing to update. A staged app update
+(`~/Applications/Herdr.app.new.noindex`, `.new.json.noindex` holding the version) applies on the next app start.
+
+*Full Disk Access.* The grant is keyed on the bundle path plus the designated requirement
+(`identifier "dev.herdr.core"`, team `2W9652Q7QR`, Developer ID). The path is fixed and the swap is in place, so as long
+as the requirement is unchanged the grant stays and nothing is asked again; verified identical for 0.1.18 and 0.1.19
+before the update (2026-11-09). The preflight exits 4 when it differs (re-grant at the machine's screen), and the post-check
+plus `make tcc-probe` prove it live. Local Network, microphone and AppData prompts stay session-scoped on macOS 26 and may
+still appear; answer Local Network/microphone, never "Allow" on AppData as a fix. There is no unattended update job: a
+second updater would race the app.
 
 **What breaks it.**
 - A wrapper at `~/.local/bin/{hc,herdr-core}` (the installer and `hc update` rewrite those links).

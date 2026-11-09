@@ -2711,9 +2711,13 @@ herdr-core-status:
 # The OFFICIAL updater (`hc update`), run by hand in a quiet window: `hc ls` shows what is live. A core update can end
 # programs inside terminals (upstream herdr-core #133); the terminals stay and hc-resume types `claude --resume` into them.
 # There is no unattended job: the Herdr app also updates the cores of linked machines, a second updater would race it.
-herdr-core-update:
+herdr-core-update: ## Update this machine's core (official hc update) after the preflight: new version, same signing requirement, no agent mid-turn (FORCE=1 overrides the last)
 	@HC="$(HOME)/.local/bin/hc"; \
 	bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null || { echo "  ✗ core not up: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; \
+	bash "$(DOTFILES_DIR)/scripts/herdr-core-preflight.sh"; pre=$$?; \
+	[ "$$pre" != 3 ] || exit 0; \
+	[ "$$pre" = 0 ] || { echo "  ✗ preflight stopped the update (rc=$$pre)"; exit 1; }; \
+	req0=$$(codesign -dr - "$(CORE_APP)" 2>&1 | grep '^designated'); \
 	v0=$$("$$HC" --version); n0=$$("$$HC" ls | jq '.terminals | length'); \
 	echo "  before: $$v0, $$n0 live terminal(s)"; \
 	out=$$("$$HC" update 2>&1); rc=$$?; echo "$$out"; \
@@ -2724,7 +2728,10 @@ herdr-core-update:
 	echo "  after:  $$v1, $$n1 live terminal(s)"; \
 	[ "$$n0" = "$$n1" ] || { echo "  ✗ terminal count changed ($$n0 -> $$n1)"; exit 1; }; \
 	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || echo "  · see the lines above: old holders end with their terminals, an inherited environment needs make herdr-core-clean-restart"; \
-	echo "  ✓ core up, terminals kept. Next: ~/Library/Logs/hc-resume.log (programs the update ended are resumed), make tcc-probe; the other machine: make herdr-core-update there"
+	req1=$$(codesign -dr - "$(CORE_APP)" 2>&1 | grep '^designated'); \
+	[ "$$req0" = "$$req1" ] || { echo "  ✗ signing requirement changed during the update: re-grant Full Disk Access on $(CORE_APP) at the machine's screen"; exit 1; }; \
+	$(MAKE) --no-print-directory tcc-probe || { echo "  ✗ tcc-probe failed after the update (docs/tcc.md)"; exit 1; }; \
+	echo "  ✓ core up, terminals kept, signing requirement unchanged, Full Disk Access holds. Next: ~/Library/Logs/hc-resume.log (programs the update ended are resumed); MacBook: make op-tcc-probe"
 
 .PHONY: tcc-check tcc-check-test tcc-probe op-tcc-probe
 tcc-check: ## Read-only: flag a LaunchAgent program (ad-hoc signed / versioned path) that has no durable file-access grant (docs/tcc.md)
@@ -2750,7 +2757,7 @@ tcc-check-test: ## Hermetic test for tcc-check
 	@bash $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 
 herdr-core-test: ## Hermetic tests: the core-up definition, core-health (stray, responsibility, version parity) and hc-responsible
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/core-up.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/herdr-core-preflight.sh $(DOTFILES_DIR)/scripts/lib/core-up.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
 	@bash $(DOTFILES_DIR)/scripts/core-health.test.sh
 	@python3 -W ignore $(DOTFILES_DIR)/scripts/hc-responsible.test.py
 

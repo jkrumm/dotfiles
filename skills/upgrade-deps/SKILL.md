@@ -110,23 +110,29 @@ Upstream's `Herdr Core.app`, installed by the official installer, **not Homebrew
 identity and `hc update` refuses it). The Homebrew machine procedure is steps 1–7 above and never touches it; `caddy`
 and `tailscale` stay the pins.
 
-1. **Read the release notes first:** the CHANGELOG of herdrdev/herdr-core for the new version, the privacy lines in
-   particular (new prompts: Local Network, microphone, file access) and anything on holders, `serve`, launchd or
-   responsibility.
-2. **Quiet window:** `hc ls` on each machine; few or no live agents. An update can end programs inside terminals
-   (upstream herdr-core #133); `hc-resume` then types `claude --resume <id>` into the surviving login shells.
-3. **Update:** `make herdr-core-update` on the mini, then on the MacBook (it runs the official `hc update`, runs it again
-   when hc asks, and checks version, core up, terminal count and responsibility). The Herdr app may update linked machines'
-   cores itself, so expect a version to have moved already; there is no unattended job.
+0. **Is there anything to do?** `bash scripts/herdr-core-preflight.sh` prints installed vs latest core (exit 3 = current),
+   the notes, and whether the new bundle keeps the signing requirement. Also compare the Herdr app
+   (`~/Applications/Herdr.app` CFBundleShortVersionString vs `releases.herdr.dev/app/latest.json`); a staged
+   `Herdr.app.new.noindex` applies on the next app start.
+1. **Read the release notes first:** the preflight prints them; the CHANGELOG of herdrdev/herdr-core adds the privacy
+   lines (new prompts: Local Network, microphone, file access) and anything on holders, `serve`, launchd or responsibility.
+2. **Quiet window, not a stop:** an update is possible with agents live (the holder keeps every terminal), but the program
+   inside a terminal may end (upstream herdr-core #133, open). `make herdr-core-update` refuses while any terminal is
+   `working`; wait for idle/done, `FORCE=1` only on the owner's word. Never run it from the session being updated.
+   `hc-resume` then types `claude --resume <id>` into the surviving login shells.
+3. **Update cores before the app.** The app's hourly self-update also updates linked machines' cores (no off switch): do
+   the mini and the MacBook yourself first, so the app finds nothing. `make herdr-core-update` on the mini, then on the
+   MacBook; it ends with `make tcc-probe`.
 4. **Verify, both machines:** `hc --version` equal; `bash scripts/lib/core-up.sh` silent; `python3 scripts/hc-responsible.py`
-   (old Cellar holders end with their terminals, nothing new); `make tcc-probe`; `make op-tcc-probe` (MacBook); the tail of
+   (old Cellar holders end with their terminals, nothing new); `make op-tcc-probe` (MacBook); the tail of
    `~/Library/Logs/hc-resume.log` on the mini; `make doctor`.
 5. **An agent never starts a core or opens the app.** A core's environment becomes every terminal's, and `open` passes the
    caller's: one `open -a Herdr` from a Claude session put `CLAUDE_CODE_CHILD_SESSION` in every terminal ("Transcript saving
    is off"). `hc-responsible.py` flags it; `make herdr-core-clean-restart` cures it (MacBook, ends the terminals' programs).
-6. **Grants:** Full Disk Access on `Herdr Core.app` is re-granted only if the signing team or identifier changed
-   (`codesign -dv` on the bundle). New Local Network / microphone prompts are answered at the machine's screen. Never click
-   Allow on an AppData dialog as a fix.
+6. **Grants:** Full Disk Access on `Herdr Core.app` survives an update when the designated requirement is unchanged: the
+   preflight compares old and new (exit 4 = re-grant at the machine's screen) and the target re-checks it plus `make tcc-probe`
+   afterwards. New Local Network / microphone prompts are answered at the machine's screen. Never click Allow on an AppData
+   dialog as a fix.
 
 ---
 
