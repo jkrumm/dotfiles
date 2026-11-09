@@ -445,7 +445,7 @@ d = json.load(open(sys.argv[1]))
 o = d["output"]
 p = o.get("params", {})
 stamp = time.strftime("%Y%m%d-%H%M%S")
-short = d["runId"].split("-")[0]
+short = d["runId"]  # whole id: the first segment is time-ordered, so concurrent runs share it
 cost = (o.get("cost") or {}).get("usd")
 print("\t".join([d["runId"], str(o["model"]), str(o.get("size", "")), str(p.get("quality", "")),
                  "" if cost is None else f"{cost:.4f}", str(o["latencyMs"])]))

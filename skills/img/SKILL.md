@@ -67,6 +67,15 @@ imgcli ls [prefix/] · info <key> · url <key> [transform ...] · transforms · 
 
 `icon` writes the whole set: `favicon.ico` (16/32/48), `favicon.svg` (vectorized via recraft, $0.01 — omitted with a reason when gradient-heavy art would produce a bloated SVG), `icon-192.png`, `icon-512.png`, `icon-mask.png` (maskable, subject inside the 409px safe zone), `apple-touch-icon.png` (180, opaque on `--bg`), `icon-1024.png` (opaque, Xcode single-size/App Store), `AppIcon.icns` (macOS), plus `head.html` (the `<link>` tags) and `manifest.webmanifest` (icons array — add `name`/`theme_color` yourself). Sources under 512 px are upscaled first (real-esrgan, $0.002, keeps alpha) — recraft cutout and vectorize both reject inputs under 256 px. `--from` art without transparency is cut out automatically (`--cutout auto`). Opaque targets (apple-touch, maskable, 1024) are flattened onto `--bg`, default white — pick a brand colour when the subject is light.
 
+## Logos and app icons
+
+1. **Raster first, through `gen`.** Never hand-compute vector geometry for an expressive mark: it came out generic or broken every time. SVG is a later flat derivative, because metallic or gradient art cannot be vectorised (`icon` omits `favicon.svg` for it).
+2. **Breadth, then depth.** Breadth: about 12 whole prompts that differ in style and composition, each opening with its style, `--n 2`, stating the exact subject count, how much of the tile it fills, and "no text". Depth: `gen --edit` on the owner's pick, naming what changes (scale, head size, light) and what stays; edits kept the design reliably. `gen` runs may go in parallel.
+3. **Check count and subject yourself.** One direction returned three arrows when two were asked.
+4. **Show a numbered contact sheet**, each option also at 64, 32 and 16 px, as a private link (`imgcli private`).
+5. **The owner picks.** Your own judgement of the logo is not approval, and nothing replaces the live mark before his pick.
+6. **Combining references:** `gen --edit` takes one file, so name the qualities of the others in words.
+
 ## Prefixes, naming, URLs
 
 | Prefix | For | Naming |
