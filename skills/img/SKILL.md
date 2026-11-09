@@ -75,6 +75,10 @@ imgcli ls [prefix/] · info <key> · url <key> [transform ...] · transforms · 
 4. **Show a numbered contact sheet**, each option also at 64, 32 and 16 px, as a private link (`imgcli private`).
 5. **The owner picks.** Your own judgement of the logo is not approval, and nothing replaces the live mark before his pick.
 6. **Combining references:** `gen --edit` takes one file, so name the qualities of the others in words.
+7. **Full export, after the pick.** Make a flat one-colour version: `gen --edit` on the pick, "solid white on black, same outline, thin even gaps at crossings". That flat file is the source of `favicon.ico` and `favicon.svg` (a metallic or gradient pick vectorises badly and shrinks to mush at 16 px); the full-colour pick stays the source of the large targets. Export with `imgcli icon --from <file> --bg <brand colour>`; a flat one-colour source vectorises cleanly and can be made adaptive (`prefers-color-scheme` in the SVG).
+8. **A full package holds:** `favicon.ico` (16/32/48) and adaptive `favicon.svg`, PWA `icon-192`/`icon-512`, maskable `icon-mask`, `apple-touch-icon` (180), `icon-1024` (iOS and the App Store), `AppIcon.icns` (macOS), and a social card (1200×630, built separately from the pick, e.g. `gen --edit` or the `rs:fill:1200:630/f:jpg` URL). The phone, maskable and App Store icons are **full bleed**: no transparency, no rounded corners, the background runs to the edge because the system applies its own mask (maskable keeps the subject inside the safe zone).
+9. **Look at every target before shipping** (open each file, view each size, on a light and a dark tab): a mark that is right at 1024 can be wrong at 16 or inside a mask.
+10. **Even arrows, cheaply:** a fixed-up mirror — keep the better half, make a 180° rotated copy, join them — gives exactly even arrows when the owner wants that. Use it on the flat version, not the pick.
 
 ## Prefixes, naming, URLs
 
