@@ -9,7 +9,7 @@
  * review. A sentence in an answer cannot be the only guard for bypassing
  * another team's rule, so the bypass itself is denied.
  *
- * Active only when FACTORY_SESSION is set (`rd work` / `rd issue` spawns). The
+ * Active only when FACTORY_SESSION is set (`rd work` / factory lead spawns). The
  * owner's own sessions are untouched; the bypass stays the owner's to do by hand.
  *
  * Denied (command position only — quoted text is data, see docker-makefile.ts):

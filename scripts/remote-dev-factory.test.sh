@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# remote-dev-factory.test — which path `rd work|say|issue` takes when the factory answers, holds, fails or
+# remote-dev-factory.test — which path `rd work|say` takes when the factory answers, holds, fails or
 # is absent (docs/remote-dev.md §rd and the factory). hc and `factory` are stubs that record every call:
 #   factory  health  rc from $STATE/health-rc (default 0) · "health-hang" makes it sleep
 #            spawn create  reply + rc from $STATE/create-reply · create-rc (or -<key> for one key), recorded
@@ -30,8 +30,6 @@ g init -q --bare -b master "$TMP/origin.git"
 g clone -q "$TMP/origin.git" "$TMP/co" 2>/dev/null
 echo a >"$TMP/co/f"; g -C "$TMP/co" add f; g -C "$TMP/co" commit -qm one; g -C "$TMP/co" push -q -u origin master 2>/dev/null
 
-# secrets-run resolves the factory token in production; here it only runs what follows `--`
-printf '#!/usr/bin/env bash\nwhile [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done; shift\nexec "$@"\n' >"$TMP/home/.local/bin/secrets-run"; chmod +x "$TMP/home/.local/bin/secrets-run"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 # a launchd-born core exists (lib/core-up.sh's first half) unless $STATE/no_core exists; PS_BIN keeps the real ps out
 printf '#!/usr/bin/env bash\n[ -f "${STATE:-/nonexistent}/no_core" ] || echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"\n' >"$TMP/bin/ps"; chmod +x "$TMP/bin/ps"; export PS_BIN="$TMP/bin/ps"
@@ -62,10 +60,6 @@ case "$1 $2" in
     total=$(wc -l <"$f"); [ "$n" -gt "$total" ] && n=$total
     sed -n "${n}p" "$f" ;;
   "session get") if [ -f "$STATE/session-reply-$3" ]; then cat "$STATE/session-reply-$3"; exit 0; fi; cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
-  "issue new") [ -t 0 ] || cat >"$STATE/issue-stdin" 2>/dev/null; cat "$STATE/issue-reply" 2>/dev/null || echo "issue 7 queued"; exit "$(cat "$STATE/issue-rc" 2>/dev/null || echo 0)" ;;
-  "issue list") echo "7 queued myrepo"; exit 0 ;;
-  "signal file") [ -t 0 ] || cat >"$STATE/signal-stdin" 2>/dev/null; echo "signal 9 settling"; exit 0 ;;
-  "issue schema") echo "Filing an Issue: facts keys why what change acceptance"; exit 0 ;;
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
@@ -154,52 +148,13 @@ rd say worker "go on"
 has "says why" "$out" "not at a prompt yet"
 lacks "no note recorded" "$fcalls" "session note"
 
-echo "issue: rd issue files through the factory, never through hc"
-reset; printf '{"what":"x"}\n' >"$TMP/facts.json"
-rd issue myrepo "Do the thing" --facts "@$TMP/facts.json" --after 3 --after 4 --key k1
-is "filed: exit 0" "$rc" 0
-has "prints the factory's line" "$out" "issue 7 queued"
-has "repo resolved to its path" "$fcalls" "issue new --repo $S/myrepo --title Do the thing"
-has "after + key + facts passed" "$fcalls" "--after 3 --after 4 --key k1 --facts -"
-is "facts reach the factory on stdin" "$(cat "$STATE/issue-stdin")" '{"what":"x"}'
-is "no hc call" "$hcalls" ""
-reset; echo 5 >"$STATE/issue-rc"; echo '{"error":{"message":"nope"}}' >"$STATE/issue-reply"
-rd issue myrepo "T"
-is "the factory's exit code is passed through" "$rc" 5
-has "one-line message" "$out" "no Issue filed"
-is "no hc fallback on a refusal" "$hcalls" ""
-reset; rm -f "$TMP/home/.local/bin/factory.off"; mv "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/factory.off"
-rd issue myrepo "T"
-mv "$TMP/home/.local/bin/factory.off" "$TMP/home/.local/bin/factory"
-is "factory not installed: exit 127" "$rc" 127
-has "says no Issue was filed" "$out" "no Issue filed"
-is "and starts nothing on hc" "$hruns" ""
-reset
-rd issue nosuchrepo "T"
-[ "$rc" -ne 0 ] && ok "unknown repo refused" || bad "unknown repo accepted"
-reset; rd issue --help
-is "issue --help: exit 0" "$rc" 0
-has "issue --help prints the factory contract" "$out" "facts keys why what change acceptance"
-is "issue --help files nothing" "$(grep -c "issue new" <<<"$fcalls")" 0
-reset; rd issue myrepo --help
-[ "$rc" -ne 0 ] && ok "a flag as the title is refused" || bad "filed an Issue titled --help"
-is "nothing filed for a flag title" "$(grep -c "issue new" <<<"$fcalls")" 0
-reset; rd issues
-has "issues lists" "$out" "7 queued myrepo"
-reset; rd issue myrepo "T" --after issue_12
-has "an issue_N id is passed as its number" "$fcalls" "--after 12"
-reset; rd issue myrepo "T" --after lead-12
-[ "$rc" -ne 0 ] && ok "a session key as --after is refused" || bad "filed with --after lead-12"
-
-echo "signal: rd signal files an agent signal, never an Issue"
-reset; rd signal myrepo "The CLI hides a limit" --text "what I ran"
-is "signal: exit 0" "$rc" 0
-has "signal: files through signal file" "$fcalls" "signal file --from agent:"
-has "signal: repo resolved to its path" "$fcalls" "--repo $S/myrepo --title The CLI hides a limit --text -"
-is "signal: text on stdin" "$(cat "$STATE/signal-stdin")" "what I ran"
-is "signal: no Issue" "$(grep -c "issue new" <<<"$fcalls")" 0
-reset; rd signal myrepo
-[ "$rc" -ne 0 ] && ok "signal without a title refused" || bad "signal without a title accepted"
+echo "retired: issue|issues|signal point to the factory CLI and call nothing"
+for sub in issue issues signal; do
+  reset; rd "$sub" myrepo "x"
+  is "$sub: exit 2" "$rc" 2
+  has "$sub: names the factory CLI" "$out" "retired: use the factory CLI"
+  is "$sub: nothing called" "$hcalls$hruns$fcalls" ""
+done
 
 echo "removed: wave|fan|merge|close are unknown subcommands and start nothing"
 for sub in wave fan merge close; do

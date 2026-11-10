@@ -65,7 +65,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Work | Route |
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
-| Work for a repo that should ship on its own, incl. N independent changes | `rd issue <repo> <title>` / `factory issue new` — the factory's lead builds, reviews, deploys and verifies; the filing contract is `rd issue --help` (`factory issue schema`); which repo, plans, edges and factory friction: the `factory` skill |
+| Work for a repo that should ship on its own, incl. N independent changes | `factory issue new` — the factory's lead builds, reviews, deploys and verifies; the filing contract is `factory issue schema`; which repo, plans, edges and factory friction: the `factory` skill |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
 | Prove a change works (UI, traces, endpoints) | `@verifier` |
@@ -73,7 +73,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Code review | `/review` |
 | Dead code, unused exports or packages, duplication, circular imports, after a refactor or removal | `/analyze` |
 
-The lanes — the factory's Issue (`rd issue`) and `@implementer` — are the only ways
+The lanes — the factory's Issue (`factory issue new`) and `@implementer` — are the only ways
 to start *another agent* (`docs/agent-platform.md`); `Explore`, `@verifier`,
 `/check`, `/research` and `/review` are in-session tools, not lanes. Brief a worker completely: exact
 paths, the change, acceptance criteria, scope limits, and any research baked in

@@ -46,7 +46,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · usage adapter over `claude-account` (uv script, no API calls) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
-| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd work\|issue\|issues\|agents\|read\|say` (see Machines) |
+| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd work\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
@@ -172,12 +172,12 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd issue <repo> <title>` | work for a repo that should ship on its own: a thin `factory issue new` (`--facts @file\|-`, `--after <id>`, `--key`); the factory's lead builds, reviews, deploys and verifies; no factory, no Issue (exit code passed through); `rd issues` lists; `rd signal <repo> <title>` reports a finding for triage (factory friction: `rd signal software-factory …`). How to use it from any repo: `skills/factory`. |
+| `factory issue new --repo <repo> --title … --facts @file.json` | work for a repo that should ship on its own (`--after <id>`, `--key`; contract: `factory issue schema`); the factory's lead builds, reviews, deploys and verifies; `factory issue list` follows it; `factory signal file --from agent:<repo> --title … --text …` reports a finding or factory friction for triage. How to use it from any repo: `skills/factory`. |
 
 | Want | Command |
 |-|-|
 | A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` (core up only; else it starts one keychain-less) picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
-| Work *placed on* the mini, no terminal | `rd work\|issue\|issues\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`) |
+| Work *placed on* the mini, no terminal | `rd work\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`) |
 | Housekeeping | the janitor (`com.jkrumm.hc-reap`, every 30 min; `scripts/hc-reap.py`): closes finished factory-spawned agent terminals (idle past the age limit, clean and pushed tree), messages a dirty one instead, closes orphan shells, stops old background sessions; never a working agent. Rules in `docs/remote-dev.md` §Janitor rules. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
 | What every agent is doing | the app's sidebar; the factory (software-factory, `factory read overview` / `read sessions`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |

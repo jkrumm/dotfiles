@@ -15,8 +15,8 @@ set -uo pipefail
 # keys off) so the two machines can share one command surface.
 #
 # The MacBook's sanctioned repos are dotfiles/dotfiles-private/brain —
-# no project repos. `work` and `issue` resolve paths ON the host, which
-# is why none of them take a path — a MacBook-side project-repo path would be
+# no project repos. `work` resolves paths ON the host, which
+# is why it takes no path — a MacBook-side project-repo path would be
 # meaningless.
 
 HOST="${REMOTE_DEV_HOST:-mini}"
@@ -410,7 +410,7 @@ agent_name() {
 
 # --- the factory ---------------------------------------------------------------
 #
-# `issue`, `issues` and `say` go through the software factory (docs/remote-dev.md §rd and the factory); `say` falls back
+# `work --role` and `say` go through the software factory (docs/remote-dev.md §rd and the factory); `say` falls back
 # to hc directly when it does not answer. Every call is bounded.
 FACTORY_HEALTH_S=3
 FACTORY_CALL_S=15
@@ -420,12 +420,10 @@ FACTORY_UP=""
 # has no timeout binary (`timeout` or Homebrew's `gtimeout`; RD_TIMEOUT_CMDS overrides the names): an unbounded call
 # could hang on a factory that is down, so without a bound there is no factory path.
 factory_host() { # <secs> <args…>
-  local secs=$1 args="" a stdin='</dev/null'; shift
+  local secs=$1 args="" a; shift
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
-  # FACTORY_STDIN_B64 (base64, one line) is fed to the call's stdin instead of /dev/null (`rd issue --facts`).
-  [[ -z ${FACTORY_STDIN_B64:-} ]] || stdin="<<<\"\$(printf %s '$FACTORY_STDIN_B64' | base64 -d)\""
-  # The token API: every call but `health` needs the owner's token, which secrets-run resolves from the deployed release's .env.tpl.
-  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs secrets-run run --env-file=\"\$HOME/.software-factory/current/.env.tpl\" -- factory$args $stdin"
+  # No token wrapper: on the mini a bare `factory` resolves the owner token itself (a set FACTORY_TOKEN wins).
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs factory$args </dev/null"
 }
 
 # True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1
@@ -885,93 +883,6 @@ cmd_reap() {
     python3 \"\$d/hc-reap.py\"$args"
 }
 
-# File an Issue with the software factory: the Issue path (docs/remote-dev.md §rd issue). A thin `factory issue new`
-# on the host, bounded like every factory call. No hc fallback: without the factory there is no Issue, and the
-# factory's exit code is ours. --facts is read here (the file may be on this machine) and handed over on stdin.
-cmd_issue() {
-  local name=${1:-} title=${2:-} key="" facts="" have_facts=0 usage="usage: issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]"
-  case $name in
-    -h|--help|help)
-      # The factory owns the filing contract (facts keys, example, limits, rd versus direct): print its text, not a copy.
-      factory_host "$FACTORY_CALL_S" issue schema
-      return ;;
-  esac
-  [[ -n $name && -n $title ]] || die "$usage
-the filing contract (facts keys, example): rd issue --help, or factory issue schema"
-  [[ $title != -* ]] || die "rd issue: the title '$title' looks like a flag. $usage"
-  shift 2
-  local -a fargs=()
-  while (( $# )); do
-    case $1 in
-      --facts) [[ $# -ge 2 ]] || die "$usage"; have_facts=1; facts=$2; shift 2 ;;
-      --after) [[ ${2:-} =~ ^(issue_)?([1-9][0-9]*)$ ]] || die "rd issue: --after takes an Issue id (609 or issue_609)"
-               fargs+=(--after "${BASH_REMATCH[2]}"); shift 2 ;;
-      --key)   [[ $# -ge 2 ]] || die "$usage"; key=$2; shift 2 ;;
-      *) die "$usage" ;;
-    esac
-  done
-  local path
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
-  [[ -z $key ]] || fargs+=(--key "$key")
-  local b64="" out rc=0
-  if (( have_facts )); then
-    if [[ $facts == - ]]; then b64=$(base64 | tr -d '\n')
-    elif [[ $facts == @* && -f ${facts#@} ]]; then b64=$(base64 <"${facts#@}" | tr -d '\n')
-    else die "rd issue: --facts takes @file (an existing file) or -"; fi
-    fargs+=(--facts -)
-  fi
-  FACTORY_STDIN_B64=$b64 out=$(factory_host "$FACTORY_CALL_S" issue new --repo "$path" --title "$title" ${fargs[@]+"${fargs[@]}"} 2>&1) || rc=$?
-  if (( rc != 0 )); then
-    [[ -z $out ]] || printf '%s\n' "$out" >&2
-    echo "rd issue: no Issue filed - the factory answered exit $rc (no hc fallback; 'factory health' says whether it is up)" >&2
-    exit "$rc"
-  fi
-  printf '%s\n' "$out"
-}
-
-cmd_issues() {
-  local out rc=0
-  out=$(factory_host "$FACTORY_CALL_S" issue list "$@" 2>&1) || rc=$?
-  if (( rc != 0 )); then
-    [[ -z $out ]] || printf '%s\n' "$out" >&2
-    echo "rd issues: the factory answered exit $rc (no hc fallback)" >&2
-    exit "$rc"
-  fi
-  printf '%s\n' "$out"
-}
-
-# Put a finding in as an agent signal, not an Issue: triage merges duplicates and files one Issue on <repo>. The route
-# for friction with a tool or the factory itself (`rd signal software-factory "<title>"`). from is agent:<this repo>.
-cmd_signal() {
-  local name=${1:-} title=${2:-} text="" have_text=0 usage="usage: signal <repo> <title> [--text @file|-|<text>]"
-  [[ -n $name && -n $title && $name != -* ]] || die "$usage"
-  [[ $title != -* ]] || die "rd signal: the title '$title' looks like a flag. $usage"
-  shift 2
-  while (( $# )); do
-    case $1 in
-      --text) [[ $# -ge 2 ]] || die "$usage"; have_text=1; text=$2; shift 2 ;;
-      *) die "$usage" ;;
-    esac
-  done
-  local path from b64="" out rc=0
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
-  from="agent:$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
-  local -a fargs=(--from "$from" --repo "$path" --title "$title")
-  if (( have_text )); then
-    if [[ $text == - ]]; then b64=$(base64 | tr -d '\n')
-    elif [[ $text == @* && -f ${text#@} ]]; then b64=$(base64 <"${text#@}" | tr -d '\n')
-    else b64=$(printf %s "$text" | base64 | tr -d '\n'); fi
-    fargs+=(--text -)
-  fi
-  FACTORY_STDIN_B64=$b64 out=$(factory_host "$FACTORY_CALL_S" signal file "${fargs[@]}" 2>&1) || rc=$?
-  if (( rc != 0 )); then
-    [[ -z $out ]] || printf '%s\n' "$out" >&2
-    echo "rd signal: nothing filed - the factory answered exit $rc" >&2
-    exit "$rc"
-  fi
-  printf '%s\n' "$out"
-}
-
 usage() {
   cat <<'EOF'
 
@@ -981,12 +892,7 @@ usage() {
                               an optional prompt is claude's first message
                               --role R: tier + effort from the factory role table
                               (a verb that takes no more arguments exits 2 on extras)
-    rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]
-                              file an Issue with the software factory (its lead builds, reviews, deploys, verifies);
-                              no factory, no Issue (exit code passed through). rd issue --help prints the facts contract. rd issues lists them
-    rd signal <repo> <title> [--text @file|-|<text>]
-                              report a finding (friction with the factory: rd signal software-factory …); triage files one Issue
-    rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
+    rd agents                every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
     rd read <agent> [src]     read an agent's output without attaching (src: history lines, or 'visible')
     rd say <agent> <text…>    send a prompt to a running agent (refused while it is blocked on a dialog)
 
@@ -994,7 +900,8 @@ usage() {
   whichever of them 'agents' put in front of you. A name hc does not know is an error.
 
   Lanes for starting agent work (docs/agent-platform.md):
-    Issue         `rd issue <repo> <title>` — work for a repo that should ship on its own
+    Issue         `factory issue new --repo <repo> --title … --facts @file` — work for a repo that should ship on its own
+                  (`factory issue list`, `factory signal file`, `factory issue schema` for the contract)
     @implementer  native subagent — the edit must land in this session's live tree
 
   Getting a terminal is a different layer:
@@ -1011,9 +918,7 @@ EOF
 case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;
   work)   shift; cmd_work "$@" ;;
-  issue)  shift; cmd_issue "$@" ;;
-  issues) shift; cmd_issues "$@" ;;
-  signal) shift; cmd_signal "$@" ;;
+  issue|issues|signal) usage_die "rd $1 is retired: use the factory CLI (factory issue new | factory issue list | factory signal file --from agent:<repo>; factory issue schema prints the filing contract)" ;;
   agents) shift; cmd_agents "$@" ;;
   reap)   shift; cmd_reap "$@" ;;
   read)   shift; cmd_read "$@" ;;

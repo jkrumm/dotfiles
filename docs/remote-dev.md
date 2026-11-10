@@ -99,7 +99,7 @@ holds state with no viewer attached. How it runs, updates, grants: `docs/herdr-c
 
 Moved verbatim from `AGENTS.md`.
 
-- **`rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]` / `rd issues`:** the Issue path, the preferred way to start work that should ship on its own. A thin `factory issue new --repo <path> --title … [--facts -] [--after …] [--key …]` on the host through `factory_host` (same bound, `FACTORY_CALL_S`, and path as `spawn create`); `--facts` is read on the calling machine (a file or stdin, JSON) and handed over on stdin. It prints the factory's line and passes its exit code through; there is **no hc fallback**: with no factory (not installed 127, timeout 124, error) nothing is filed and it says so in one line. `rd issue --help` prints the factory's own filing contract (`factory issue schema`: facts keys, example, rd versus direct), the single source; this repo keeps no copy. `rd issues` is `factory issue list`. Covered by `scripts/remote-dev-factory.test.sh`.
+- **`factory issue new` / `factory issue list` / `factory signal file`:** the Issue path, the preferred way to start work that should ship on its own. The bare factory CLI on the mini, which resolves the owner token itself: `rd` no longer wraps it or carries secrets for it. `factory issue new --repo <repo-name-or-path> --title … --facts @file.json|- [--after <id>] [--key <key>]` files; `factory issue list [--repo <name>] [--state open|closed|all]` lists; `factory signal file --from agent:<repo> --title … --text …` reports a finding or friction for triage. `factory issue schema` prints the filing contract (facts keys, example, limits), the single source; this repo keeps no copy.
 - **`rd reap`:** `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min): closes the terminal of a factory-spawned agent that is done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout; never a working/unknown agent or a dirty/unpushed tree (it messages those instead); first of all it leaves alone any terminal without a `factory.key` label (the owner's own sessions; the one exception is the 7-day orphaned-shell rule below) and any `factory.key=plan:<repo>` tab (the factory's planning tab); stops `claude --bg` leftovers > 24 h; closes an orphaned login shell (live, no status, no name, no `factory.key` or Claude session label, program and foreground a shell, no children, its `turn` (rises as commands run) unchanged for 7 days of hc-reap observations, remembered per terminal in the state file, a first sighting starting the clock; never a `plan:` tab or a named terminal). Log: `~/Library/Logs/hc-reap.log`
 
 ### Sidebar groups
@@ -125,7 +125,6 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 |-|-|
 | `repos [filter]` | repos on the host, branch + dirty count |
 | `work <repo> [<prompt…>]` | the owner's own session: labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks); an optional prompt is claude's first message (human-attended: no solo flag) |
-| `issue <repo> <title>` / `issues` | file an Issue with the factory / list Issues (§Janitor rules and `rd` detail) |
 | `agents` | every roster, one line per agent (`SOURCE NAME STATUS CWD ID`), deduped on Claude session id |
 | `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching; both take an address, a terminal name, a repo name or a cwd |
 
@@ -171,7 +170,7 @@ hazard, except across terminals where you cannot see it happen. `agents` dedupes
 the Claude session id (hc: the `jk.claude.session` label; the daemon:
 `sessionId`) — otherwise one Claude in a terminal reads as two agents racing a tree.
 
-Lanes start agent work (`docs/agent-platform.md`): a factory Issue (`rd issue`, `rd issues` lists) and `@implementer`. `agent-dispatch` and
+Lanes start agent work (`docs/agent-platform.md`): a factory Issue (`factory issue new`, `factory issue list` lists) and `@implementer`. `agent-dispatch` and
 `rd bg` were removed 2026-10-04.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
@@ -206,7 +205,7 @@ enabled account.
 (`spawn_env` in `scripts/remote-dev.sh`; the name is the terminal's name). The software-factory hooks (source: software-factory `integrations/claude-code/hooks.json`, rendered into settings by `_render-settings`, `docs/hooks.md`) run
 only when it is set. Covered by `scripts/remote-dev-factory-env.test.sh`.
 
-**Contracts.** What `rd` calls on the factory (`health`, `role get`, `issue new`, `issue list`, `session note`) and its credential are documented in software-factory `integrations/rd/README.md`.
+**Contracts.** What `rd` calls on the factory (`health`, `role get`, `session note`) are documented in software-factory `integrations/rd/README.md`.
 
 **Role table (`--role`).** `rd work --role <role>` takes the tier and effort from the factory's role table:
 `factory role get <role> --format json` → `{"role","tier":"haiku|sonnet|opus","effort":"low|medium|high|xhigh|max"}`,

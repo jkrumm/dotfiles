@@ -34,7 +34,7 @@ name or `machine/tN`.
   layout replaces the agents mod, so it shows nowhere in the app. Find workers with `rd agents` or `hc ls --json`
   (a `parent` field; finished ones fold into `hidden_finished`). Don't add labels to a background worker.
 - **Lane policy wins over `hc --skill`.** The manual says to delegate through `hc run … claude`. Here only
-  `@implementer` and the factory Issue (`rd issue`) start agents (`docs/agent-platform.md`). Use `hc run` for a
+  `@implementer` and the factory Issue (`factory issue new`) start agents (`docs/agent-platform.md`). Use `hc run` for a
   non-agent program (tests, a watcher, a dev server), or for an agent only when the user asks for one.
 - **The account is chosen on the command, never inherited.** A core's env is every terminal's env, and `hc run`
   forwards nothing: write `env CLAUDE_CONFIG_DIR=<dir> claude …` (no variable = the `iu` account). Through the API,

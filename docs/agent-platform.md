@@ -31,7 +31,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
 |-|-|
-| Lanes (Issue, `@implementer`), lean global CLAUDE.md, the factory CLI describing its own Issue filing contract (`rd issue --help`), OpenCode parity | **landed** (dotfiles W1–W2) |
+| Lanes (Issue, `@implementer`), lean global CLAUDE.md, the factory CLI describing its own Issue filing contract (`factory issue schema`), OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
 | Worker engine: model registry, review angles, one source for model ids | **landed**, now in agent-workflows (the predecessor service retired 2026-10-29, Wave 11) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
@@ -67,7 +67,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 | Lane | When | Engine |
 |-|-|-|
-| Issue (`rd issue` / `factory issue new`) | work for a repo that should ship on its own | the software factory: its lead builds, reviews, deploys and verifies (`rd issues` / `factory issue list` follow it); no factory, no Issue |
+| Issue (`factory issue new`) | work for a repo that should ship on its own | the software factory: its lead builds, reviews, deploys and verifies (`factory issue list` follows it); no factory, no Issue |
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
@@ -132,7 +132,7 @@ Nothing polls. Waiting is one of three, by who spawned:
 
 | Spawned through | Wait with |
 |-|-|
-| The factory | nothing: a lead ends its turn after `factory issue defer` and the factory wakes it; anyone else follows with `rd issues` / `factory read chain` |
+| The factory | nothing: a lead ends its turn after `factory issue defer` and the factory wakes it; anyone else follows with `factory issue list` / `factory read chain` |
 | `hc run` / `rd` hc-direct, with the caller as parent | `hc wait --children all\|any`; hc also types a note into the parent when a child finishes, blocks or exits |
 | A single terminal | `hc wait <t>` (`--output X` for a program), never `sleep` |
 

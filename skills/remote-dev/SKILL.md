@@ -1,6 +1,6 @@
 ---
 name: remote-dev
-description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and reaping Claude Code agents (`rd work`, `rd issue`) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
+description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and reaping Claude Code agents (`rd work`) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
 ---
 
 # Remote dev — the mini as dev host
@@ -20,8 +20,8 @@ a path:
 ```bash
 repos [filter]                    # what's on the dev host, with branch + dirty count
 work <repo>                       # a tab with claude in the repo's space (idempotent)
-rd issue <repo> <title> [--facts @file|-] [--after <id>] [--key <k>]   # file an Issue with the factory
-rd issues                            # list the factory's Issues
+factory issue new --repo <repo> --title … --facts @file.json   # file an Issue with the factory
+factory issue list                # list the factory's Issues
 agents                            # every agent on the host
 rd read <agent>                   # read its output without attaching
 rd say <agent> "…"                # hc send: refuses a blocked agent, queues for a working one
@@ -30,7 +30,7 @@ rd say <agent> "…"                # hc send: refuses a blocked agent, queues f
 Agents `rd` starts run on the Max subscriptions only. `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
-Lanes start agent work: a factory Issue (`rd issue <repo> <title>`, `rd issues` lists; which repo, plans,
+Lanes start agent work: a factory Issue (`factory issue new`, `factory issue list` lists; which repo, plans,
 edges and factory friction are the `factory` skill) and `@implementer`. `rd work` is the owner's own session. `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.
 
