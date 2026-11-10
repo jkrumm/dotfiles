@@ -198,7 +198,12 @@ activate() {
     || die "no $DOMAIN session to bootstrap into — log in at the console once, then re-run: make collie-setup"
 
   if [ "$changed" = "1" ] || ! loaded "$LABEL"; then
-    loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    if loaded "$LABEL"; then
+      launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+      # bootout returns before the job is gone; bootstrapping into the teardown fails with
+      # "Bootstrap failed: 5: Input/output error". Wait until launchd has dropped the label.
+      for _ in $(seq 1 30); do loaded "$LABEL" || break; sleep 1; done
+    fi
     launchctl bootstrap "$DOMAIN" "$PLIST" || die "launchctl bootstrap failed for $PLIST"
     note "✓ $LABEL bootstrapped (RunAtLoad + KeepAlive)"
   else
