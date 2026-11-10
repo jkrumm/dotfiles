@@ -253,6 +253,12 @@ export function gradeNeverRecorded(e: Expected, o: GradeOpts): Graded {
   return { ...base, grade: "ok", reason: "not run yet, inside its first window" }
 }
 
+/** No plist declares the label, it is no Hermes cron job and it has no cadence. Needs `o.expected` (the plist scan): without it nothing is known to be undeclared. */
+function isOnDemand(s: JobState, o: GradeOpts): boolean {
+  if (!o.expected || s.every !== null || s.label.startsWith(CRON_PREFIX)) return false
+  return !o.expected.some((e) => e.label === s.label)
+}
+
 export function gradeOne(s: JobState, o: GradeOpts): Graded {
   const base = {
     label: s.label,
@@ -270,6 +276,9 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
   const done = (grade: Grade, reason: string): Graded => ({ ...base, grade, reason })
 
   if (s.run_id === CORRUPT) return done("failing", s.tail[0] ?? "state file corrupt")
+  // On demand: started by hand or a hook through `jobrun`, no plist, no cadence. There is nothing to load and
+  // nothing to be late for, so only the outcome of the last run grades.
+  if (isOnDemand(s, o)) return done(s.consecutive_fail > 0 ? "failing" : "ok", s.consecutive_fail > 0 ? `on-demand job's last run failed (rc=${s.rc})` : "ok")
   if (!o.loaded(s.label)) return done("unloaded", "not loaded in launchd")
 
   const ageS = (iso: string | null) => (iso ? (o.now - Date.parse(iso)) / 1000 : Number.POSITIVE_INFINITY)

@@ -164,6 +164,36 @@ describe("expected set (never-recorded gap)", () => {
   })
 })
 
+describe("on-demand jobs (no plist, no cadence)", () => {
+  const onDemand = (p: Partial<JobState> = {}) => job({ label: "com.jkrumm.iris-release-mac", every: null, started: ago(10 * 86400), last_ok: ago(10 * 86400), ...p })
+  const never = () => false
+  const gradeD = (s: JobState, expected: Expected[] = []) => gradeOne(s, { now: NOW, loaded: never, expected })
+
+  test("a successful on-demand run grades ok even though launchd does not know it", () => {
+    expect(gradeD(onDemand()).grade).toBe("ok")
+  })
+  test("a failed on-demand run grades failing with the rc at once, however old", () => {
+    const g = gradeD(onDemand({ rc: 2, consecutive_fail: 1 }))
+    expect(g.grade).toBe("failing")
+    expect(g.reason).toContain("rc=2")
+  })
+  test("a plist-declared label that is not loaded stays unloaded", () => {
+    const e: Expected = { label: "com.jkrumm.iris-release-mac", owner: "iris", every: null, installedAt: NOW }
+    expect(gradeD(onDemand(), [e]).grade).toBe("unloaded")
+  })
+  test("a state file with a cadence but no plist stays unloaded; so does a caller that gives no plist scan", () => {
+    expect(gradeD(onDemand({ every: 300 })).grade).toBe("unloaded")
+    expect(gradeOne(onDemand(), { now: NOW, loaded: never }).grade).toBe("unloaded")
+  })
+  test("gradeAll: on-demand rows next to a plist job", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jg-"))
+    writeFileSync(join(dir, "com.jkrumm.iris-release-mac.json"), JSON.stringify(onDemand({ rc: 2, consecutive_fail: 1 })))
+    writeFileSync(join(dir, "com.jkrumm.iris-probe.json"), JSON.stringify(onDemand({ label: "com.jkrumm.iris-probe" })))
+    const rows = gradeAll(dir, { now: NOW, loaded: never, expected: [] })
+    expect(rows.map((r) => [r.label, r.grade])).toEqual([["com.jkrumm.iris-probe", "ok"], ["com.jkrumm.iris-release-mac", "failing"]])
+  })
+})
+
 describe("hermes cron adapter", () => {
   const write = (jobs: unknown) => {
     const p = join(mkdtempSync(join(tmpdir(), "cron-")), "jobs.json")
