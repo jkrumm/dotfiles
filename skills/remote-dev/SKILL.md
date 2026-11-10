@@ -30,8 +30,8 @@ rd say <agent> "…"                # hc send: refuses a blocked agent, queues f
 Agents `rd` starts run on the Max subscriptions only. `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
-Lanes start agent work: a factory Issue (`rd issue <repo> <title>`, `rd issues` lists)
-and `@implementer`. `rd work` is the owner's own session. `agent-dispatch` and
+Lanes start agent work: a factory Issue (`rd issue <repo> <title>`, `rd issues` lists; which repo, plans,
+edges and factory friction are the `factory` skill) and `@implementer`. `rd work` is the owner's own session. `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.
 
 ### Looking at an agent

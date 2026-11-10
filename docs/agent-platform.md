@@ -26,7 +26,7 @@ loop was switched off 2026-10-27 by agent-workflows P0; its design and the
 status rows that described it are in
 `docs/archive/agent-platform-2026-10-warden-era.md`. The workflow platform (`agw`,
 agent-workflows) is built; `docs/agent-workflows/concept.md` is its design record. This page wins over any older
-doc that contradicts it; open work is tracked in each repo's `docs/waves/PLAN.md`.
+doc that contradicts it; open work is the factory's Issues and each repo's `docs/plan.yaml` (skill `factory`).
 Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
@@ -132,7 +132,7 @@ Nothing polls. Waiting is one of three, by who spawned:
 
 | Spawned through | Wait with |
 |-|-|
-| The factory | `factory session wait --on workers`: a held spawn has no terminal yet, so only the factory sees it |
+| The factory | nothing: a lead ends its turn after `factory issue defer` and the factory wakes it; anyone else follows with `rd issues` / `factory read chain` |
 | `hc run` / `rd` hc-direct, with the caller as parent | `hc wait --children all\|any`; hc also types a note into the parent when a child finishes, blocks or exits |
 | A single terminal | `hc wait <t>` (`--output X` for a program), never `sleep` |
 

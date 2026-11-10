@@ -172,7 +172,7 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd issue <repo> <title>` | work for a repo that should ship on its own: a thin `factory issue new` (`--facts @file\|-`, `--after <id>`, `--key`); the factory's lead builds, reviews, deploys and verifies; no factory, no Issue (exit code passed through); `rd issues` lists. |
+| `rd issue <repo> <title>` | work for a repo that should ship on its own: a thin `factory issue new` (`--facts @file\|-`, `--after <id>`, `--key`); the factory's lead builds, reviews, deploys and verifies; no factory, no Issue (exit code passed through); `rd issues` lists; `rd signal <repo> <title>` reports a finding for triage (factory friction: `rd signal software-factory …`). How to use it from any repo: `skills/factory`. |
 
 | Want | Command |
 |-|-|
@@ -180,7 +180,7 @@ substitutes for another.**
 | Work *placed on* the mini, no terminal | `rd work\|issue\|issues\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`) |
 | Housekeeping | the janitor (`com.jkrumm.hc-reap`, every 30 min; `scripts/hc-reap.py`): closes finished factory-spawned agent terminals (idle past the age limit, clean and pushed tree), messages a dirty one instead, closes orphan shells, stops old background sessions; never a working agent. Rules in `docs/remote-dev.md` §Janitor rules. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
-| What every agent is doing | the app's sidebar; the factory (software-factory, `factory fleet`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
+| What every agent is doing | the app's sidebar; the factory (software-factory, `factory read overview` / `read sessions`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 
