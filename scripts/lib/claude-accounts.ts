@@ -656,6 +656,17 @@ export function pick(reg: Registry, cache0: Cache, lane: string, nowMs: number, 
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
 }
 
+/** Weekly capacity left under the account's own ceiling (scaled by its plan) per hour to its own reset, sharpened by URGENCY_EXP. */
+export function accountWeight(reg: Registry, cache: Cache, id: string, nowMs: number): number {
+  const x = cache.samples[id]
+  const hasWeek = !!x && hasW(x)
+  // a reset that already passed means the cached % predates the rollover: judge it as a fresh week
+  const rolled = hasWeek && x.w_reset !== null && x.w_reset * 1000 <= nowMs
+  const spare = hasWeek && !rolled ? weeklyMax(x, nowMs) - x.w! : WEEKLY_MAX
+  const hoursLeft = hasWeek && !rolled && x.w_reset !== null ? Math.max(1, (x.w_reset * 1000 - nowMs) / 3600_000) : WEEK_S / 3600
+  return (spare * accountUnits(reg.accounts[id]).weekly) / hoursLeft ** URGENCY_EXP
+}
+
 function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): Omit<PickResult, "stale"> {
   const ids = Object.keys(reg.accounts)
   const eligibleIds = ids.filter((id) => eligible(reg, cache, id, nowMs))
@@ -678,15 +689,7 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?:
   // Weight = weekly capacity left under the account's own ceiling (scaled by its plan) per hour to its own reset,
   // sharpened by URGENCY_EXP: the account whose window closes soonest with room left is the one whose points would
   // otherwise be lost. Everything is read from the registry and the sample, nothing names an account.
-  const weight = (id: string) => {
-    const x = cache.samples[id]
-    const hasWeek = !!x && hasW(x)
-    // a reset that already passed means the cached % predates the rollover: judge it as a fresh week
-    const rolled = hasWeek && x.w_reset !== null && x.w_reset * 1000 <= nowMs
-    const spare = hasWeek && !rolled ? weeklyMax(x, nowMs) - x.w! : WEEKLY_MAX
-    const hoursLeft = hasWeek && !rolled && x.w_reset !== null ? Math.max(1, (x.w_reset * 1000 - nowMs) / 3600_000) : WEEK_S / 3600
-    return (spare * accountUnits(reg.accounts[id]).weekly) / hoursLeft ** URGENCY_EXP
-  }
+  const weight = (id: string) => accountWeight(reg, cache, id, nowMs)
   const choose = (cands: string[]): string | undefined => {
     if (!rng || cands.length < 2) return cands.reduce<string | undefined>((best, id) => (best === undefined || weight(id) > weight(best) ? id : best), undefined)
     let r = rng() * cands.reduce((sum, id) => sum + weight(id), 0)
@@ -718,6 +721,26 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?:
   if (other) return { picked: other, reason: "spill" }
   if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }
   return { picked: SPILL, reason: "no-eligible-account" }
+}
+
+export interface RankEntry {
+  account: string
+  reason: string
+  weight?: number
+}
+
+/** Every eligible account in the order rule v1.6 would hand them out: `pick` (deterministic) iterated, the winner removed each round. */
+export function rank({ reg, cache, lane, nowMs }: { reg: Registry; cache: Cache; lane: string; nowMs: number }): RankEntry[] {
+  const out: RankEntry[] = []
+  const live = withoutSessionWindows(reg, cache)
+  let rest = reg
+  for (let i = Object.keys(reg.accounts).length; i > 0; i--) {
+    const p = pick(rest, cache, lane, nowMs)
+    if (p.picked === SPILL || p.reason === "interactive-fallback") break
+    out.push({ account: p.picked, reason: p.reason, weight: accountWeight(reg, live, p.picked, nowMs) })
+    rest = { ...rest, accounts: { ...rest.accounts, [p.picked]: { ...rest.accounts[p.picked], enabled: false } } }
+  }
+  return out
 }
 
 export interface PickLine {

@@ -6,6 +6,7 @@
 //   claude-account expiry [--json] [--ids a,b]   per enabled account (--ids: the named accounts, disabled ones too: a first login): when its login (refresh token) ends, from its own Keychain item (read-only; only the two timestamps and the plan tier are read out; rows carry `tier` and `plan_detected`). Rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (owns ~/.claude) and `severity` (the grade, but a non-default account never exceeds WARN) — what verify and the heartbeat act on
 //   claude-account refresh [--ids a,b] [--all]   first imports the peer machine's samples (`usage --json` over ssh, once per run), then the OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
 //   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
+//   claude-account rank --lane <lane> [--json]   rule-v1.6 order of every eligible account (iterated `pick --dry`), a pure read: no refresh, no picks.jsonl line; --json: {lane, order:[{account,reason,weight}], at}
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
@@ -24,7 +25,7 @@ import { dirname, join } from "node:path"
 import { type HealthRow, type PendingAsk, gradeMachine, healthSignature, worst } from "./lib/claude-health.ts"
 import {
   type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
-  hasSessionLimit, mergeSample, newestAge, planTier, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL, withoutSessionWindows,
+  hasSessionLimit, mergeSample, newestAge, planTier, pick, pickLine, rank, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL, withoutSessionWindows,
 } from "./lib/claude-accounts.ts"
 
 const SPILL_EXIT = 3
@@ -353,6 +354,15 @@ async function main(argv: string[]): Promise<number> {
       console.log(line ?? SPILL)
       if (rest.includes("--why")) console.log(`# picked=${p.picked} reason=${p.reason} stale=${p.stale}`)
       return line === null ? SPILL_EXIT : 0
+    }
+    case "rank": {
+      const lane = flag(rest, "--lane")
+      if (!lane) throw new Error("usage: claude-account rank --lane <lane> [--json]")
+      const now = Date.now()
+      const order = rank({ reg, cache: readClaudeJson(reg, loadCache()), lane, nowMs: now })
+      if (rest.includes("--json")) console.log(JSON.stringify({ lane, order, at: new Date(now).toISOString() }))
+      else order.forEach((e, i) => console.log(`${i + 1}. ${e.account}  ${e.reason}  w=${e.weight!.toFixed(3)}`))
+      return 0
     }
     case "usage":
       usage(reg, rest.includes("--json"))

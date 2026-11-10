@@ -96,6 +96,7 @@ same pattern as `jobrun`):
 
 ```
 claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"; no headroom: prints "spill", exit 3
+claude-account rank --lane <lane> [--json]   # deterministic rule-v1.6 order of every eligible account (iterated `pick --dry`), pure read; what the factory admits by
 claude-account usage [--json]       # every account: 5h % (not for Ultra), 7d %, resets, auth ok
 claude-account env <id>             # force an account (c --account b)
 claude-account expiry [--json] [--ids a,b]   # when each enabled login ends (refresh token), graded PASS / WARN / FAIL; --ids names accounts, disabled ones included

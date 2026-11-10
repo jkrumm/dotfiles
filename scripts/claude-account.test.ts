@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { HOME_BIN, PEER_SCRIPT } from "./claude-account.ts"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, rank, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -1597,5 +1597,32 @@ describe("claude-account-snapshot.sh", () => {
   test("exports PATH so `#!/usr/bin/env bun` resolves", () => {
     const sh = readFileSync(join(import.meta.dir, "claude-account-snapshot.sh"), "utf8")
     expect(sh).toContain('export PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH"')
+  })
+})
+
+describe("rank: the picker's order of every eligible account", () => {
+  const D = 24 * H
+  const order = (c: Cache, lane: string) => rank({ reg: reg3(), cache: c, lane, nowMs: NOW })
+  const iu = sample(10, 80, { wReset: NOW / 1000 + 32 * H })
+  const me = sample(4, 54, { wReset: NOW / 1000 + 46 * H })
+  const me2 = sample(5, 11, { wReset: NOW / 1000 + 5.5 * D })
+  test("bulk lane mirrors today: me, me2, iu", () => {
+    const r = order(cache3(iu, me, me2), "bulk")
+    expect(r.map((e) => e.account)).toEqual(["me", "me2", "iu"])
+    expect(r.every((e) => typeof e.weight === "number")).toBe(true)
+  })
+  test("an ineligible account is absent", () => {
+    expect(order(cache3(sample(10, 96), me, me2), "bulk").map((e) => e.account)).not.toContain("iu")
+    const failed: Cache = { ...cache3(iu, me, me2), auth_failed: { me: true } }
+    expect(order(failed, "bulk").map((e) => e.account)).not.toContain("me")
+  })
+  test("no eligible account: empty order", () => {
+    expect(order(cache3(sample(10, 96), sample(10, 96), sample(10, 96)), "bulk")).toEqual([])
+  })
+  test("interactive lane starts with iu and has no fallback entry", () => {
+    const r = order(cache3(sample(10, 10), me, me2), "interactive")
+    expect(r[0].account).toBe("iu")
+    expect(r.some((e) => e.reason === "interactive-fallback")).toBe(false)
+    expect(order(cache3(sample(10, 96), sample(10, 96), sample(10, 96)), "interactive")).toEqual([])
   })
 })
