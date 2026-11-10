@@ -904,7 +904,8 @@ the filing contract (facts keys, example): rd issue --help, or factory issue sch
   while (( $# )); do
     case $1 in
       --facts) [[ $# -ge 2 ]] || die "$usage"; have_facts=1; facts=$2; shift 2 ;;
-      --after) [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || die "rd issue: --after takes an Issue id"; fargs+=(--after "$2"); shift 2 ;;
+      --after) [[ ${2:-} =~ ^(issue_)?([1-9][0-9]*)$ ]] || die "rd issue: --after takes an Issue id (609 or issue_609)"
+               fargs+=(--after "${BASH_REMATCH[2]}"); shift 2 ;;
       --key)   [[ $# -ge 2 ]] || die "$usage"; key=$2; shift 2 ;;
       *) die "$usage" ;;
     esac
@@ -939,6 +940,38 @@ cmd_issues() {
   printf '%s\n' "$out"
 }
 
+# Put a finding in as an agent signal, not an Issue: triage merges duplicates and files one Issue on <repo>. The route
+# for friction with a tool or the factory itself (`rd signal software-factory "<title>"`). from is agent:<this repo>.
+cmd_signal() {
+  local name=${1:-} title=${2:-} text="" have_text=0 usage="usage: signal <repo> <title> [--text @file|-|<text>]"
+  [[ -n $name && -n $title && $name != -* ]] || die "$usage"
+  [[ $title != -* ]] || die "rd signal: the title '$title' looks like a flag. $usage"
+  shift 2
+  while (( $# )); do
+    case $1 in
+      --text) [[ $# -ge 2 ]] || die "$usage"; have_text=1; text=$2; shift 2 ;;
+      *) die "$usage" ;;
+    esac
+  done
+  local path from b64="" out rc=0
+  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
+  from="agent:$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
+  local -a fargs=(--from "$from" --repo "$path" --title "$title")
+  if (( have_text )); then
+    if [[ $text == - ]]; then b64=$(base64 | tr -d '\n')
+    elif [[ $text == @* && -f ${text#@} ]]; then b64=$(base64 <"${text#@}" | tr -d '\n')
+    else b64=$(printf %s "$text" | base64 | tr -d '\n'); fi
+    fargs+=(--text -)
+  fi
+  FACTORY_STDIN_B64=$b64 out=$(factory_host "$FACTORY_CALL_S" signal file "${fargs[@]}" 2>&1) || rc=$?
+  if (( rc != 0 )); then
+    [[ -z $out ]] || printf '%s\n' "$out" >&2
+    echo "rd signal: nothing filed - the factory answered exit $rc" >&2
+    exit "$rc"
+  fi
+  printf '%s\n' "$out"
+}
+
 usage() {
   cat <<'EOF'
 
@@ -951,6 +984,8 @@ usage() {
     rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]
                               file an Issue with the software factory (its lead builds, reviews, deploys, verifies);
                               no factory, no Issue (exit code passed through). rd issue --help prints the facts contract. rd issues lists them
+    rd signal <repo> <title> [--text @file|-|<text>]
+                              report a finding (friction with the factory: rd signal software-factory …); triage files one Issue
     rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
     rd read <agent> [src]     read an agent's output without attaching (src: history lines, or 'visible')
     rd say <agent> <text…>    send a prompt to a running agent (refused while it is blocked on a dialog)
@@ -978,6 +1013,7 @@ case "${1:-}" in
   work)   shift; cmd_work "$@" ;;
   issue)  shift; cmd_issue "$@" ;;
   issues) shift; cmd_issues "$@" ;;
+  signal) shift; cmd_signal "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   reap)   shift; cmd_reap "$@" ;;
   read)   shift; cmd_read "$@" ;;

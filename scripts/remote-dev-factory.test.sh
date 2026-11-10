@@ -64,6 +64,7 @@ case "$1 $2" in
   "session get") if [ -f "$STATE/session-reply-$3" ]; then cat "$STATE/session-reply-$3"; exit 0; fi; cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
   "issue new") [ -t 0 ] || cat >"$STATE/issue-stdin" 2>/dev/null; cat "$STATE/issue-reply" 2>/dev/null || echo "issue 7 queued"; exit "$(cat "$STATE/issue-rc" 2>/dev/null || echo 0)" ;;
   "issue list") echo "7 queued myrepo"; exit 0 ;;
+  "signal file") [ -t 0 ] || cat >"$STATE/signal-stdin" 2>/dev/null; echo "signal 9 settling"; exit 0 ;;
   "issue schema") echo "Filing an Issue: facts keys why what change acceptance"; exit 0 ;;
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
@@ -185,6 +186,20 @@ reset; rd issue myrepo --help
 is "nothing filed for a flag title" "$(grep -c "issue new" <<<"$fcalls")" 0
 reset; rd issues
 has "issues lists" "$out" "7 queued myrepo"
+reset; rd issue myrepo "T" --after issue_12
+has "an issue_N id is passed as its number" "$fcalls" "--after 12"
+reset; rd issue myrepo "T" --after lead-12
+[ "$rc" -ne 0 ] && ok "a session key as --after is refused" || bad "filed with --after lead-12"
+
+echo "signal: rd signal files an agent signal, never an Issue"
+reset; rd signal myrepo "The CLI hides a limit" --text "what I ran"
+is "signal: exit 0" "$rc" 0
+has "signal: files through signal file" "$fcalls" "signal file --from agent:"
+has "signal: repo resolved to its path" "$fcalls" "--repo $S/myrepo --title The CLI hides a limit --text -"
+is "signal: text on stdin" "$(cat "$STATE/signal-stdin")" "what I ran"
+is "signal: no Issue" "$(grep -c "issue new" <<<"$fcalls")" 0
+reset; rd signal myrepo
+[ "$rc" -ne 0 ] && ok "signal without a title refused" || bad "signal without a title accepted"
 
 echo "removed: wave|fan|merge|close are unknown subcommands and start nothing"
 for sub in wave fan merge close; do
