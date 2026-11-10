@@ -45,8 +45,8 @@ endif
 # the pin resolves to on a host that runs every agent, so an upgrade has to be a
 # reviewed diff of this pin (`make collie-upgrade`).
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := 9eeedd89b380ac19005da6aa0f72f09a1df2df9c
-COLLIE_VERSION := 1.25.3
+COLLIE_REF     := fa7b22758dd2a921f90818be2104f6445e8e60aa
+COLLIE_VERSION := 1.28.1
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
