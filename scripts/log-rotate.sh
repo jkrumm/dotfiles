@@ -39,6 +39,11 @@
 # freed 24 GB real, APFS shares blocks). sweep_chrome_clones removes those directories older than 24 h,
 # skipping any that lsof reports open. Only that one root is touched — net.imput.helium.code_sign_clone
 # and every other sibling are out of scope. CHROME_CLONE_ROOT overrides the root (the test suite uses it).
+# BOUNDED: 2026-11-11 the mini held 14k clones (agents' ad-hoc Playwright scripts launch ~300 Chrome/h) and
+# a serial `lsof +D` + `rm -rf` per 2 GB bundle ran 19+ min at load 80-165 (Beszel page, issue 829). So the
+# open set is ONE lsof for the whole root, rm runs at background IO/CPU priority (taskpolicy -b), and a run
+# stops after CHROME_CLONE_MAX removals (default 400) or CHROME_CLONE_BUDGET_S seconds (default 600); the
+# backlog drains over successive hourly runs instead of in one burst.
 # On a machine without the root (Linux, other Macs) it logs one line and does nothing.
 
 set -euo pipefail
@@ -139,16 +144,28 @@ sweep_chrome_clones() {
     echo "chrome-clone: /usr/sbin/lsof missing — cannot check open clones, sweep skipped"
     return 0
   fi
+  local max=${CHROME_CLONE_MAX:-400} budget=${CHROME_CLONE_BUDGET_S:-600} capped="" open proot
+  local -a lowprio=()
+  [ -x /usr/sbin/taskpolicy ] && lowprio=(/usr/sbin/taskpolicy -b)
+  # One lsof for the whole system, reduced to the clone directory names something holds open.
+  proot=$(cd "$root" && pwd -P) # lsof prints resolved paths (/private/var/...)
+  open=$(/usr/sbin/lsof -w -n -F n 2>/dev/null | awk -v r="$proot/" 'index($0, "n" r) == 1 {
+    p = substr($0, length(r) + 2); sub("/.*", "", p); print p }' | sort -u)
   before=$(df -k "$root" | awk 'NR==2 {print $4}')
+  SECONDS=0
   while IFS= read -r -d '' d; do
-    if [ -n "$(/usr/sbin/lsof -t +D "$d" 2>/dev/null)" ]; then
+    if [ "$removed" -ge "$max" ] || [ "$SECONDS" -ge "$budget" ]; then
+      capped=" (cap reached, rest next run)"
+      break
+    fi
+    if printf '%s\n' "$open" | grep -qxF -- "${d##*/}"; then
       echo "chrome-clone: $d is open — kept"
       continue
     fi
-    rm -rf -- "$d" && removed=$((removed + 1))
+    ${lowprio[@]+"${lowprio[@]}"} rm -rf -- "$d" && removed=$((removed + 1))
   done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'code_sign_clone.*' -mmin +1440 -print0)
   after=$(df -k "$root" | awk 'NR==2 {print $4}')
-  echo "chrome-clone: $removed removed from $root, free space +$(( (after - before) / 1024 )) MB"
+  echo "chrome-clone: $removed removed from $root${capped}, free space +$(( (after - before) / 1024 )) MB"
 }
 
 sweep_chrome_clones

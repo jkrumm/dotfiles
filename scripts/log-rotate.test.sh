@@ -75,6 +75,14 @@ check "old chrome clone removed" test ! -e "$CR/code_sign_clone.old"
 check "fresh chrome clone kept" test -d "$CR/code_sign_clone.fresh"
 check "open chrome clone kept" test -d "$CR/code_sign_clone.open"
 
+rm -rf "$CR"/code_sign_clone.*
+for n in 1 2 3 4 5; do mkdir "$CR/code_sign_clone.stale$n"; touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.stale$n"; done
+out4=$(CHROME_CLONE_MAX=2 LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" 2>&1)
+check "chrome sweep stops at the removal cap" sh -c '[ "$(ls "$1" | wc -l)" -eq 3 ] && printf "%s" "$2" | grep -q "cap reached"' _ "$CR" "$out4"
+LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
+LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
+check "chrome sweep drains the rest on later runs" sh -c '[ -z "$(ls "$1")" ]' _ "$CR"
+
 out3=$(CHROME_CLONE_ROOT="$TMP/absent" bash "$HERE/log-rotate.sh" 2>&1); rc3=$?
 check "missing chrome root is a no-op" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2" ] && printf "%s" "$3" | grep -q "nothing to sweep"' _ "$rc3" "$TMP/absent" "$out3"
 
