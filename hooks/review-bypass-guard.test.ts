@@ -212,6 +212,7 @@ describe("hook I/O", () => {
 describe("the owner's admin-merge exception", () => {
   const TOOL = "IU-Group-Engineering/epos-tool-athena";
   const TEAMCHAT = "IU-Group-Engineering/epos-ai-teamchat-athena";
+  const IMPORT_DASHBOARD = "IU-Group-Engineering/epos-import-dashboard-athena";
 
   test("allowed only when the command names a listed repo", () => {
     allowed(`gh pr merge 64 -R ${TOOL} --squash --admin`);
@@ -219,6 +220,7 @@ describe("the owner's admin-merge exception", () => {
     allowed(`gh pr merge 72 --repo=${TEAMCHAT} --admin`);
     allowed(`gh pr merge https://github.com/${TOOL}/pull/64 --admin --delete-branch`);
     allowed(`GH_CONFIG_DIR=/x gh pr merge 64 -R ${TOOL} --admin`);
+    allowed(`gh pr merge 5 -R ${IMPORT_DASHBOARD} --squash --admin`);
   });
 
   test("no repo named: denied, the working directory is not trusted", () => {
