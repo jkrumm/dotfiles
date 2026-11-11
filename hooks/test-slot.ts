@@ -54,7 +54,9 @@ const JS_TEST_BINARIES = new Set(["vitest", "jest", "pytest", "py.test", "mocha"
 
 /** `npm|pnpm|yarn|bun run <script>`: a script that tests or checks. */
 const TEST_SCRIPT = /^(test|tests|check|e2e)([-:_].+)?$/;
-const MAKE_TARGET = /^(check|test|tests|e2e)([-:_].+)?$/;
+// One optional word prefix (`ui-check`, `api-test`): a monorepo/IuRoot Makefile scopes its gates by area, and the
+// 2026-11-11 load-212 incident was three `make ui-check` (vitest, 12 workers each) running outside any slot.
+const MAKE_TARGET = /^([a-z0-9]+[-_])?(check|test|tests|e2e)([-:_].+)?$/;
 
 function basename(token: string): string {
   return token.split("/").pop() ?? token;
