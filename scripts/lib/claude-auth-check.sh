@@ -46,13 +46,17 @@ claude_auth_probe() {
   return 0
 }
 
+# rc 0 works, 1 does not, 124 a probe hung (no verdict)
 claude_token_works() {
-  local tok tout
+  local tok tout rc=0
   [[ -x "$SECRETS_RUN_BIN" ]] || return 1
-  tok=$(claude_bounded "$CLAUDE_PROBE_TIMEOUT" "$SECRETS_RUN_BIN" read op://mini/claude/oauth-token) || return 1
-  [[ -n "$tok" ]] || return 1
+  tok=$(claude_bounded "$CLAUDE_PROBE_TIMEOUT" "$SECRETS_RUN_BIN" read op://mini/claude/oauth-token) || rc=$?
+  (( rc == 124 )) && return 124
+  (( rc == 0 )) && [[ -n "$tok" ]] || return 1
   tout=$(claude_bounded "$CLAUDE_PROBE_TIMEOUT" env CLAUDE_CODE_OAUTH_TOKEN="$tok" USER="${USER:-$(/usr/bin/id -un)}" \
-    "$CLAUDE_BIN" auth status) || return 1
+    "$CLAUDE_BIN" auth status) || rc=$?
+  (( rc == 124 )) && return 124
+  (( rc == 0 )) || return 1
   [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$tout" 2>/dev/null)" == "true" ]]
 }
 
@@ -103,7 +107,13 @@ check_claude_auth_iu() {
   #   neither                    → the real "billing API credits" alert
 
   if [[ "$logged" != "true" ]]; then
-    if claude_token_works; then
+    local trc=0
+    claude_token_works || trc=$?
+    if (( trc == 124 )); then
+      echo "claude keychain login answers not logged in; the cached-token probe hung (>${CLAUDE_PROBE_TIMEOUT}s, killed) — no verdict"
+      return 2
+    fi
+    if (( trc == 0 )); then
       # PASSES, deliberately. Max billing is intact, every core terminal and `claude --bg`
       # daemon works, and the only cost is a worse CREDENTIAL — static 1y, no
       # refresh, no reliable revocation — not a broken host. Failing here would
