@@ -36,14 +36,19 @@
 # ALSO SWEPT, once per run: stale Chrome code-sign clones. Every headless Chrome launch leaves a
 # code_sign_clone.<random> directory under $(dirname DARWIN_USER_TEMP_DIR)/X/com.google.Chrome.code_sign_clone
 # and nothing removes them (2026-10-17 on the mini: 62 dirs, du 128 GB; deleting the 61 older than 24 h
-# freed 24 GB real, APFS shares blocks). sweep_chrome_clones removes those directories older than 24 h,
+# freed 24 GB real, APFS shares blocks). sweep_chrome_clones removes those directories older than 2 h,
 # skipping any that lsof reports open. Only that one root is touched — net.imput.helium.code_sign_clone
 # and every other sibling are out of scope. CHROME_CLONE_ROOT overrides the root (the test suite uses it).
 # BOUNDED: 2026-11-11 the mini held 14k clones (agents' ad-hoc Playwright scripts launch ~300 Chrome/h) and
 # a serial `lsof +D` + `rm -rf` per 2 GB bundle ran 19+ min at load 80-165 (Beszel page, issue 829). So the
 # open set is ONE lsof for the whole root, rm runs at background IO/CPU priority (taskpolicy -b), and a run
-# stops after CHROME_CLONE_MAX removals (default 400) or CHROME_CLONE_BUDGET_S seconds (default 600); the
-# backlog drains over successive hourly runs instead of in one burst.
+# stops after CHROME_CLONE_MAX removals (default 1500) or CHROME_CLONE_BUDGET_S seconds (default 600); the
+# backlog drains over successive runs instead of in one burst.
+# RATE (issue 839, Beszel "disk filling fast", 16-49 GB/h): the sweep first ran hourly, 400 removals,
+# age gate 24 h, while ~300-600 clones/h were created (basalt-ui layout tests launch Chrome per test) —
+# the stock only grew, 14k clones, ~25 GB freed per 400. The gate is now CHROME_CLONE_MIN_AGE_MIN
+# (default 120; lsof still guards any clone a running Chrome holds), removals run 4 wide, and the plist
+# runs every 15 min, so the stock stays near two hours of creation instead of a day's.
 # On a machine without the root (Linux, other Macs) it logs one line and does nothing.
 
 set -euo pipefail
@@ -144,7 +149,7 @@ sweep_chrome_clones() {
     echo "chrome-clone: /usr/sbin/lsof missing — cannot check open clones, sweep skipped"
     return 0
   fi
-  local max=${CHROME_CLONE_MAX:-400} budget=${CHROME_CLONE_BUDGET_S:-600} capped="" open proot all
+  local max=${CHROME_CLONE_MAX:-1500} budget=${CHROME_CLONE_BUDGET_S:-600} capped="" open proot all
   local -a lowprio=()
   [ -x /usr/sbin/taskpolicy ] && lowprio=(/usr/sbin/taskpolicy -b)
   # One lsof for the whole system, reduced to the clone directory names something holds open.
@@ -160,8 +165,17 @@ sweep_chrome_clones() {
     p = substr($0, length(r) + 2); sub("/.*", "", p); print p }' | sort -u)
   before=$(df -k "$root" | awk 'NR==2 {print $4}')
   SECONDS=0
+  # Removals run in batches of 16 across 4 workers (one serial rm of a 2 GB bundle is ~1.3 s, so
+  # a serial sweep clears ~2.7k/h at best), and the cap and budget are checked between batches.
+  local -a batch=()
+  flush_batch() {
+    [ "${#batch[@]}" -gt 0 ] || return 0
+    printf '%s\0' "${batch[@]}" | ${lowprio[@]+"${lowprio[@]}"} xargs -0 -n 1 -P 4 rm -rf --
+    removed=$((removed + ${#batch[@]}))
+    batch=()
+  }
   while IFS= read -r -d '' d; do
-    if [ "$removed" -ge "$max" ] || [ "$SECONDS" -ge "$budget" ]; then
+    if [ $((removed + ${#batch[@]})) -ge "$max" ] || [ "$SECONDS" -ge "$budget" ]; then
       capped=" (cap reached, rest next run)"
       break
     fi
@@ -169,8 +183,10 @@ sweep_chrome_clones() {
       echo "chrome-clone: $d is open — kept"
       continue
     fi
-    ${lowprio[@]+"${lowprio[@]}"} rm -rf -- "$d" && removed=$((removed + 1))
-  done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'code_sign_clone.*' -mmin +1440 -print0)
+    batch+=("$d")
+    [ "${#batch[@]}" -ge 16 ] && flush_batch
+  done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'code_sign_clone.*' -mmin "+${CHROME_CLONE_MIN_AGE_MIN:-120}" -print0)
+  flush_batch
   after=$(df -k "$root" | awk 'NR==2 {print $4}')
   echo "chrome-clone: $removed removed from $root${capped}, free space +$(( (after - before) / 1024 )) MB"
 }

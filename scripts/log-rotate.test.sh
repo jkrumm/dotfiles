@@ -83,6 +83,18 @@ LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
 LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
 check "chrome sweep drains the rest on later runs" sh -c '[ -z "$(ls "$1")" ]' _ "$CR"
 
+rm -rf "$CR"/code_sign_clone.*
+mkdir "$CR/code_sign_clone.3h" "$CR/code_sign_clone.30m"
+touch -t "$(date -v-3H +%Y%m%d%H%M)" "$CR/code_sign_clone.3h"
+touch -t "$(date -v-30M +%Y%m%d%H%M)" "$CR/code_sign_clone.30m"
+LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
+check "chrome clone older than 2 h removed" test ! -e "$CR/code_sign_clone.3h"
+check "chrome clone younger than 2 h kept" test -d "$CR/code_sign_clone.30m"
+rm -rf "$CR"/code_sign_clone.*
+for n in $(seq 1 40); do mkdir "$CR/code_sign_clone.b$n"; touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.b$n"; done
+LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
+check "chrome sweep clears a multi-batch backlog in one run" sh -c '[ -z "$(ls "$1")" ]' _ "$CR"
+
 out3=$(CHROME_CLONE_ROOT="$TMP/absent" bash "$HERE/log-rotate.sh" 2>&1); rc3=$?
 check "missing chrome root is a no-op" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2" ] && printf "%s" "$3" | grep -q "nothing to sweep"' _ "$rc3" "$TMP/absent" "$out3"
 

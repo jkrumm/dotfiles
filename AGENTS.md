@@ -497,7 +497,7 @@ command tables and gotchas: `docs/macbook.md`.
 **Agent logs live in `~/Library/Logs/<name>.{log,err}`, never `/tmp`.** macOS
 deletes `/tmp` files untouched for 3+ days and launchd opens its stdio **once, at
 spawn** — after a sweep a `KeepAlive` agent writes into an unlinked inode and
-nothing reports it. `make log-rotate-setup` bounds them: hourly, **copytruncate**
+nothing reports it. `make log-rotate-setup` bounds them: every 15 min, **copytruncate**
 (a rename follows the inode, exactly like the sweep), 16 MB cap, one `.1`
 generation, safe because launchd's fds are `O_APPEND`. The list in
 `scripts/log-rotate.sh` derives its list from the `com.jkrumm.*`/`com.iu.*` plists' log paths plus

@@ -16,7 +16,7 @@
     <string>__HOME__/.local/bin/jobrun</string>
     <string>com.jkrumm.log-rotate</string>
     <string>--owner</string><string>dotfiles</string>
-    <string>--every</string><string>3600</string>
+    <string>--every</string><string>900</string>
     <string>--timeout</string><string>120</string>
     <string>--</string>
     <string>__DOTFILES_DIR__/scripts/log-rotate.sh</string>
@@ -27,10 +27,10 @@
   <dict>
     <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
-  <!-- Hourly, not daily. A single `stat` per declared file costs nothing, and
+  <!-- Every 15 min (was hourly): the Chrome clone sweep must outpace ~300-600 clones/h (issue 839). A single `stat` per declared file costs nothing, and
        the cadence is what bounds a crash-looping agent to one hour's output
        above the cap instead of a day's. -->
-  <key>StartInterval</key><integer>3600</integer>
+  <key>StartInterval</key><integer>900</integer>
   <!-- Fire on load so a reboot bounds any log that grew while the machine was
        down or during a long uptime before the agent was installed. -->
   <key>RunAtLoad</key><true/>
