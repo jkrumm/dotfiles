@@ -202,10 +202,17 @@ section_drift() {
   out=$(bash "$DOTFILES_DIR/scripts/drift-check.sh" --no-push 2>&1)
   rc=$?
   printf '%s\n' "$out" | sed 's/^/    /'
+  # Stale drift (a pending OS update, a Tailscale release) is maintenance that waits for the
+  # owner's window, not a broken host. The `MacMini Drift - Push` monitor already pages it;
+  # failing verify as well turned every factory Watch red for changes that cannot move it
+  # (Issue 737). So stale entries (`✗` lines) are a WARN. An exit 1 without one is a crashed
+  # script, and that stays a FAIL.
   if [ "$rc" -eq 0 ]; then
     ok "drift-check" "clean"
+  elif [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q '^ *✗ '; then
+    skip "drift-check" "WARN: stale drift past its grace — see above (the Drift monitor pages it)"
   else
-    bad "drift-check" "drifted — see above"
+    bad "drift-check" "drift-check failed (exit $rc) — see above"
   fi
 }
 

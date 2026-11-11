@@ -264,6 +264,10 @@ sat five releases behind (two security fixes on a shell-equivalent surface) and
 was found by accident, months later. `scripts/drift-check.sh` closes that: the
 heartbeat runs it once a day as a bounded side job after its composite push (the
 `com.jkrumm.drift-check` agent was retired 2026-11-06); the on-demand run is part of `make doctor`.
+There stale drift (past the grace, `✗` lines) is a **WARN**, not a FAIL: it is maintenance waiting
+for the owner's window (a macOS restart, `make tailscale-upgrade`), the Drift monitor already pages it,
+and a red `make verify` failed the Watch of unrelated factory Issues (737). A drift-check that
+crashes (exit 1 with no `✗` line) is still a FAIL.
 
 | Command | Does |
 |-|-|
