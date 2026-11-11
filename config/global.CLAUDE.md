@@ -147,6 +147,17 @@ Commit format and the amend rule: `rules/commit-conventions.md`.
 - Launchers (`c`/`ch`, `cs`/`cf`, `oc`, and the
   Codex lane `cx`/`cxa`/`astra`): `AGENTS.md` §Claude Code launchers.
 
+## Waiting, and the host's shell
+
+Burn-in 2026-11-10: 116 blocked-`sleep` errors in 113 of 308 lead sessions.
+
+- **Never sleep-poll.** `sleep N` followed by anything is blocked; a `ScheduleWakeup` poll finds nothing. Run the long command in the background with its exit code written out (`make -C <dir> check > <dir>/.check.log 2>&1; echo rc=$?`), end the turn — the completion notice is the wake — then read the log. Waiting on a condition: `Monitor` (load via ToolSearch; it needs a `description`).
+- **Never pipe a waited command into `tail`/`head`** — the pipe's exit code is the tail's, so a red run reports 0.
+- **`make -C <dir>`**, never a bare `make` in a background shell (it does not start where you are). One check per tree: while a worker runs one, don't start your own.
+- **Kill by pid.** `pkill -f` is refused by a hook; an until-loop on `pgrep -f '<cmd>'` matches itself and never ends.
+- **zsh:** quote a glob or use `rg` — an unmatched `--include=*` stops with "no matches found". Some sessions (factory leads) have no Grep/Glob tool: `rg`/`ls` in Bash.
+- In a factory session `gh pr merge --admin` is refused (except the owner's `ADMIN_MERGE_REPOS`, `AGENTS.md` §review-bypass-guard); fix the red run instead.
+
 ## Config hierarchy
 
 - **Global:** `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this
