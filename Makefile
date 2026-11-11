@@ -2541,7 +2541,7 @@ opbackup-teardown:
 opbackup-check:
 	@bash $(DOTFILES_DIR)/scripts/opbackup-auto.sh $(if $(FORCE),--force,)
 
-# Hourly copytruncate rotation for the LaunchAgent logs this repo owns. Needed
+# Every-15-min copytruncate rotation for the LaunchAgent logs this repo owns. Needed
 # because moving those logs out of /tmp removed the only thing that had ever
 # bounded them — macOS's periodic cleanup, which DELETES rather than truncates
 # and left every KeepAlive agent writing into an unlinked inode.
@@ -3471,7 +3471,7 @@ help:
 	@echo "  make human-queue-deny ID=<id> [REASON=...]  MacBook: deny one request"
 	@echo "  make human-queue-count          MacBook: print just the pending count (fast; used by the SessionStart hook)"
 	@echo "  ask-human.sh ask '…' --push     mini: trigger the approval itself — a native dialog on the MacBook, no make human-queue needed"
-	@echo "  make log-rotate-setup           Load the hourly copytruncate rotation for this repo's LaunchAgent logs"
+	@echo "  make log-rotate-setup           Load the 15-min copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
 	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, tmp, package caches)"

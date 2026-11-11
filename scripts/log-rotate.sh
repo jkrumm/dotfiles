@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rotate the LaunchAgent logs this repo owns. Hourly, via
+# Rotate the LaunchAgent logs this repo owns. Every 15 min, via
 # com.jkrumm.log-rotate (see scripts/com.jkrumm.log-rotate.plist.template).
 #
 # WHY THIS EXISTS. /tmp/walkingpad.err reached 35 MB growing ~1 line/sec with
@@ -170,7 +170,7 @@ sweep_chrome_clones() {
   local -a batch=()
   flush_batch() {
     [ "${#batch[@]}" -gt 0 ] || return 0
-    printf '%s\0' "${batch[@]}" | ${lowprio[@]+"${lowprio[@]}"} xargs -0 -n 1 -P 4 rm -rf --
+    printf '%s\0' "${batch[@]}" | ${lowprio[@]+"${lowprio[@]}"} xargs -0 -n 1 -P 4 rm -rf -- || true
     removed=$((removed + ${#batch[@]}))
     batch=()
   }

@@ -103,7 +103,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma, under `jobrun --timeout 270` (bounded); also pushes the collie, factory and secrets monitors and runs the daily drift sweep as a side job |
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
-| `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
+| `com.jkrumm.log-rotate` | 900s | copytruncate, 16 MB cap; list derived from our plists |
 | `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, stale `$TMPDIR` entries, package caches |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → ntfy chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.hc-events` | KeepAlive | the herdr-core event record: `events.subscribe` via `hc connect` (only while `lib/core-up.sh` says a launchd-born core answers: `hc connect` would start a core) into the same `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.snapshot` lines carry the terminal roster, `recorder.gap` lines (stream ended, `missed`, unparseable line, silence) mark holes; records only; `make hc-events-setup`, log `~/Library/Logs/hc-events.log` |

@@ -649,7 +649,7 @@ by looking fine.
 - **Logs go to `~/Library/Logs/<name>.{log,err}`, never `/tmp`.** macOS deletes
   `/tmp` files untouched for 3+ days and launchd opens its stdio **once, at
   spawn**, so after a sweep a `KeepAlive` agent writes into an unlinked inode and
-  nothing reports it. `make log-rotate-setup` bounds them: hourly,
+  nothing reports it. `make log-rotate-setup` bounds them: every 15 min,
   **copytruncate** (a rename would follow the inode, exactly like the sweep),
   16 MB cap, one `.1` generation, safe because launchd's fds are `O_APPEND`. The
   list in `scripts/log-rotate.sh` is declared, never globbed.
