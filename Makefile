@@ -2552,7 +2552,7 @@ opbackup-check:
 log-rotate-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.log-rotate" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ hourly → copytruncate any owned log past 16 MB, keep one .1 generation"
+	@echo "    ↳ every 15 min → copytruncate any owned log past 16 MB, keep one .1 generation"
 log-rotate-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.log-rotate.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
