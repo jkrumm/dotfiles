@@ -38,7 +38,7 @@ if [[ ${1-} == auth ]]; then
   if [[ ${STUB_LOGGED_IN:-1} == 1 ]]; then echo '{"loggedIn": true}'; else echo '{"loggedIn": false}'; fi
   exit 0
 fi
-echo "RAN cfg=${CLAUDE_CONFIG_DIR-unset} picked=${CLAUDE_ACCOUNT_PICKED-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN:+set} reason=${CLAUDE_ACCOUNT_REASON-unset} args=$*"
+echo "RAN cfg=${CLAUDE_CONFIG_DIR-unset} picked=${CLAUDE_ACCOUNT_PICKED-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN:+set} reason=${CLAUDE_ACCOUNT_REASON-unset} ftok=${FACTORY_TOKEN-unset} args=$*"
 EOF
 cat > "$TMP/bin/claude-account" <<'EOF'
 #!/usr/bin/env bash
@@ -59,12 +59,15 @@ esac
 EOF
 cat > "$TMP/bin/secrets-run" <<'EOF'
 #!/usr/bin/env bash
-echo "stub-token"
+case ${2-} in
+  *FACTORY_ORCHESTRATOR_TOKEN) [[ -n ${STUB_NO_ORCH-} ]] && exit 1; echo "orch-token" ;;
+  *) echo "stub-token" ;;
+esac
 EOF
 chmod +x "$TMP/bin/"*
 
 # The harness may itself run inside a picked session: scrub everything the contract reads.
-unset CLAUDE_CONFIG_DIR CLAUDE_ACCOUNT_PICKED CLAUDE_ACCOUNT_REASON USAGE_LANE CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
+unset FACTORY_TOKEN FACTORY_SESSION FACTORY_ROLE CLAUDE_CONFIG_DIR CLAUDE_ACCOUNT_PICKED CLAUDE_ACCOUNT_REASON USAGE_LANE CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
 export STUB_PICKS="$PICKS" STUB_CALLS="$CALLS"
 
 reset() { : > "$PICKS"; : > "$CALLS"; }
@@ -261,6 +264,29 @@ case $out in *tok=set*) bad "me must never get the IU token" "$out" ;; *) ok "me
 reset; out=$(STUB_LOGGED_IN=0 zrun plain 'claude --foo')
 assert_contains "non-interactive mini shell keeps the token fallback" "tok=set" "$out"
 assert_eq "non-interactive mini shell: no pick" 0 "$(picks)"
+
+echo "orchestrator session writes to the factory with its own token (backend=cache)"
+reset; out=$(zrun interactive 'claude --foo')
+assert_contains "interactive session start gets the orchestrator token" "ftok=orch-token" "$out"
+reset; out=$(zrun interactive 'c --foo')
+assert_contains "c gets it too" "ftok=orch-token" "$out"
+reset; out=$(zrun interactive 'claude --foo >/dev/null; print -r -- "shell:${FACTORY_TOKEN-unset}"')
+assert_contains "the interactive shell's own environment stays clean" "shell:unset" "$out"
+reset; out=$(FACTORY_TOKEN=lead-token zrun interactive 'claude --foo')
+assert_contains "a set FACTORY_TOKEN (a lead, an explicit choice) wins" "ftok=lead-token" "$out"
+reset; out=$(FACTORY_SESSION=w1 zrun interactive 'claude --foo')
+assert_contains "a factory session (rd work pane) is not the orchestrator" "ftok=unset" "$out"
+reset; out=$(FACTORY_ROLE=lead zrun interactive 'claude --foo')
+assert_contains "a factory role is not the orchestrator" "ftok=unset" "$out"
+reset; out=$(STUB_NO_ORCH=1 zrun interactive 'claude --foo')
+assert_contains "ref absent from the cache: no token, the session still starts" "ftok=unset" "$out"
+reset; out=$(zrun plain 'claude --foo')
+assert_contains "non-interactive shell is not the orchestrator" "ftok=unset" "$out"
+reset; out=$(zrun interactive 'claude mcp list')
+assert_contains "a subcommand is not a session start" "ftok=unset" "$out"
+echo "not-cache" > "$TMP/xdg/secrets/backend"
+reset; out=$(zrun interactive 'claude --foo')
+assert_contains "off the dev host (MacBook): nothing resolved" "ftok=unset" "$out"
 
 echo
 if (( fail )); then printf '\033[31m%d failed\033[0m, %d passed\n' "$fail" "$pass"; exit 1; fi

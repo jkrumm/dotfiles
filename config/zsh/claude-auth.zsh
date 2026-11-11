@@ -1,7 +1,7 @@
 # The `claude` shell function: account pick for interactive starts (all machines) and the
 # Claude Max token fallback for the headless dev host (mini only, WP4).
 #
-# ONE FUNCTION, TWO JOBS. `claude()` at the bottom is the only definition on any machine:
+# ONE FUNCTION, THREE JOBS. `claude()` at the bottom is the only definition on any machine:
 #
 #   1. Account pick. A `claude` typed into an interactive zsh (a Herdr app terminal, a
 #      resumed session in a kept login shell) picks its account with
@@ -13,6 +13,9 @@
 #      subcommands (auth, mcp, …) never pick. `--resume <id>` keeps the session's account.
 #   2. Token fallback (below), via `_claude_auth_run`. Defined as a real fallback only on the dev host;
 #      everywhere else it is a plain `command claude`.
+#   3. Orchestrator principal (`_claude_run`, mini only): an interactive session start that has no FACTORY_TOKEN,
+#      FACTORY_SESSION or FACTORY_ROLE gets FACTORY_TOKEN = the resolved FACTORY_ORCHESTRATOR_TOKEN, so its factory
+#      writes are `orchestrator` events, not owner touches. Leads and `rd work` panes already carry their own.
 #
 # The pick helpers (`_claude_account_line`, `_claude_enter_account`) live in claude.zsh, which only
 # interactive shells load; `~/.zshenv` sources THIS file alone for non-interactive ones, so the
@@ -159,9 +162,37 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
     CLAUDE_CODE_OAUTH_TOKEN="$tok" command claude "$@"
   }
 
+  # The orchestrator's factory bearer (software-factory: "The orchestrator has its own principal"), or nothing.
+  # Silent when the ref is not in the offline cache (dotfiles-private/headless.refs, `make secrets-seed`): the
+  # session then keeps the owner token the `factory` CLI resolves itself, as before.
+  _claude_orchestrator_token() {
+    secrets-run read op://mini/software-factory/FACTORY_ORCHESTRATOR_TOKEN 2>/dev/null
+  }
+
 else
   _claude_auth_run() { command claude "$@"; }
+  _claude_orchestrator_token() { return 0; }
 fi
+
+# A session start of the interactive orchestrator (the session that files and steers Issues) writes to the factory
+# with its own principal, so its notes, cancels and wakes are `orchestrator` events, not owner touches. Never
+# second-guesses a caller that decided: a set FACTORY_TOKEN (a lead's agent token, an explicit choice) or a factory
+# session (FACTORY_SESSION, FACTORY_ROLE: `rd work` panes and leads) is left alone. Subshell, so the token never
+# enters the interactive shell's own environment; the child gets it as environment, never argv.
+_claude_run() {
+  local tok=""
+  if [[ -o interactive ]] && [[ -z ${FACTORY_TOKEN-}${FACTORY_SESSION-}${FACTORY_ROLE-} ]] && _claude_starts_session "$@"; then
+    tok=$(_claude_orchestrator_token)
+  fi
+  if [[ -z $tok ]]; then
+    _claude_auth_run "$@"
+    return
+  fi
+  (
+    export FACTORY_TOKEN=$tok
+    _claude_auth_run "$@"
+  )
+}
 
 # True when the args start a session — the only thing worth an account pick. Info flags, print mode
 # (`claude -p` subprocesses) and subcommands never do; the list is the `claude --help` command set
@@ -220,10 +251,10 @@ claude() {
       parts=("${(@f)out}")
       (
         _claude_enter_account "$parts[1]" "$parts[2]" "$parts[3]"
-        _claude_auth_run "$@"
+        _claude_run "$@"
       )
       return
     fi
   fi
-  _claude_auth_run "$@"
+  _claude_run "$@"
 }

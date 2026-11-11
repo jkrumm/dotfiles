@@ -434,6 +434,13 @@ iu is `unset CLAUDE_CONFIG_DIR`, so the marker says it was decided; it only coun
 `make claude-accounts-setup` pre-trusts `$HOME` in every account's `.claude.json` (`scripts/claude-pretrust.sh`) and copies the default account's trusted folders into the extra ones (`scripts/claude-trust-sync.sh`, never loosens).
 Contract and tests: `docs/claude-accounts.md` §Spawn integration, `make claude-launcher-test`.
 
+**Orchestrator principal (mini).** An interactive `claude` session start (so `c`/`ch`/`cs`/`cf` too) with no `FACTORY_TOKEN`,
+`FACTORY_SESSION` or `FACTORY_ROLE` gets `FACTORY_TOKEN` = `op://mini/software-factory/FACTORY_ORCHESTRATOR_TOKEN` (via `secrets-run`,
+`_claude_run` in `claude-auth.zsh`), so its notes, cancels and wakes are `orchestrator` events, not owner touches. The ref is
+listed in dotfiles-private `headless.refs`; absent from the cache the session silently keeps the owner token. The principal
+cannot call the factory's eight owner-only routes (verdicts, worth-asking, Errand done, …): from such a session use the
+Console, or `FACTORY_TOKEN= factory …` (the CLI then resolves the owner token itself).
+
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills every launcher correctly because the SessionStart
 hook logs `ANTHROPIC_BASE_URL`.
