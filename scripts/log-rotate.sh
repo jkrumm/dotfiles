@@ -144,12 +144,19 @@ sweep_chrome_clones() {
     echo "chrome-clone: /usr/sbin/lsof missing — cannot check open clones, sweep skipped"
     return 0
   fi
-  local max=${CHROME_CLONE_MAX:-400} budget=${CHROME_CLONE_BUDGET_S:-600} capped="" open proot
+  local max=${CHROME_CLONE_MAX:-400} budget=${CHROME_CLONE_BUDGET_S:-600} capped="" open proot all
   local -a lowprio=()
   [ -x /usr/sbin/taskpolicy ] && lowprio=(/usr/sbin/taskpolicy -b)
   # One lsof for the whole system, reduced to the clone directory names something holds open.
   proot=$(cd "$root" && pwd -P) # lsof prints resolved paths (/private/var/...)
-  open=$(/usr/sbin/lsof -w -n -F n 2>/dev/null | awk -v r="$proot/" 'index($0, "n" r) == 1 {
+  # lsof exits non-zero when it cannot stat some file; that is not a failure. No output at all is
+  # (it would read as "nothing open"), so the sweep fails closed.
+  all=$(/usr/sbin/lsof -w -n -F n 2>/dev/null || true)
+  if [ -z "$all" ]; then
+    echo "chrome-clone: lsof returned nothing — cannot tell which clones are open, sweep skipped"
+    return 0
+  fi
+  open=$(printf '%s\n' "$all" | awk -v r="$proot/" 'index($0, "n" r) == 1 {
     p = substr($0, length(r) + 2); sub("/.*", "", p); print p }' | sort -u)
   before=$(df -k "$root" | awk 'NR==2 {print $4}')
   SECONDS=0
