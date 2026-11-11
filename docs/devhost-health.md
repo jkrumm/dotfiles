@@ -52,7 +52,13 @@ one pusher behind three monitors froze and all three went DOWN. Now:
   `<name> timed out after <secs>s (hung tool; killed)` (rc 124). That is an ordinary FAIL, with
   the same boot-grace and streak rules as any other. A normal finish leaves no watchdog behind
   (the parent polls). The eager `tailscale status` snapshot at load is bounded the same way.
-- `DEVHOST_COMPONENT_TIMEOUT` (default 40 s) bounds one component; `DEVHOST_HEARTBEAT_BUDGET`
+- `DEVHOST_COMPONENT_TIMEOUT` (default 40 s) bounds one component, except `check_claude_auth`, which has
+  `DEVHOST_CLAUDE_AUTH_TIMEOUT` (default 100 s): it cold-starts the claude binary once per account plus the expiry
+  helper, and under sustained host load (load average ~30, swap parked) that outran 40 s — 56 timeouts on
+  2026-11-10/11, nine in a row at 19:07-19:43Z paged the composite DOWN (issue 832) while every probe answered in
+  well under a second by hand. A component that takes `DEVHOST_SLOW_COMPONENT_LOG` (15 s) or more is logged to
+  stderr (`slow component: <name> took Ns`), so a repeat is attributable from `~/Library/Logs/devhost-health.log`.
+  `DEVHOST_HEARTBEAT_BUDGET`
   (default 200 s, measured from script start, so the snapshot and side monitors count) bounds the
   composite loop, and each component gets at most the budget that is left. Once it is spent the remaining components are not run: each contributes
   `FAIL: <component> not run (heartbeat budget spent)` through the normal grading, so the
