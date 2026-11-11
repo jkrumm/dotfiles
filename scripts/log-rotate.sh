@@ -44,9 +44,9 @@
 # open set is ONE lsof for the whole root, rm runs at background IO/CPU priority (taskpolicy -b), and a run
 # stops after CHROME_CLONE_MAX removals (default 1500) or CHROME_CLONE_BUDGET_S seconds (default 600); the
 # backlog drains over successive runs instead of in one burst.
-# RATE (issue 839, Beszel "disk filling fast", 16-49 GB/h): the sweep first ran hourly, 400 removals,
+# RATE (issue 839, Beszel "disk filling fast"): the sweep first ran hourly, 400 removals,
 # age gate 24 h, while ~300-600 clones/h were created (basalt-ui layout tests launch Chrome per test) —
-# the stock only grew, 14k clones, ~25 GB freed per 400. The gate is now CHROME_CLONE_MIN_AGE_MIN
+# the stock only grew, 14k clones (1264 removed in one run freed only ~0.7 GB: mostly shared blocks). The gate is now CHROME_CLONE_MIN_AGE_MIN
 # (default 120; lsof still guards any clone a running Chrome holds), removals run 4 wide, and the plist
 # runs every 15 min, so the stock stays near two hours of creation instead of a day's.
 # On a machine without the root (Linux, other Macs) it logs one line and does nothing.
