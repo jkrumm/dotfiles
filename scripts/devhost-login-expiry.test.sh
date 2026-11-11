@@ -20,6 +20,11 @@ echo '{"accounts":{"iu":{"dir":null,"enabled":true},"me":{"dir":"~/.claude-me","
 cat > "$TMP/claude" <<'STUB'
 #!/bin/sh
 ok() { echo '{"loggedIn":true,"subscriptionType":"max"}'; }
+# STUB_HANG=iu|me: that account's probe hangs (a child holds the capture pipe, like a stuck helper would)
+case "${STUB_HANG:-}:${CLAUDE_CONFIG_DIR:-}" in
+  iu:) sleep 31 & wait ;;
+  me:*claude-me) sleep 31 & wait ;;
+esac
 if [ -n "${CLAUDE_CONFIG_DIR:-}" ] || [ "${STUB_IU_DEAD:-0}" != 1 ]; then ok
 elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ "${STUB_TOKEN_DEAD:-0}" != 1 ]; then ok
 else echo '{"loggedIn":false}'
@@ -73,6 +78,19 @@ out=$(grade iu-expired STUB_IU_DEAD=1); assert_eq "keychain dead + cached token 
 assert_contains "...accepted state still named" "cached oauth token" "$out"
 out=$(grade iu-expired STUB_IU_DEAD=1 STUB_TOKEN_DEAD=1); assert_eq "keychain dead AND token dead + expired: FAIL (the iu policy fails)" "1" "${out%%|*}"
 out=$(grade ok STUB_IU_DEAD=1 STUB_TOKEN_DEAD=1); assert_eq "...same FAIL without any expiry finding" "1" "${out%%|*}"
+
+echo "a hung claude probe is no verdict: WARN naming the account, bounded per probe, no leftover process"
+t0=$SECONDS; out=$(grade ok STUB_HANG=iu CLAUDE_PROBE_TIMEOUT=1); took=$(( SECONDS - t0 ))
+assert_eq "iu probe hangs: rc 2 (WARN), not FAIL" "2" "${out%%|*}"
+assert_contains "...named, no verdict" "claude auth status for iu hung (>1s, killed) — no verdict" "$out"
+assert_contains "...process table logged for attribution" "sleep" "$(cat "$TMP/err")"
+(( took < 10 )) && ok "...bounded (${took}s)" || bad "...bounded" "took ${took}s"
+out=$(grade ok STUB_HANG=me CLAUDE_PROBE_TIMEOUT=1)
+assert_eq "extra account probe hangs: rc 2" "2" "${out%%|*}"
+assert_contains "...iu still graded, hung account named" "claude auth ok (max); claude auth status hung (>1s, killed) for me — no verdict" "$out"
+sleep 1
+left=$(/bin/ps -axo command | /usr/bin/grep -c '[s]leep 31')
+assert_eq "no stuck probe or child survives the group kill" "0" "$left"
 
 echo
 if (( fail )); then printf '\033[31m%d failed\033[0m, %d passed\n' "$fail" "$pass"; exit 1; fi
