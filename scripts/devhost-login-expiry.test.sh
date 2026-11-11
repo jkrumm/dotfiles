@@ -30,7 +30,7 @@ elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ "${STUB_TOKEN_DEAD:-0}" != 1 ]; 
 else echo '{"loggedIn":false}'
 fi
 STUB
-printf '#!/bin/sh\necho cached-token\n' > "$TMP/secrets-run"
+printf '#!/bin/sh\n[ "${STUB_SR_HANG:-0}" = 1 ] && { sleep 31 & wait; }\necho cached-token\n' > "$TMP/secrets-run"
 cat > "$TMP/ca" <<'STUB'
 #!/bin/sh
 echo "$CLAUDE_ACCOUNTS_REGISTRY" > "$TMP_DIR/registry-seen"
@@ -88,8 +88,15 @@ assert_contains "...process table logged for attribution" "sleep" "$(cat "$TMP/e
 out=$(grade ok STUB_HANG=me CLAUDE_PROBE_TIMEOUT=1)
 assert_eq "extra account probe hangs: rc 2" "2" "${out%%|*}"
 assert_contains "...iu still graded, hung account named" "claude auth ok (max); claude auth status hung (>1s, killed) for me — no verdict" "$out"
-sleep 1
-left=$(/bin/ps -axo command | /usr/bin/grep -c '[s]leep 31')
+out=$(grade ok STUB_IU_DEAD=1 STUB_SR_HANG=1 CLAUDE_PROBE_TIMEOUT=1)
+assert_eq "keychain dead + cached-token probe hangs: WARN, not the billing FAIL" "2" "${out%%|*}"
+assert_contains "...no verdict named" "cached-token probe hung (>1s, killed) — no verdict" "$out"
+left=1
+for _ in 1 2 3 4 5 6 7 8 9 10; do   # a killed process is reaped asynchronously: poll, don't race it
+  left=$(/bin/ps -axo stat,command | /usr/bin/grep '[s]leep 31' | /usr/bin/grep -vc '^Z')
+  [[ "$left" == 0 ]] && break
+  sleep 0.3
+done
 assert_eq "no stuck probe or child survives the group kill" "0" "$left"
 
 echo
