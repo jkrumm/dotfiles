@@ -58,6 +58,12 @@ one pusher behind three monitors froze and all three went DOWN. Now:
   2026-11-10/11, nine in a row at 19:07-19:43Z paged the composite DOWN (issue 832) while every probe answered in
   well under a second by hand. A component that takes `DEVHOST_SLOW_COMPONENT_LOG` (15 s) or more is logged to
   stderr (`slow component: <name> took Ns`), so a repeat is attributable from `~/Library/Logs/devhost-health.log`.
+  The widening did not end the pages (issue 840, 2026-11-11: nine more 100 s runs, every probe 0.1 s by hand), so the
+  hang is a single stuck `claude auth status` / `secrets-run` / `claude-account expiry` call, not load. Each of those
+  probes now has its own bound (`CLAUDE_PROBE_TIMEOUT`, 20 s, `claude_bounded` in `scripts/lib/claude-auth-check.sh`:
+  own process group, group KILL, the group's `ps` rows written to the local log before the kill). A hung probe is **no
+  verdict**, not a dead login: WARN naming the account (`claude auth status hung … for <id> — no verdict`), never a page
+  by itself; the other accounts are still graded. A dead login still answers (and FAILs as before).
   `DEVHOST_HEARTBEAT_BUDGET`
   (default 200 s, measured from script start, so the snapshot and side monitors count) bounds the
   composite loop, and each component gets at most the budget that is left. Once it is spent the remaining components are not run: each contributes
