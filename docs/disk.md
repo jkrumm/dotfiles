@@ -11,7 +11,7 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 
 | Path | GiB | Owner / purpose | Class |
 |-|-|-|-|
-| `~/SourceRoot/weatherorb` | 135 | weatherorb production: `products/` 68 (two blend rounds of 23 each, plus skill and scenario products), `data/` 50 (model downloads), `var/` 13 (basemap 7.4) | needed. weatherorb's moves are weatherorb waves (its Wave 82: archive to S3) |
+| `~/SourceRoot/weatherorb` | 158 | weatherorb production, re-measured 2026-11-11 (the 2026-10-20 audit read 135): `products/` 47 (after Wave 82, the shadow retirement), `data/` ~89, peaking ~100 with the chunk sawtooth (`ecmwf_ifs` 36.6 came back on trial 2026-10-21 under the owner's no-disk-bar ruling; retention is healthy, a dry run frees 0), `var/` 22 | needed. weatherorb's moves are weatherorb waves. Its S3 archive (Wave 81, ADR 0009) moves `var/` past-track and dumps, never `data/` |
 | `~/.colima` (data disk, sparse) | 78 | Colima VM. Docker: images ~30, named volumes ~48, build cache capped at 15 | needed. Swept daily |
 | ↳ volume `student-enrolment_mysql-data` | 29 | IU epos.student-enrolment local MySQL (container `idss-mysql`, running) | **ask owner**: IU student data, see below |
 | ↳ volume `vps_clickstack-ch-data` | 9 | local ClickStack telemetry, no container | ask owner (likely waste) |
