@@ -106,6 +106,22 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
 done
 assert_eq "no grandchild sleeper survives the group kill" 0 "$left"
 
+echo "check_claude_auth has its own, wider bound (a slow claude cold start is not a hang)"
+cat > "$TMP/claude-slow" <<STUB
+#!/bin/sh
+sleep 3
+echo '{"loggedIn":true,"subscriptionType":"max"}'
+STUB
+chmod +x "$TMP/claude-slow"
+run_script DEVHOST_COMPONENTS="check_claude_auth" DEVHOST_COMPONENT_TIMEOUT=1 DEVHOST_CLAUDE_AUTH_TIMEOUT=15 \
+  DEVHOST_SLOW_COMPONENT_LOG=2 CLAUDE_BIN="$TMP/claude-slow" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/none-registry.json"
+composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+assert_contains "slow auth probe still reads as up" "status=up" "$composite"
+assert_contains "slow component is named in the local log" "slow component: check_claude_auth took" "$(/bin/cat "$TMP/out.log")"
+run_script DEVHOST_COMPONENTS="check_claude_auth" DEVHOST_COMPONENT_TIMEOUT=1 DEVHOST_CLAUDE_AUTH_TIMEOUT=1 \
+  CLAUDE_BIN="$TMP/claude-slow" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/none-registry.json"
+assert_contains "past its own bound it still fails as a hung tool" "check_claude_auth timed out after 1s" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+
 echo "budget exhaustion: remaining components are not run, still graded, the push still goes out"
 run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=30 DEVHOST_HEARTBEAT_BUDGET=1 STUB_OBSIDIAN_HANG=1
 composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")

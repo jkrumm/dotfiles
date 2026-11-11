@@ -195,6 +195,14 @@ STATE_DIR="${DEVHOST_HEALTH_STATE_DIR:-$HOME/.local/state/devhost-health}"
 # hung ~28 h in here; launchd never starts a second instance of a running job, so
 # the single pusher behind three Kuma monitors froze and all three went DOWN.
 COMPONENT_TIMEOUT="${DEVHOST_COMPONENT_TIMEOUT:-40}"
+# check_claude_auth cold-starts the claude binary once per account plus the expiry helper. Under sustained
+# host load (swap parked, load average 30) that chain outran 40 s: 56 timeouts on 2026-11-10/11, nine in a row
+# at 19:07-19:43Z paged the composite DOWN while every probe was healthy when run by hand. It gets its own,
+# wider bound; the heartbeat budget below still caps the whole run.
+CLAUDE_AUTH_TIMEOUT="${DEVHOST_CLAUDE_AUTH_TIMEOUT:-100}"
+# A component that took at least this long is logged to stderr (the local log), so the next slow one is
+# attributable without a repro.
+SLOW_COMPONENT_LOG="${DEVHOST_SLOW_COMPONENT_LOG:-15}"
 # Seconds from SCRIPT START (snapshot + side monitors + composite loop). Past it the remaining
 # components are not run (each is a FAIL line), so the composite push is always reached.
 HEARTBEAT_BUDGET="${DEVHOST_HEARTBEAT_BUDGET:-200}"
@@ -1451,8 +1459,14 @@ for component in $components; do
   else
     budget_left=$(( HEARTBEAT_BUDGET - elapsed ))
     component_timeout=$COMPONENT_TIMEOUT
+    if [[ "$component" == check_claude_auth ]]; then component_timeout=$CLAUDE_AUTH_TIMEOUT; fi
     (( budget_left >= component_timeout )) || component_timeout=$budget_left
+    component_start=$SECONDS
     detail=$(run_bounded "$component_timeout" "$component") || rc=$?
+    component_took=$(( SECONDS - component_start ))
+    if (( component_took >= SLOW_COMPONENT_LOG )); then
+      echo "slow component: $component took ${component_took}s (rc=$rc, limit ${component_timeout}s)" >&2
+    fi
   fi
   if (( rc == 0 )); then
     details+=("$detail")
