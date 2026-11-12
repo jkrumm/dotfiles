@@ -185,6 +185,12 @@ reset; out=$(zrun interactive 'cs')
 assert_contains "cs pins the model" "--model sonnet" "$out"
 assert_contains "cs on an iu pick: marker iu" "picked=iu" "$out"
 assert_eq "cs: exactly one pick" 1 "$(picks)"
+reset; out=$(zrun interactive 'cf')
+assert_eq "cf: never picks" 0 "$(picks)"
+assert_contains "cf: always the me account" "cfg=$ME picked=me" "$out"
+assert_contains "cf pins the model" "--model fable" "$out"
+reset; out=$(zrun interactive 'cf --account iu')
+assert_contains "cf --account iu: an explicit account still wins" "cfg=unset picked=iu" "$out"
 reset; out=$(zrun interactive 'c --account me')
 assert_eq "c --account me: no pick" 0 "$(picks)"
 assert_contains "c --account me: forced account + marker" "cfg=$ME picked=me" "$out"
