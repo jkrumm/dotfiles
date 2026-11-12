@@ -1,10 +1,10 @@
 ---
-description: How a background-job or service failure reaches a human today, on both Macs. Covers the three alert paths (Uptime Kuma, HyperDX, jobs-grade; jobs-grade ends in ntfy, Kuma and HyperDX still in Slack until their own moves), the jobrun/jobs-grade tiers T0 and T1, the source of truth per question, dead-man's-switch vs failure semantics, and the MacBook. Nothing auto-heals. The warden-era design is archived in docs/archive/ops-signals-2026-10-warden-era.md.
+description: How a background-job or service failure reaches a human today, on both Macs. Covers the three alert paths (Uptime Kuma, HyperDX, jobs-grade; jobs-grade ends in a factory signal on the owner repo, with ntfy only as the fallback; Kuma and HyperDX still in Slack until their own moves), the jobrun/jobs-grade tiers T0 and T1, the source of truth per question, dead-man's-switch vs failure semantics, and the MacBook. Nothing auto-heals. The warden-era design is archived in docs/archive/ops-signals-2026-10-warden-era.md.
 ---
 
 # Ops signals — from a failing job to a human
 
-> **Nothing auto-heals.** Every alert ends in a message a human reads and acts on: ntfy topic `alerts` for job failures (Kuma and HyperDX still post to Slack until they move too). The autonomous
+> **Nothing auto-heals.** Every alert ends in a message a human reads and acts on: a factory signal on the owner repo for job failures, ntfy topic `alerts` (priority 3) only when the factory is unreachable (Kuma and HyperDX still post to Slack until they move too). The autonomous
 > remediation loop (warden) was switched off 2026-10-27; its design is kept in
 > `docs/archive/ops-signals-2026-10-warden-era.md`. GitHub issues are no longer worked
 > automatically.
@@ -15,13 +15,14 @@ description: How a background-job or service failure reaches a human today, on b
 |-|-|-|
 | Uptime Kuma monitor | status change → provider `Slack - Alerts` | Slack |
 | HyperDX alert | alert and OK → `Slack #alerts` | Slack `#alerts` |
-| Background job (`jobrun` / Hermes cron) | run record → `jobs-grade` (the only grader) → `jobs-grade --summary --ntfy`, run inside the 300 s mini heartbeat | ntfy topic `alerts` (iPhone and Mac), posted when the set of not-ok jobs changes (new failure, grade change, recovery) |
-| KeepAlive service | `services` and `check_launchd_restarts` components of the 300 s heartbeat → composite Kuma push | Dead port or restart loop pages through Kuma → Slack |
+| Background job (`jobrun` / Hermes cron) | run record → `jobs-grade` (the only grader) → `jobs-grade --summary --report`, run inside the 300 s mini heartbeat | a factory **signal on the job's owner repo** once the job is not ok for 2 consecutive grades (at most one per job per day); ntfy topic `alerts` at priority 3 only as the fallback when `factory` is unreachable. A lead fixes it; the owner is not paged |
+| KeepAlive service | `services` and `check_launchd_restarts` components of the 300 s heartbeat → the **detail** Kuma push (`MacMini Dev Host Detail - Push`, opt-in URL file) | Dead port or restart loop: DOWN on the detail monitor → the factory door → a lead. Until that monitor and its URL file exist (homelab signal filed with issue 870) a component FAIL is WARN text on `MacMini Dev Host - Push` and **reaches nobody** |
 | MacBook | `~/.wakeup` runs `jobs-grade --notify` | macOS notification only |
 
-The composite stays WARN-only for jobs: a job failure shows up as a **WARN** line in the composite's
-message and never turns it DOWN, so Kuma does not become a second reporting path for the same
-failure. The composite pages only on machine and platform symptoms.
+The heartbeat stays WARN-only for jobs: a job failure shows up as a **WARN** line in the push message
+and never turns a monitor DOWN, so Kuma does not become a second reporting path for the same
+failure. `MacMini Dev Host - Push` pages only when the mini is unreachable or its core is dead (tailnet, sshd, core
+socket); the other components' verdict rides the detail monitor, which the factory door routes to a lead.
 
 ## 2. Kuma's role
 
@@ -42,7 +43,7 @@ failures are tickets, not pages.
 | **T0 record** | `jobrun` (wrapper) | Writes the run's start, finish, rc, duration, tail and run id to the state dir |
 | **T1 self-heal** | the job itself, plus launchd | In-job retry with backoff and a deadline, escalating its own ladder (netgear-watchdog is the model). Next-tick retry comes free from launchd; KeepAlive restarts after the 10 s throttle |
 
-Past T1 a failure is a message (ntfy for jobs, Slack for Kuma and HyperDX). There is no T2 (automatic remediation) any more; T3 is the
+Past T1 a failure is a signal or a message (a factory signal for jobs, Slack for Kuma and HyperDX). There is no T2 (automatic remediation) any more; T3 is the
 human reading the alert, plus `human-queue` (`ask-human`) for physical, biometric or TCC work.
 
 ## 4. Source of truth (one per question)

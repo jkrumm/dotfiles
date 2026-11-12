@@ -24,6 +24,7 @@ mkdir -p "$TMP/bin" "$TMP/state"
 cat > "$TMP/bin/curl" <<STUB
 #!/bin/sh
 echo "\$*" >> "$TMP/curl.log"
+case "\$*" in *api/push/composite*) date +%s >> "$TMP/liveness.ts" ;; esac
 case "\$*" in *api/push/*) ;; *7793*)
   # STUB_FACTORY_DOWN=1: refused every time; =N>1: refused the first N-1 calls, then answers (a restart gap).
   if [ "\${STUB_FACTORY_DOWN:-0}" != 0 ]; then
@@ -55,6 +56,7 @@ exit 0
 STUB
 chmod +x "$TMP/bin/curl" "$TMP/obsidian"
 printf 'http://kuma.invalid/api/push/composite\n' > "$TMP/composite-url"
+printf 'http://kuma.invalid/api/push/detail\n' > "$TMP/detail-url"
 printf 'http://kuma.invalid/api/push/collie\n' > "$TMP/collie-url"
 printf 'http://kuma.invalid/api/push/factory\n' > "$TMP/factory-url"
 
@@ -64,7 +66,8 @@ run_script() {
   local t0=$SECONDS
   env PATH="$TMP/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
     DEVHOST_HEALTH_STATE_DIR="$TMP/state" \
-    DEVHOST_PUSH_URL_FILE="$TMP/composite-url" \
+    DEVHOST_PUSH_URL_FILE="$TMP/composite-url" DEVHOST_DETAIL_PUSH_URL_FILE="$TMP/detail-url" \
+    DEVHOST_LIVENESS="" \
     COLLIE_PUSH_URL_FILE="$TMP/collie-url" COLLIE_PLIST="$TMP/none.plist" \
     FACTORY_PUSH_URL_FILE="$TMP/factory-url" FACTORY_HEALTH_URL="http://127.0.0.1:7793/health" \
     SECRETS_FRESHNESS_PUSH_URL_FILE="$TMP/none-secrets-url" \
@@ -81,19 +84,20 @@ pushes() { /usr/bin/grep -c 'api/push/' "$TMP/curl.log"; }
 echo "healthy components: one up push, exit 0"
 run_script DEVHOST_COMPONENTS="check_obsidian"
 assert_eq "exit 0" 0 "$RC"
-assert_contains "composite pushed up" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+assert_contains "composite pushed up" "status=up" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 
 echo "a hung tool fails only its own component, the push still goes out"
 run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=1 STUB_OBSIDIAN_HANG=1
-composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "push is down" "status=down" "$composite"
 assert_contains "msg names the component and the timeout" "check_obsidian timed out after 1s" "$composite"
 assert_eq "a DOWN verdict that was delivered exits 0" 0 "$RC"
 (( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
 # side monitors push independently, before the composite, even when a composite component hangs (same run)
-assert_eq "collie + factory + composite = 3 pushes" 3 "$(pushes)"
+assert_eq "liveness + collie + factory + composite summary + detail = 5 pushes" 5 "$(pushes)"
 order=$(/usr/bin/grep -o 'push/[a-z]*' "$TMP/curl.log" | /usr/bin/tr '\n' ' ')
-assert_eq "side monitors first, composite last" "push/collie push/factory push/composite " "$order"
+assert_eq "liveness first, side monitors next, detail last" "push/composite push/collie push/factory push/detail push/composite " "$order"
+assert_contains "the hung component does not turn the composite DOWN" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log" | /usr/bin/tail -1)"
 assert_contains "factory relayed up" "status=up" "$(/usr/bin/grep 'push/factory' "$TMP/curl.log")"
 left=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
@@ -115,21 +119,21 @@ STUB
 chmod +x "$TMP/claude-slow"
 run_script DEVHOST_COMPONENTS="check_claude_auth" DEVHOST_COMPONENT_TIMEOUT=1 DEVHOST_CLAUDE_AUTH_TIMEOUT=15 \
   DEVHOST_SLOW_COMPONENT_LOG=2 CLAUDE_BIN="$TMP/claude-slow" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/none-registry.json"
-composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "slow auth probe still reads as up" "status=up" "$composite"
 assert_contains "slow component is named in the local log" "slow component: check_claude_auth took" "$(/bin/cat "$TMP/out.log")"
 run_script DEVHOST_COMPONENTS="check_claude_auth" DEVHOST_COMPONENT_TIMEOUT=1 DEVHOST_CLAUDE_AUTH_TIMEOUT=1 \
   CLAUDE_BIN="$TMP/claude-slow" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/none-registry.json"
-assert_contains "past its own bound it still fails as a hung tool" "check_claude_auth timed out after 1s" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+assert_contains "past its own bound it still fails as a hung tool" "check_claude_auth timed out after 1s" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 
 echo "budget exhaustion: remaining components are not run, still graded, the push still goes out"
 run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=30 DEVHOST_HEARTBEAT_BUDGET=1 STUB_OBSIDIAN_HANG=1
-composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "push is down" "status=down" "$composite"
 assert_contains "later component not run" "check_agents_md_flag not run (heartbeat budget spent)" "$composite"
 (( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_HEARTBEAT_BUDGET=0
-assert_contains "zero budget runs nothing" "check_obsidian not run (heartbeat budget spent)" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+assert_contains "zero budget runs nothing" "check_obsidian not run (heartbeat budget spent)" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 
 echo "exit 1 only when a push was not delivered"
 run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_FAIL=1
@@ -156,7 +160,7 @@ rm -f "$TMP/state/drift-last-run"
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh" DEVHOST_DRIFT_TIMEOUT=1 STUB_DRIFT_HANG=1
 assert_eq "hung drift: heartbeat exits 0" 0 "$RC"
 assert_contains "timeout is logged" "drift-check timed out after 1s" "$(cat "$TMP/out.log")"
-assert_contains "composite still pushed" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+assert_contains "composite still pushed" "status=up" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 (( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
 age=$(( $(date +%s) - $(stat -f %m "$TMP/state/drift-last-run") ))
 (( age >= 68000 && age <= 69000 )) && ok "timed-out run is stamped to retry in ~1 h" || bad "retry stamp" "age ${age}s"
@@ -174,12 +178,12 @@ echo '{"accounts":{"iu":{"dir":null,"enabled":true}}}' > "$TMP/registry.json"
 chmod +x "$TMP/claude" "$TMP/secrets-run" "$TMP/ca"
 run_script DEVHOST_COMPONENTS="check_claude_auth" CLAUDE_BIN="$TMP/claude" SECRETS_RUN_BIN="$TMP/secrets-run" \
   DEVHOST_CLAUDE_ACCOUNT_BIN="$TMP/ca" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
-composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "logged in: push is up" "status=up" "$composite"
 assert_contains "logged in: message" "claude auth ok (max)" "$composite"
 run_script DEVHOST_COMPONENTS="check_claude_auth" CLAUDE_BIN="$TMP/claude" SECRETS_RUN_BIN="$TMP/secrets-run" \
   DEVHOST_CLAUDE_ACCOUNT_BIN="$TMP/ca" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json" STUB_CLAUDE_DEAD=1
-composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "dead login, dead token: push is down" "status=down" "$composite"
 assert_contains "dead login: message" "billing API credits" "$composite"
 
@@ -195,7 +199,7 @@ STUB
 printf '#!/bin/sh\n[ "${STUB_FSEVENTSD:-0}" = 0 ] && exit 1\necho 551\n' > "$TMP/pgrep"
 printf '#!/bin/sh\necho "MEM"\necho "${STUB_FSEVENTSD_MEM:-4544K}"\n' > "$TMP/top"
 chmod +x "$TMP/sysctl" "$TMP/pgrep" "$TMP/top"
-mem_run() { run_script DEVHOST_COMPONENTS="check_memory" SYSCTL_BIN="$TMP/sysctl" PGREP_BIN="$TMP/pgrep" TOP_BIN="$TMP/top" "$@"; composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log"); }
+mem_run() { run_script DEVHOST_COMPONENTS="check_memory" SYSCTL_BIN="$TMP/sysctl" PGREP_BIN="$TMP/pgrep" TOP_BIN="$TMP/top" "$@"; composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log"); }
 mem_run STUB_SWAP_MB=100 STUB_FSEVENTSD=1
 assert_contains "idle host, small fseventsd: up" "status=up" "$composite"
 mem_run STUB_SWAP_MB=9300
@@ -231,6 +235,66 @@ echo $(( $(date +%s) - 3600 )) > "$TMP/restart-marks/com.jkrumm.software-factory
 factory_run STUB_FACTORY_DOWN=1
 assert_contains "stale mark: pages" "status=down" "$factory_push"
 rm -f "$TMP/restart-marks/com.jkrumm.software-factory"
+
+echo "liveness first: a hung slow component never delays or downgrades the liveness push (acceptance)"
+# DEVHOST_LIVENESS names the dead-machine checks; the stub netstat makes sshd listen.
+printf '#!/bin/sh\necho "tcp4  0  0  *.22  *.*  LISTEN"\n' > "$TMP/netstat-ok"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/netstat-dead"
+chmod +x "$TMP/netstat-ok" "$TMP/netstat-dead"
+# check_sshd calls /usr/sbin/netstat by absolute path, so the liveness stub is a function the test injects:
+cat > "$TMP/liveness-lib.sh" <<'STUB'
+liveness_stub_ok() { echo "stub alive"; }
+liveness_stub_dead() { echo "stub dead"; return 1; }
+liveness_stub_slow() { /bin/sleep 30; }
+STUB
+run_script DEVHOST_LIVENESS="liveness_stub_ok" DEVHOST_TEST_LIB="$TMP/liveness-lib.sh" DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" \
+  DEVHOST_COMPONENT_TIMEOUT=1 STUB_OBSIDIAN_HANG=1
+first=$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)
+assert_contains "the FIRST push is the liveness push" "push/composite?" "$(printf '%s?' "$first")"
+assert_contains "liveness push is up" "status=up" "$first"
+assert_contains "liveness msg" "stub alive" "$first"
+mapfile_like=$(/usr/bin/grep 'push/composite' "$TMP/curl.log" | /usr/bin/tail -1)
+assert_contains "second composite push carries the detail, still up" "check_obsidian timed out after 1s" "$mapfile_like"
+assert_contains "second composite push is up" "status=up" "$mapfile_like"
+assert_contains "detail monitor is the one that goes down" "status=down" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+assert_eq "no composite push is ever down" 0 "$(/usr/bin/grep 'push/composite' "$TMP/curl.log" | /usr/bin/grep -c 'status=down')"
+
+echo "liveness: the push lands within 20 s while a slow component is still hanging"
+# A component that outlives the whole run: the liveness push is already out before it starts.
+rm -f "$TMP/liveness.ts"
+t0=$(date +%s)
+run_script DEVHOST_LIVENESS="liveness_stub_ok" DEVHOST_TEST_LIB="$TMP/liveness-lib.sh" DEVHOST_COMPONENTS="check_obsidian" \
+  DEVHOST_COMPONENT_TIMEOUT=6 STUB_OBSIDIAN_HANG=1
+tl=$(/usr/bin/head -1 "$TMP/liveness.ts" 2>/dev/null || echo 0)
+(( tl > 0 && tl - t0 <= 3 )) && ok "liveness push landed $(( tl - t0 )) s after the start, the hang ran 6 s" || bad "liveness push timing" "first composite push at +$(( tl - t0 )) s"
+
+echo "liveness: only a dead-machine check failing pushes down"
+run_script DEVHOST_LIVENESS="liveness_stub_dead" DEVHOST_TEST_LIB="$TMP/liveness-lib.sh" DEVHOST_COMPONENTS="check_agents_md_flag"
+first=$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)
+assert_contains "dead machine: liveness push is down" "status=down" "$first"
+assert_contains "dead machine: names the check" "stub dead" "$first"
+assert_eq "dead machine: the detail push does not overwrite DOWN with up" 0 "$(/usr/bin/grep 'push/composite' "$TMP/curl.log" | /usr/bin/grep -c 'status=up')"
+assert_eq "dead machine: exit 0 (delivered verdict)" 0 "$RC"
+run_script DEVHOST_LIVENESS="liveness_stub_dead" DEVHOST_TEST_LIB="$TMP/liveness-lib.sh" DEVHOST_COMPONENTS="check_agents_md_flag" \
+  DEVHOST_TRANSIENT_FAILS=3
+assert_contains "below the streak: still up, degraded" "status=up" "$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)"
+echo "liveness: a check that times out is slow, not dead (needs the long streak)"
+rm -f "$TMP/state"/fail-*
+run_script DEVHOST_LIVENESS="liveness_stub_slow" DEVHOST_TEST_LIB="$TMP/liveness-lib.sh" DEVHOST_COMPONENTS="check_agents_md_flag" \
+  DEVHOST_LIVENESS_STEP_TIMEOUT=1
+first=$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)
+assert_contains "timeout under the long streak: up" "status=up" "$first"
+assert_contains "timeout is named as slow" "timed out after 1s" "$first"
+rm -f "$TMP/state"/fail-*
+run_script DEVHOST_LIVENESS="liveness_stub_slow" DEVHOST_TEST_LIB="$TMP/liveness-lib.sh" DEVHOST_COMPONENTS="check_agents_md_flag" \
+  DEVHOST_LIVENESS_STEP_TIMEOUT=1 DEVHOST_LIVENESS_TIMEOUT_STREAK=1
+assert_contains "timeout past the long streak: down" "status=down" "$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)"
+rm -f "$TMP/state"/fail-*
+
+echo "liveness: the real tailnet / sshd / core checks grade without blocking"
+run_script DEVHOST_LIVENESS="liveness_tailnet" DEVHOST_COMPONENTS="check_agents_md_flag"
+assert_contains "tailscale stub /usr/bin/false: dead tailnet pushes down" "status=down" "$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)"
+assert_contains "...and says why" "tailscaled not Running" "$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)"
 
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')

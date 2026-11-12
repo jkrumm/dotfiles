@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
-import { type Expected, type Graded, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, ntfyNotify, ntfyTransition, summarize, windowSeconds } from "./jobs-grade.ts"
+import { join } from "node:path"
+import { type Expected, type Graded, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, REPORT_AFTER_GRADES, REPORT_EVERY_MS, reportJobs, reportPlan, signalFor, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -289,103 +289,129 @@ describe("--notify: staleness against awake time", () => {
   })
 })
 
-describe("--ntfy: transitions", () => {
-  const row = (label: string, g: Graded["grade"], reason = "r"): Graded => ({ ...gradeOne(job({ label }), { now: NOW, loaded }), grade: g, reason })
-  const H = "mini"
+describe("--report: signals to the factory, not ntfy", () => {
+  const row = (label: string, g: Graded["grade"], reason = "r", owner = "dotfiles"): Graded => ({ ...gradeOne(job({ label, owner }), { now: NOW, loaded }), grade: g, reason })
+  const T0 = NOW
+  const MIN = 60_000
 
-  test("first failure posts the not-ok set", () => {
-    const { text, next } = ntfyTransition({}, [row("a", "failing", "3 consecutive failures"), row("b", "ok")], H)
-    expect(text).toBe("jobs-grade[mini]: 1 job(s) not ok — a=failing (3 consecutive failures)")
-    expect(next).toEqual({ a: "failing" })
+  test("a job not ok for one grade is not reported yet", () => {
+    const { due, next } = reportPlan({}, [row("a", "failing")], T0)
+    expect(due).toEqual([])
+    expect(next.a.bad).toBe(1)
   })
-  test("unchanged set posts nothing", () => {
-    expect(ntfyTransition({ a: "failing" }, [row("a", "failing", "other reason"), row("b", "ok")], H).text).toBeNull()
+  test(`a job not ok for ${REPORT_AFTER_GRADES} consecutive grades is due`, () => {
+    const one = reportPlan({}, [row("a", "failing")], T0)
+    const two = reportPlan(one.next, [row("a", "failing")], T0 + 5 * MIN)
+    expect(two.due.map((r) => r.label)).toEqual(["a"])
   })
-  test("a grade change posts again", () => {
-    const { text, next } = ntfyTransition({ a: "stale" }, [row("a", "failing")], H)
-    expect(text).toContain("a=failing")
-    expect(next).toEqual({ a: "failing" })
+  test("an ok grade in between resets the streak", () => {
+    const one = reportPlan({}, [row("a", "failing")], T0)
+    const ok = reportPlan(one.next, [row("a", "ok")], T0 + 5 * MIN)
+    expect(ok.next.a ?? { bad: 0 }).toMatchObject({ bad: 0 })
+    expect(reportPlan(ok.next, [row("a", "failing")], T0 + 10 * MIN).due).toEqual([])
   })
-  test("a new label alongside an old one posts", () => {
-    expect(ntfyTransition({ a: "failing" }, [row("a", "failing"), row("b", "stale")], H).text).toContain("2 job(s) not ok")
+  test("a reported job is not due again inside a day, then amends", () => {
+    const prev = { a: { bad: 50, filedAt: T0, ntfyAt: null } }
+    expect(reportPlan(prev, [row("a", "failing")], T0 + 3600_000).due).toEqual([])
+    expect(reportPlan(prev, [row("a", "failing")], T0 + REPORT_EVERY_MS + 1).due.map((r) => r.label)).toEqual(["a"])
   })
-  test("recovery posts an all-ok message naming what was bad", () => {
-    const { text, next } = ntfyTransition({ a: "failing", b: "stale" }, [row("a", "ok"), row("b", "ok")], H)
-    expect(text).toBe("jobs-grade[mini]: all jobs ok again (was: a=failing, b=stale)")
-    expect(next).toEqual({})
-  })
-  test("empty to empty posts nothing", () => {
-    expect(ntfyTransition({}, [row("a", "ok")], H).text).toBeNull()
-  })
-  test("long messages are truncated", () => {
-    const rows = Array.from({ length: 80 }, (_, i) => row(`job-${i}`, "failing", "x".repeat(40)))
-    const { text } = ntfyTransition({}, rows, H)
-    expect(text?.length).toBe(1500)
-    expect(text?.endsWith("…")).toBe(true)
-  })
-})
-
-describe("--ntfy: post step", () => {
-  const bad = [gradeOne(job({ rc: 1, consecutive_fail: 3 }), { now: NOW, loaded })]
-
-  type Seen = { auth: string | null; path: string | null; tags: string | null; body: string | null }
-  async function withStub(status: number, fn: (state: string, seen: Seen) => Promise<void>) {
-    const seen: Seen = { auth: null, path: null, tags: null, body: null }
-    const server = Bun.serve({ port: 0, async fetch(req) {
-      seen.auth = req.headers.get("authorization")
-      seen.path = new URL(req.url).pathname
-      seen.tags = req.headers.get("tags")
-      seen.body = await req.text()
-      return Response.json({ id: "x" }, { status })
-    } })
-    const saved = { ...process.env }
-    process.env.JOBS_GRADE_NTFY_URL = `http://localhost:${server.port}/`
-    process.env.JOBS_GRADE_NTFY_TOKEN = "tk_test"
-    process.env.JOBS_GRADE_NTFY_TOPIC = "ctest"
-    try {
-      await fn(join(mkdtempSync(join(tmpdir(), "ntfy-")), "sub/ntfy.json"), seen)
-    } finally {
-      process.env = saved
-      await server.stop(true)
+  test("a flapping job costs at most one report a day, however often it flaps", () => {
+    let state = {} as ReturnType<typeof reportPlan>["next"]
+    let reports = 0
+    for (let i = 0; i < 288; i++) { // 24 h of 5-min grades, alternating flapping / ok
+      const plan = reportPlan(state, [row("f", i % 4 < 2 ? "flapping" : "ok")], T0 + i * 5 * MIN)
+      state = plan.next
+      for (const r of plan.due) { state[r.label].filedAt = T0 + i * 5 * MIN; reports++ }
     }
-  }
+    expect(reports).toBe(1)
+  })
+  test("recovery keeps its stamps for a day (a relapse is not a second signal) then forgets the job", () => {
+    const prev = { a: { bad: 4, filedAt: T0, ntfyAt: null } }
+    expect(reportPlan(prev, [row("a", "ok")], T0 + MIN).next.a?.filedAt).toBe(T0)
+    expect(reportPlan(prev, [row("a", "ok")], T0 + 3 * REPORT_EVERY_MS).next.a).toBeUndefined()
+  })
+  test("the signal is addressed to the owner repo with one stable title per job", () => {
+    const a = signalFor(row("com.jkrumm.t", "failing", "3 consecutive failures (rc=124)", "dotfiles"))
+    const b = signalFor(row("com.jkrumm.t", "stale", "last run 90 min ago", "dotfiles"))
+    expect(a.repo).toBe("dotfiles")
+    expect(a.title).toBe(b.title)
+    expect(a.title).toContain("com.jkrumm.t")
+    expect(a.text).toContain("rc=124")
+    expect(signalFor(row("x", "failing", "r", "?")).repo).toBe("dotfiles")
+    expect(signalFor(row("hermes-cron.x", "failing", "r", "hermes-agent")).repo).toBe("hermes-agent")
+  })
 
-  test("state is written after a successful post, and an unchanged set does not post again", async () => {
-    await withStub(200, async (state, seen) => {
-      expect(await ntfyNotify(bad, state)).toBe("ok")
-      expect(seen.auth).toBe("Bearer tk_test")
-      expect(seen.path).toBe("/ctest")
-      expect(seen.tags).toBe("warning")
-      expect(seen.body).toContain("com.jkrumm.t=failing")
-      expect(JSON.parse(readFileSync(state, "utf8"))).toEqual({ "com.jkrumm.t": "failing" })
-      seen.body = null
-      expect(await ntfyNotify(bad, state)).toBe("unchanged")
-      expect(seen.body).toBeNull()
-    })
+  const bad = [row("com.jkrumm.t", "failing", "3 consecutive failures")]
+  function tmpState() { return join(mkdtempSync(join(tmpdir(), "report-")), "sub/report.json") }
+
+  test("factory reachable: a signal is filed after 2 grades and ntfy is NEVER posted", async () => {
+    const state = tmpState()
+    const filed: { repo: string; title: string }[] = []
+    let ntfyCalls = 0
+    const deps = (now: number) => ({ now, file: async (s: { repo: string; title: string; text: string }) => { filed.push(s); return true }, ntfy: async () => { ntfyCalls++ } })
+    expect(await reportJobs(bad, state, deps(T0))).toBe("unchanged")
+    expect(filed).toEqual([])
+    expect(await reportJobs(bad, state, deps(T0 + 5 * MIN))).toBe("ok")
+    expect(filed.map((s) => `${s.repo}:${s.title}`)).toEqual(["dotfiles:Background job com.jkrumm.t needs a fix"])
+    expect(await reportJobs(bad, state, deps(T0 + 10 * MIN))).toBe("unchanged")
+    expect(filed).toHaveLength(1)
+    expect(ntfyCalls).toBe(0)
+    expect(JSON.parse(readFileSync(state, "utf8"))["com.jkrumm.t"].filedAt).toBe(T0 + 5 * MIN)
   })
-  test("recovery posts with the ok tag", async () => {
-    await withStub(200, async (state, seen) => {
-      mkdirSync(dirname(state), { recursive: true })
-      writeFileSync(state, JSON.stringify({ "com.jkrumm.t": "failing" }))
-      expect(await ntfyNotify([gradeOne(job(), { now: NOW, loaded })], state)).toBe("ok")
-      expect(seen.tags).toBe("white_check_mark")
-      expect(seen.body).toContain("all jobs ok again")
-    })
+  test("factory unreachable: ntfy fallback once, retried against the factory next tick, ntfy not repeated within a day", async () => {
+    const state = tmpState()
+    const ntfy: string[] = []
+    let up = false
+    const deps = (now: number) => ({ now, file: async () => up, ntfy: async (t: string) => { ntfy.push(t) } })
+    await reportJobs(bad, state, deps(T0))
+    expect(await reportJobs(bad, state, deps(T0 + 5 * MIN))).toBe("ok")
+    expect(ntfy).toHaveLength(1)
+    expect(ntfy[0]).toContain("com.jkrumm.t=failing")
+    expect(ntfy[0]).toContain("factory unreachable")
+    expect(await reportJobs(bad, state, deps(T0 + 10 * MIN))).toBe("unchanged")
+    expect(ntfy).toHaveLength(1)
+    up = true // the factory comes back: the signal lands, still no second ntfy
+    expect(await reportJobs(bad, state, deps(T0 + 15 * MIN))).toBe("ok")
+    expect(ntfy).toHaveLength(1)
+    expect(JSON.parse(readFileSync(state, "utf8"))["com.jkrumm.t"].filedAt).toBe(T0 + 15 * MIN)
   })
-  test("state is NOT written when ntfy answers an error", async () => {
-    await withStub(403, async (state) => {
-      expect(await ntfyNotify(bad, state)).toBe("failed")
-      expect(existsSync(state)).toBe(false)
-    })
+  test("factory and ntfy both down: failed, and the job is retried next tick", async () => {
+    const state = tmpState()
+    const deps = (now: number) => ({ now, file: async () => false, ntfy: async () => { throw new Error("http 403") } })
+    await reportJobs(bad, state, deps(T0))
+    expect(await reportJobs(bad, state, deps(T0 + 5 * MIN))).toBe("failed")
+    const stamp = JSON.parse(readFileSync(state, "utf8"))["com.jkrumm.t"]
+    expect(stamp.filedAt).toBeNull()
+    expect(stamp.ntfyAt).toBeNull()
+    expect(await reportJobs(bad, state, deps(T0 + 10 * MIN))).toBe("failed")
   })
-  test("a stale row judged against a short awake time is not announced", async () => {
+  test("a stale row judged against a short awake time is not reported", async () => {
     const stale = gradeOne(job({ label: "com.jkrumm.slept", started: ago(7200), last_ok: ago(7200), finished: ago(7199), every: 300 }), { now: NOW, loaded })
     expect(stale.grade).toBe("stale")
-    await withStub(200, async (state, seen) => {
-      expect(await ntfyNotify(judgeAgainstAwake([stale, ...bad], 60), state)).toBe("ok")
-      expect(seen.body).toContain("com.jkrumm.t=failing")
-      expect(seen.body).not.toContain("com.jkrumm.slept")
-      expect(JSON.parse(readFileSync(state, "utf8"))).toEqual({ "com.jkrumm.t": "failing" })
-    })
+    const state = tmpState()
+    const filed: string[] = []
+    const deps = (now: number) => ({ now, file: async (s: { title: string }) => { filed.push(s.title); return true }, ntfy: async () => {} })
+    const rows = judgeAgainstAwake([stale, ...bad], 60)
+    await reportJobs(rows, state, deps(T0))
+    await reportJobs(rows, state, deps(T0 + 5 * MIN))
+    expect(filed).toEqual(["Background job com.jkrumm.t needs a fix"])
+  })
+  test("the real factory binary path: a stub `factory` receives the signal flags", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "factory-stub-"))
+    const log = join(dir, "args.log")
+    const bin = join(dir, "factory")
+    writeFileSync(bin, `#!/bin/sh\nprintf '%s\\n' "$@" > "${log}"\nexit ${"${STUB_RC:-0}"}\n`, { mode: 0o755 })
+    const saved = { ...process.env }
+    process.env.JOBS_GRADE_FACTORY_BIN = bin
+    try {
+      const state = tmpState()
+      await reportJobs(bad, state, { now: T0, ntfy: async () => { throw new Error("must not be called") } })
+      expect(await reportJobs(bad, state, { now: T0 + 5 * MIN, ntfy: async () => { throw new Error("must not be called") } })).toBe("ok")
+      const args = readFileSync(log, "utf8").split("\n")
+      expect(args.slice(0, 7)).toEqual(["signal", "file", "--from", "agent:dotfiles", "--repo", "dotfiles", "--title"])
+      expect(args[7]).toBe("Background job com.jkrumm.t needs a fix")
+    } finally {
+      process.env = saved
+    }
   })
 })

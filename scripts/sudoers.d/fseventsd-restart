@@ -1,0 +1,3 @@
+# Installed by `make fseventsd-sudoers` as /etc/sudoers.d/fseventsd-restart (root:wheel 0440). One command, no arguments
+# wildcard: the daily fseventsd-watch job restarts the leaking file-events daemon without a password. launchd respawns it.
+__USER__ ALL=(root) NOPASSWD: /usr/bin/killall fseventsd

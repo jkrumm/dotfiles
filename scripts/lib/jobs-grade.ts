@@ -7,10 +7,13 @@
 //   jobs-grade            JSON array on stdout
 //   jobs-grade --table    human table, verdict line last (exit 0 / 2 like --summary)
 //   jobs-grade --summary  one line, exit 0 (all ok) / 2 (WARN) — what the heartbeat and doctor relay
-//   jobs-grade --ntfy     with --summary or --table: post to ntfy topic `alerts` when the set of not-ok jobs changes
-//                         (new failure, grade change, recovery). Best-effort: a failed post writes one stderr
-//                         line, never changes stdout or the exit code, and is retried on the next tick because
-//                         the state file is only written after a successful post.
+//   jobs-grade --report  with --summary or --table: report the not-ok jobs to the FACTORY, not to a person. A job not ok for
+//                         REPORT_AFTER_GRADES consecutive grades files a signal on its owning repo (`factory signal file --from
+//                         agent:dotfiles --repo <owner>`, one stable title per job so a repeat amends the same item) and a lead fixes
+//                         it. A job is reported at most once per REPORT_EVERY_MS, so a flapping job costs one signal a day. ntfy
+//                         (topic `alerts`, priority 3) is only the fallback when `factory` cannot be reached, also at most once a day
+//                         per job. Best-effort: a failed report writes one stderr line, never changes stdout or the exit code, and
+//                         is retried on the next tick (a job is only marked reported after it landed). Recovery sends nothing.
 //   jobs-grade --notify   MacBook wake hook: like --summary, plus a macOS notification for the bad rows.
 //                         A closed lid is not a stalled job, so `stale` is judged against AWAKE time:
 //                         a row is dropped unless the machine has been awake for its whole window.
@@ -23,7 +26,8 @@
 //
 // Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
 // JOBRUN_HERMES_CRON overrides ~/.hermes/cron/jobs.json.
-// --ntfy: JOBS_GRADE_NTFY_STATE (default ~/.local/state/jobs-grade/ntfy.json), JOBS_GRADE_NTFY_TOPIC (default `alerts`),
+// --report: JOBS_GRADE_REPORT_STATE (default ~/.local/state/jobs-grade/report.json), JOBS_GRADE_FACTORY_BIN (default `factory`);
+// the ntfy fallback reads JOBS_GRADE_NTFY_TOPIC (default `alerts`),
 // JOBS_GRADE_NTFY_TOKEN (default: `secrets-run read op://common/ntfy/TOKEN`), JOBS_GRADE_NTFY_URL or NTFY_URL (default: the
 // base-url in ~/SourceRoot/homelab/config/ntfy/server.yml, read at run time because the host is private; tests point it at a stub).
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs"
@@ -349,41 +353,85 @@ export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
   return { line: `jobs WARN (${rows.length}): ${bad.map((r) => `${r.label}=${r.grade}`).join(", ")}`, code: 2 }
 }
 
-// --- ntfy transitions ----------------------------------------------------------------------------
+// --- Reporting: signals to the factory, ntfy only as the fallback -----------------------------------
+// The owner wants only what needs him. A job that stays red is a repo's problem, so it becomes a signal on the
+// owning repo (a lead fixes it); a person is paged only when the factory itself cannot take the signal.
+export const REPORT_AFTER_GRADES = 2 // consecutive not-ok grades (the heartbeat grades every 5 min)
+export const REPORT_EVERY_MS = 24 * 3600_000 // per job: a flapping job is one signal a day, never one per flap
+export const SIGNAL_FROM = "agent:dotfiles"
+const STATE_KEEP_MS = 2 * REPORT_EVERY_MS
 const NTFY_MAX_CHARS = 1500
 const NTFY_DEFAULT_TOPIC = "alerts"
 const NTFY_TOKEN_REF = "op://common/ntfy/TOKEN"
 // The server host is private and this repo is public: read it from the homelab repo's ntfy config at run time.
 const NTFY_CONFIG = () => join(homedir(), "SourceRoot/homelab/config/ntfy/server.yml")
 
-export const defaultNtfyState = () => process.env.JOBS_GRADE_NTFY_STATE || join(homedir(), ".local/state/jobs-grade/ntfy.json")
+export const defaultReportState = () => process.env.JOBS_GRADE_REPORT_STATE || join(homedir(), ".local/state/jobs-grade/report.json")
 const shortHost = () => hostname().split(".")[0]
 
-const clip = (text: string) => (text.length > NTFY_MAX_CHARS ? `${text.slice(0, NTFY_MAX_CHARS - 1)}…` : text)
+const clip = (text: string, max = NTFY_MAX_CHARS) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
-/** What to tell ntfy, given the not-ok set already announced (`prev`) and the current rows.
- *  `text` is null when nothing changed (same labels, same grades); `next` is the set to persist once the post lands. */
-export function ntfyTransition(prev: Record<string, string>, rows: Graded[], host: string = shortHost()): { text: string | null; next: Record<string, string> } {
-  const bad = rows.filter((r) => r.grade !== "ok")
-  const next = Object.fromEntries(bad.map((r) => [r.label, r.grade]))
-  const same = Object.keys(next).length === Object.keys(prev).length && Object.entries(next).every(([l, g]) => prev[l] === g)
-  if (same) return { text: null, next }
-  const head = `jobs-grade[${host}]:`
-  if (bad.length === 0) {
-    const was = Object.entries(prev).map(([l, g]) => `${l}=${g}`).join(", ")
-    return { text: clip(`${head} all jobs ok again (was: ${was})`), next }
-  }
-  const list = bad.map((r) => `${r.label}=${r.grade} (${r.reason})`).join(", ")
-  return { text: clip(`${head} ${bad.length} job(s) not ok — ${list}`), next }
+/** Per job: consecutive not-ok grades, when a signal last landed, when the ntfy fallback last landed. */
+export interface JobReport {
+  bad: number
+  filedAt: number | null
+  ntfyAt: number | null
+}
+export type ReportState = Record<string, JobReport>
+
+/** A job's signal: one stable title per job, so the factory amends the same item on a repeat. */
+export function signalFor(r: Graded): { repo: string; title: string; text: string } {
+  const repo = r.owner && r.owner !== "?" ? r.owner : "dotfiles"
+  const lines = [
+    `Job ${r.label} (owner repo ${repo}) is ${r.grade}: ${r.reason}.`,
+    `last rc=${r.rc}, ${r.consecutive_fail} consecutive failures, ${r.fails_24h} in 24 h, last ok ${r.last_ok ?? "never"}, cadence ${r.every ?? "none"} s${r.owner_sha ? `, owner HEAD ${r.owner_sha}` : ""}.`,
+    ...(r.runs?.length ? [`last runs: ${r.runs.map((x) => `${x.started} rc=${x.rc} ${Math.round(x.duration_ms / 1000)}s`).join("; ")}`] : []),
+    ...(r.tail?.length ? ["output tail:", ...r.tail.slice(-20)] : []),
+    "Find the root cause and fix the job (or its plist/timeout). Grading: `bun scripts/lib/jobs-grade.ts --table` in dotfiles; run state under ~/.local/state/jobs.",
+  ]
+  return { repo, title: `Background job ${r.label} needs a fix`, text: clip(lines.join("\n"), 8000) }
 }
 
-function readNtfyState(path: string): Record<string, string> {
+/** Advance the per-job counters one grade and decide which jobs are due a report.
+ *  `due` = not ok for REPORT_AFTER_GRADES grades in a row, and not reported (signal or ntfy) in REPORT_EVERY_MS. */
+export function reportPlan(prev: ReportState, rows: Graded[], now: number): { next: ReportState; due: Graded[] } {
+  const next: ReportState = {}
+  const due: Graded[] = []
+  for (const r of rows) {
+    const old = prev[r.label] ?? { bad: 0, filedAt: null, ntfyAt: null }
+    if (r.grade === "ok") {
+      // history only: a job that recovered keeps its last-report stamps for a day so a quick relapse is still one signal a day
+      next[r.label] = { bad: 0, filedAt: old.filedAt, ntfyAt: old.ntfyAt }
+      continue
+    }
+    const cur = { ...old, bad: old.bad + 1 }
+    next[r.label] = cur
+    const recent = (t: number | null) => t !== null && now - t < REPORT_EVERY_MS
+    if (cur.bad >= REPORT_AFTER_GRADES && !recent(cur.filedAt)) due.push(r)
+  }
+  for (const [label, rep] of Object.entries(prev)) {
+    if (next[label]) continue
+    // a job that vanished from grading keeps its stamps until they are old
+    if ((rep.filedAt ?? 0) > now - STATE_KEEP_MS || (rep.ntfyAt ?? 0) > now - STATE_KEEP_MS) next[label] = { ...rep, bad: 0 }
+  }
+  for (const [label, rep] of Object.entries(next)) {
+    if (rep.bad === 0 && (rep.filedAt ?? 0) <= now - STATE_KEEP_MS && (rep.ntfyAt ?? 0) <= now - STATE_KEEP_MS) delete next[label]
+  }
+  return { next, due }
+}
+
+function readReportState(path: string): ReportState {
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"))
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {}
-    return Object.fromEntries(Object.entries(parsed).filter((e): e is [string, string] => typeof e[1] === "string"))
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null)
+    return Object.fromEntries(Object.entries(parsed).flatMap(([label, v]) => {
+      if (typeof v !== "object" || v === null) return []
+      const o = v as Record<string, unknown>
+      return [[label, { bad: num(o.bad) ?? 0, filedAt: num(o.filedAt), ntfyAt: num(o.ntfyAt) }]]
+    }))
   } catch {
-    return {} // missing or corrupt = nothing announced yet
+    return {} // missing or corrupt = nothing reported yet
   }
 }
 
@@ -406,39 +454,78 @@ function ntfyBaseUrl(): string {
   return m[1].replace(/\/+$/, "")
 }
 
-async function postNtfy(text: string, recovered: boolean): Promise<void> {
+/** The fallback: priority 3 (default), because it only fires when the factory cannot take the signal. */
+async function postNtfy(text: string): Promise<void> {
   const res = await fetch(`${ntfyBaseUrl()}/${process.env.JOBS_GRADE_NTFY_TOPIC || NTFY_DEFAULT_TOPIC}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${ntfyToken()}`, Title: "Background jobs", Tags: recovered ? "white_check_mark" : "warning" },
+    headers: { Authorization: `Bearer ${ntfyToken()}`, Title: "Background jobs", Tags: "warning", Priority: "3" },
     body: text,
     signal: AbortSignal.timeout(10_000),
   })
   if (!res.ok) throw new Error(`http ${res.status}`)
 }
 
-/** Best-effort: announce a change in the not-ok set, then persist it. Never throws.
- *  Returns "failed" when the post or the state write failed (a failed write after a landed post re-posts next tick: acceptable). */
-export async function ntfyNotify(rows: Graded[], statePath: string = defaultNtfyState()): Promise<"ok" | "unchanged" | "failed"> {
-  let next: Record<string, string>
-  try {
-    const transition = ntfyTransition(readNtfyState(statePath), rows)
-    if (transition.text === null) return "unchanged"
-    next = transition.next
-    await postNtfy(transition.text, Object.keys(next).length === 0)
-  } catch (e) {
-    console.error(`jobs-grade: ntfy post failed: ${(e as Error).message}`)
-    return "failed"
+/** `factory signal file` for one job. Resolves true when the factory took it. */
+async function fileSignal(s: { repo: string; title: string; text: string }): Promise<boolean> {
+  const PATH = `${process.env.PATH ?? "/usr/bin:/bin"}:${join(homedir(), ".local/bin")}`
+  const bin = process.env.JOBS_GRADE_FACTORY_BIN || "factory"
+  const proc = Bun.spawn([bin, "signal", "file", "--from", SIGNAL_FROM, "--repo", s.repo, "--title", s.title, "--text", s.text], {
+    env: { ...process.env, PATH }, stdout: "ignore", stderr: "pipe", timeout: 20_000,
+  })
+  const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited])
+  if (code !== 0) console.error(`jobs-grade: factory signal for ${s.title} failed (rc=${code}): ${err.trim().split("\n")[0] ?? ""}`)
+  return code === 0
+}
+
+export interface ReportDeps {
+  now?: number
+  file?: (s: { repo: string; title: string; text: string }) => Promise<boolean>
+  ntfy?: (text: string) => Promise<void>
+}
+
+/** Best-effort: file a signal for every job that is due, ntfy (priority 3, once a day per job) only for a job the
+ *  factory would not take, then persist the counters. Never throws. "failed" = a report or the state write failed. */
+export async function reportJobs(rows: Graded[], statePath: string = defaultReportState(), deps: ReportDeps = {}): Promise<"ok" | "unchanged" | "failed"> {
+  const now = deps.now ?? Date.now()
+  const file = deps.file ?? fileSignal
+  const ntfy = deps.ntfy ?? postNtfy
+  let failed = false
+  let reported = false
+  const prev = readReportState(statePath)
+  const { next, due } = reportPlan(prev, rows, now)
+  for (const r of due) {
+    const sig = signalFor(r)
+    try {
+      if (await file(sig)) {
+        next[r.label].filedAt = now
+        reported = true
+        continue
+      }
+    } catch (e) {
+      console.error(`jobs-grade: factory signal failed: ${(e as Error).message}`)
+    }
+    // factory unreachable: the fallback, at most once a day per job
+    const ntfyAt = next[r.label].ntfyAt
+    if (ntfyAt !== null && now - ntfyAt < REPORT_EVERY_MS) continue
+    try {
+      await ntfy(clip(`jobs-grade[${shortHost()}]: ${r.label}=${r.grade} (${r.reason}) — factory unreachable, signal not filed for ${sig.repo}`))
+      next[r.label].ntfyAt = now
+      reported = true
+    } catch (e) {
+      console.error(`jobs-grade: ntfy fallback failed: ${(e as Error).message}`)
+      failed = true
+    }
   }
   try {
     mkdirSync(dirname(statePath), { recursive: true })
     const tmp = `${statePath}.${process.pid}.tmp`
     writeFileSync(tmp, JSON.stringify(next))
     renameSync(tmp, statePath)
-    return "ok"
   } catch (e) {
-    console.error(`jobs-grade: ntfy state write failed: ${(e as Error).message}`)
+    console.error(`jobs-grade: report state write failed: ${(e as Error).message}`)
     return "failed"
   }
+  return failed ? "failed" : reported ? "ok" : "unchanged"
 }
 
 const readAwakeSeconds = () => awakeSeconds(Bun.spawnSync(["/usr/sbin/sysctl", "-n", "kern.waketime"], { stderr: "ignore" }).stdout.toString(), Date.now())
@@ -451,10 +538,10 @@ if (import.meta.main) {
     console.log(line)
     process.exit(code)
   }
-  const ntfyStatus = process.argv.includes("--ntfy") && (process.argv.includes("--summary") || process.argv.includes("--table"))
-    ? await ntfyNotify(judgeAgainstAwake(rows, readAwakeSeconds()))
+  const reportStatus = process.argv.includes("--report") && (process.argv.includes("--summary") || process.argv.includes("--table"))
+    ? await reportJobs(judgeAgainstAwake(rows, readAwakeSeconds()))
     : null
-  const failedNote = ntfyStatus === "failed" ? " [ntfy post failed]" : ""
+  const failedNote = reportStatus === "failed" ? " [report failed]" : ""
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
     console.log(`${line}${failedNote}`)

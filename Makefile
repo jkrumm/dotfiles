@@ -111,6 +111,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
+	@$(MAKE) --no-print-directory fseventsd-watch-setup
 	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
 	@$(MAKE) --no-print-directory hc-reap-setup
@@ -801,7 +802,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2585,6 +2586,35 @@ disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 
+# Daily restart of a leaking fseventsd (memory > 1.5 GB, or CPU >= 150 % for 10 min): 2.1 GB at 260 % CPU after 5 days
+# put the dev host into swap thrash on 2026-11-12 (issue 870). The restart is `sudo -n killall fseventsd`, allowed by ONE
+# sudoers rule that the OWNER installs once: `ask-human.sh ask 'install the fseventsd restart rule' --cmd 'cd
+# ~/SourceRoot/dotfiles && make fseventsd-sudoers'` (the mini's sudo password is MacBook-only). Until then the job logs
+# "sudoers rule not installed" and exits 0. Dev host only; converged by `make setup`. Teardown removes the jobrun state file too.
+.PHONY: fseventsd-watch-setup fseventsd-watch-teardown fseventsd-watch-dry fseventsd-sudoers fseventsd-watch-test
+fseventsd-watch-setup:
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.fseventsd-watch" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ daily at 05:10 → restart fseventsd past 1.5 GB or 10 min at 150 % CPU; log: ~/Library/Logs/fseventsd-watch.log"
+fseventsd-watch-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.fseventsd-watch.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.fseventsd-watch.json"; \
+	echo "  ✓ fseventsd-watch torn down (unloaded, plist and jobrun state removed)"
+fseventsd-watch-dry: ## Decide now and print what the fseventsd job would do (never restarts anything)
+	@bash $(DOTFILES_DIR)/scripts/fseventsd-watch.sh --dry-run
+fseventsd-sudoers: ## Install the one NOPASSWD rule (`killall fseventsd`) into /etc/sudoers.d (needs sudo: run through ask-human)
+	@SRC="$(DOTFILES_DIR)/scripts/sudoers.d/fseventsd-restart"; TMP=$$(mktemp); trap 'rm -f "$$TMP"' EXIT; \
+	sed "s/__USER__/$$(id -un)/" "$$SRC" > "$$TMP"; \
+	sudo /usr/sbin/visudo -cf "$$TMP" >/dev/null || { echo "  ✗ sudoers syntax check failed — nothing installed"; exit 1; }; \
+	sudo /usr/bin/install -m 0440 -o root -g wheel "$$TMP" /etc/sudoers.d/fseventsd-restart; \
+	sudo -n -l /usr/bin/killall fseventsd >/dev/null 2>&1 \
+		&& echo "  ✓ /etc/sudoers.d/fseventsd-restart installed; fseventsd-watch can now restart the daemon" \
+		|| { echo "  ✗ installed but sudo -n -l does not list the rule"; exit 1; }
+fseventsd-watch-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fseventsd-watch.sh $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh $(DOTFILES_DIR)/scripts/lib/fseventsd-mem.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh
+
 # The end-to-end probe for the job -> ntfy chain (docs/background-jobs.md §Canary). Dev host
 # only. Converged by `make setup`. Teardown removes its state file too, or
 # jobs-grade would grade the retired label `unloaded` forever.
@@ -3480,6 +3510,8 @@ help:
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
+	@echo "  make fseventsd-watch-dry        Decide now what the fseventsd job would do (never restarts)"
+	@echo "  make fseventsd-sudoers          Install the one NOPASSWD rule for killall fseventsd (sudo: through ask-human)"
 	@echo "  make hc-resume-setup            Dev-host only: load the Claude session resume for herdr-core (-status / -teardown)"
 	@echo "  make hc-reap-setup              Dev-host only: load the 30 min herdr-core janitor (-teardown); run once: rd reap [--dry-run]"
 	@echo "  make hc-events-setup            Dev-host only: load the herdr-core event recorder (-status / -teardown)"

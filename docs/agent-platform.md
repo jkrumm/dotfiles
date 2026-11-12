@@ -141,7 +141,7 @@ a lost program.
 
 ## Notifications
 
-Background-job failures (`jobs-grade --ntfy`) go to ntfy topic `alerts`, and the human-queue nudge to topic
+Background-job failures (`jobs-grade --report`) are filed as signals on the owner repo and fixed by a lead; ntfy topic `alerts` (priority 3) is only the fallback when the factory is unreachable. The human-queue nudge goes to topic
 `factory`, both on the iPhone and the Mac; Uptime Kuma and HyperDX alerts still go to Slack `#alerts` until their own
 moves. A human reads and acts. Source model and thresholds: `docs/ops-signals.md`.
 

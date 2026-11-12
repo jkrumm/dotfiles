@@ -9,6 +9,10 @@ LOGS="$HOME/Library/Logs"
 AGENTS="$HOME/Library/LaunchAgents"
 mkdir -p "$LOGS" "$AGENTS"
 export CHROME_CLONE_ROOT="$TMP/chrome"
+# A system-wide lsof takes minutes on a loaded host and this suite runs the script ~17 times: default to a stub that
+# reports nothing open (one non-empty line, so the sweep does not fail closed); the holder test uses a stub that holds one clone.
+printf '#!/bin/sh\necho p1\n' > "$TMP/lsof-stub"; chmod +x "$TMP/lsof-stub"
+export LSOF_BIN="$TMP/lsof-stub" LOG_ROTATE_LOWPRIO=1
 mkdir -p "$CHROME_CLONE_ROOT"
 
 fail=0
@@ -67,10 +71,9 @@ done
 CR="$CHROME_CLONE_ROOT"
 mkdir "$CR/code_sign_clone.old" "$CR/code_sign_clone.fresh" "$CR/code_sign_clone.open"
 touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.old" "$CR/code_sign_clone.open"
-(cd "$CR/code_sign_clone.open" && exec sleep 60) &
-holder=$!
-LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
-kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+# lsof stub that reports code_sign_clone.open held by a process (the real system-wide lsof takes minutes on a loaded host)
+printf '#!/bin/sh\necho p1\necho "n%s/code_sign_clone.open/Contents"\n' "$(cd "$CR" && pwd -P)" > "$TMP/lsof-holder"; chmod +x "$TMP/lsof-holder"
+LSOF_BIN="$TMP/lsof-holder" LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
 check "old chrome clone removed" test ! -e "$CR/code_sign_clone.old"
 check "fresh chrome clone kept" test -d "$CR/code_sign_clone.fresh"
 check "open chrome clone kept" test -d "$CR/code_sign_clone.open"
@@ -94,6 +97,19 @@ rm -rf "$CR"/code_sign_clone.*
 for n in $(seq 1 40); do mkdir "$CR/code_sign_clone.b$n"; touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.b$n"; done
 LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
 check "chrome sweep clears a multi-batch backlog in one run" sh -c '[ -z "$(ls "$1")" ]' _ "$CR"
+
+# rc=124 under load (issue 870): the budget counts from script start, so a spent budget removes nothing and says so.
+rm -rf "$CR"/code_sign_clone.*
+for n in 1 2 3; do mkdir "$CR/code_sign_clone.late$n"; touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.late$n"; done
+out5=$(CHROME_CLONE_BUDGET_S=0 LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" 2>&1); rc5=$?
+check "a spent budget removes nothing, exits 0 and defers the rest" sh -c '[ "$1" -eq 0 ] && [ "$(ls "$2" | wc -l)" -eq 3 ] && printf "%s" "$3" | grep -q "cap reached"' _ "$rc5" "$CR" "$out5"
+# three runs in a row finish green (the acceptance: rc=124 no more)
+for i in 1 2 3; do
+  LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1; rcn=$?
+  check "consecutive run $i exits 0" test "$rcn" -eq 0
+done
+check "the backlog drained across those runs" sh -c '[ -z "$(ls "$1")" ]' _ "$CR"
+check "the script runs at background priority (re-exec guard set)" grep -q 'exec /usr/sbin/taskpolicy -b' "$HERE/log-rotate.sh"
 
 out3=$(CHROME_CLONE_ROOT="$TMP/absent" bash "$HERE/log-rotate.sh" 2>&1); rc3=$?
 check "missing chrome root is a no-op" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2" ] && printf "%s" "$3" | grep -q "nothing to sweep"' _ "$rc3" "$TMP/absent" "$out3"

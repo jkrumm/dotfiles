@@ -149,7 +149,7 @@ the herdr-core agent). A new KeepAlive script agent calls it from its `*-setup`.
 
 `make verify` (= `make doctor`); `make logs` for the bounded log tail. No HTTP
 health URL and no OTel `service.name` — this repo runs no service. Kuma:
-`MacMini Dev Host - Push` (composite over the heartbeat components, mini only),
+`MacMini Dev Host - Push` (liveness only: tailnet, sshd, core socket; the components ride the opt-in detail monitor; mini only),
 `MacMini Secret Seed - Push` (8-day mtime). Detail: `docs/devhost-health.md`.
 
 ## Gotchas
@@ -297,8 +297,8 @@ never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/ho
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
 `scripts/devhost-health-check.sh` (`jobrun --timeout 270`) pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is the composite over **19 components**: tailscale,
-sshd, core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
+`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **18 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
+core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
 services (6), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
 jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
 the jobs push (no ACL grant runs `tag:homelab → tag:mac`); service health is pulled

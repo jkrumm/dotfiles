@@ -42,7 +42,7 @@
 # BOUNDED: 2026-11-11 the mini held 14k clones (agents' ad-hoc Playwright scripts launch ~300 Chrome/h) and
 # a serial `lsof +D` + `rm -rf` per 2 GB bundle ran 19+ min at load 80-165 (Beszel page, issue 829). So the
 # open set is ONE lsof for the whole root, rm runs at background IO/CPU priority (taskpolicy -b), and a run
-# stops after CHROME_CLONE_MAX removals (default 1500) or CHROME_CLONE_BUDGET_S seconds (default 600); the
+# stops after CHROME_CLONE_MAX removals (default 1500) or CHROME_CLONE_BUDGET_S seconds (default 300, since issue 870); the
 # backlog drains over successive runs instead of in one burst.
 # RATE (issue 839, Beszel "disk filling fast"): the sweep first ran hourly, 400 removals,
 # age gate 24 h, while ~300-600 clones/h were created (basalt-ui layout tests launch Chrome per test) —
@@ -50,8 +50,23 @@
 # (default 120; lsof still guards any clone a running Chrome holds), removals run 4 wide, and the plist
 # runs every 15 min, so the stock stays near two hours of creation instead of a day's.
 # On a machine without the root (Linux, other Macs) it logs one line and does nothing.
+#
+# rc=124 UNDER LOAD (issue 870): 2026-11-12 the job was killed by jobrun's 660 s deadline in 7 of its last ~40 runs, each
+# time at load 100+. The budget above (600 s) was measured from the START OF THE LOOP, after a system-wide lsof that
+# alone ran minutes, and a batch of 16 bundles (4 wide, ~2 GB each) could outlast the rest. Now the whole script is one
+# clock: the process runs at background priority (taskpolicy -b, so it yields to what is thrashing instead of adding
+# to it), the lsof is bounded (LSOF_BUDGET_S, default 90: past it the sweep is skipped, failing closed), the removal
+# budget (default 300 s) counts from script start, batches are 8, and the plist timeout (840 s, under the 900 s
+# interval) is the hard stop for a single batch that outlives the budget. A run that stops at its budget exits 0 and
+# the backlog drains over the next runs.
 
 set -euo pipefail
+
+# Whole script at background priority; the guard keeps the re-exec to one level.
+if [ -z "${LOG_ROTATE_LOWPRIO:-}" ] && [ -x /usr/sbin/taskpolicy ]; then
+  export LOG_ROTATE_LOWPRIO=1
+  exec /usr/sbin/taskpolicy -b "$0" "$@"
+fi
 
 LOG_DIR="${LOG_ROTATE_DIR:-$HOME/Library/Logs}"
 
@@ -145,18 +160,38 @@ sweep_chrome_clones() {
     echo "chrome-clone: no root${root:+ at $root} — nothing to sweep"
     return 0
   fi
-  if [ ! -x /usr/sbin/lsof ]; then
-    echo "chrome-clone: /usr/sbin/lsof missing — cannot check open clones, sweep skipped"
+  local lsof_bin=${LSOF_BIN:-/usr/sbin/lsof} # overridable so the test suite does not walk every open file on a loaded host 17 times
+  if [ ! -x "$lsof_bin" ]; then
+    echo "chrome-clone: $lsof_bin missing — cannot check open clones, sweep skipped"
     return 0
   fi
-  local max=${CHROME_CLONE_MAX:-1500} budget=${CHROME_CLONE_BUDGET_S:-600} capped="" open proot all
+  local max=${CHROME_CLONE_MAX:-1500} budget=${CHROME_CLONE_BUDGET_S:-300} capped="" open proot all
   local -a lowprio=()
   [ -x /usr/sbin/taskpolicy ] && lowprio=(/usr/sbin/taskpolicy -b)
   # One lsof for the whole system, reduced to the clone directory names something holds open.
   proot=$(cd "$root" && pwd -P) # lsof prints resolved paths (/private/var/...)
   # lsof exits non-zero when it cannot stat some file; that is not a failure. No output at all is
-  # (it would read as "nothing open"), so the sweep fails closed.
-  all=$(/usr/sbin/lsof -w -n -F n 2>/dev/null || true)
+  # (it would read as "nothing open"), so the sweep fails closed. Bounded: under thrash this one call ran
+  # minutes, so it runs in the background and is killed by pid at LSOF_BUDGET_S (the sweep is skipped, not guessed).
+  local lsof_out lsof_pid lsof_start lsof_budget=${LSOF_BUDGET_S:-90}
+  lsof_out=$(mktemp "${TMPDIR:-/tmp}/log-rotate-lsof.XXXXXX")
+  lsof_start=$SECONDS
+  "$lsof_bin" -w -n -F n >"$lsof_out" 2>/dev/null &
+  lsof_pid=$!
+  while kill -0 "$lsof_pid" 2>/dev/null; do
+    # wall time ($SECONDS), not loop iterations: under thrash one 0.2 s sleep can take seconds
+    if [ $((SECONDS - lsof_start)) -ge "$lsof_budget" ]; then
+      kill -KILL "$lsof_pid" 2>/dev/null || true
+      wait "$lsof_pid" 2>/dev/null || true
+      rm -f "$lsof_out"
+      echo "chrome-clone: lsof did not finish in ${lsof_budget}s (host under load) — sweep skipped this run"
+      return 0
+    fi
+    sleep 0.2
+  done
+  wait "$lsof_pid" 2>/dev/null || true
+  all=$(cat "$lsof_out")
+  rm -f "$lsof_out"
   if [ -z "$all" ]; then
     echo "chrome-clone: lsof returned nothing — cannot tell which clones are open, sweep skipped"
     return 0
@@ -164,8 +199,8 @@ sweep_chrome_clones() {
   open=$(printf '%s\n' "$all" | awk -v r="$proot/" 'index($0, "n" r) == 1 {
     p = substr($0, length(r) + 2); sub("/.*", "", p); print p }' | sort -u)
   before=$(df -k "$root" | awk 'NR==2 {print $4}')
-  SECONDS=0
-  # Removals run in batches of 16 across 4 workers (one serial rm of a 2 GB bundle is ~1.3 s, so
+  # SECONDS is NOT reset: the budget is wall time since the script started, the lsof above included.
+  # Removals run in batches of 8 across 4 workers (one serial rm of a 2 GB bundle is ~1.3 s, so
   # a serial sweep clears ~2.7k/h at best), and the cap and budget are checked between batches.
   local -a batch=()
   flush_batch() {
@@ -184,7 +219,7 @@ sweep_chrome_clones() {
       continue
     fi
     batch+=("$d")
-    [ "${#batch[@]}" -ge 16 ] && flush_batch
+    [ "${#batch[@]}" -ge 8 ] && flush_batch
   done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'code_sign_clone.*' -mmin "+${CHROME_CLONE_MIN_AGE_MIN:-120}" -print0)
   flush_batch
   after=$(df -k "$root" | awk 'NR==2 {print $4}')

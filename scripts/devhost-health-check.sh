@@ -17,7 +17,12 @@ script_start=$SECONDS
 # the mini pushes outbound over the already-granted `tag:mac → tag:homelab`
 # tcp:443. Same pattern as MacMini Secret Seed - Push and the Hermes monitors.
 #
-# ONE composite monitor, not four: core/sshd/tailscaled all fail together
+# LIVENESS FIRST (issue 870): the very first push this script makes, once the dead-machine checks pass or fail
+# (tailnet Running, sshd listening, herdr-core socket answering; ~15 s), goes to `MacMini Dev Host - Push` and means only
+# "the mini is reachable and its core is alive". Everything slow follows and rides a second push (WARN text on that
+# monitor, the component verdict on the optional detail monitor). See "Liveness first" below and docs/devhost-health.md.
+#
+# ONE composite monitor, not four (the slow components below still share ONE verdict): core/sshd/tailscaled all fail together
 # when the mini sleeps or drops off the tailnet, so separate monitors would just
 # be simultaneous pages saying the same thing. The failing component is named in
 # the push `msg`, which is where the diagnosis belongs.
@@ -396,7 +401,12 @@ print("%s|%s|%s" % (d.get("BackendState", ""), (me.get("TailscaleIPs") or [""])[
 # not a reason to stop reporting.
 # Bounded like every component: a hung tailscale CLI must not stall the script before the
 # first push (a timeout is rc 124, so the snapshot stays empty and check_tailscale says so).
-_TS_SELF=$(run_bounded "$COMPONENT_TIMEOUT" _ts_snapshot) || _TS_SELF=""
+# Liveness comes first (see "Liveness" below), so the snapshot gets the SHORT liveness bound, not 40 s: under swap
+# thrash a slow `tailscale status` must delay nothing. A timeout (rc 124) is remembered, because "tailscale did not
+# answer in 5 s" is a slow host, not a dead tailnet; the slow phase retakes the snapshot with the full bound.
+LIVENESS_STEP_TIMEOUT="${DEVHOST_LIVENESS_STEP_TIMEOUT:-5}"
+_TS_SNAPSHOT_RC=0
+_TS_SELF=$(run_bounded "$LIVENESS_STEP_TIMEOUT" _ts_snapshot) || { _TS_SNAPSHOT_RC=$?; _TS_SELF=""; }
 
 tailscale_self() {
   [[ -n "$_TS_SELF" ]] || return 1
@@ -1274,12 +1284,13 @@ check_runaways() {
 
 # Graded background jobs (jobrun state dir -> scripts/lib/jobs-grade.ts, the only grading
 # logic). WARN-only in the composite by design (exit 2, never DOWN), so Kuma stays calm
-# (ops-signals.md §2/§3); job failures reach ntfy topic `alerts` through `jobs-grade --ntfy`, which
-# posts on a state change. A grader that cannot run is also a WARN, never a page.
+# (ops-signals.md §2/§3); job failures reach a LEAD through `jobs-grade --report`, which files a signal on the
+# job's owner repo after 2 consecutive not-ok grades (ntfy only if the factory is unreachable). A grader that
+# cannot run is also a WARN, never a page.
 check_jobs() {
   local bun_dir out rc=0
   bun_dir=$(/bin/bash "$(dirname "${BASH_SOURCE[0]}")/lib/bun-bin.sh" 2>/dev/null) || { echo "jobs: bun not found, not graded"; return 2; }
-  out=$("$bun_dir/bun" "${JOBS_GRADE_TS:-$(dirname "${BASH_SOURCE[0]}")/lib/jobs-grade.ts}" --summary --ntfy) || rc=$?
+  out=$("$bun_dir/bun" "${JOBS_GRADE_TS:-$(dirname "${BASH_SOURCE[0]}")/lib/jobs-grade.ts}" --summary --report) || rc=$?
   case "$rc" in
     0|2) echo "$out"; return "$rc" ;;
     *)   echo "jobs: jobs-grade failed (rc=$rc), not graded"; return 2 ;;
@@ -1407,6 +1418,95 @@ COLLIE_PUSH_URL_FILE="${COLLIE_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/collie-p
 FACTORY_PUSH_URL_FILE="${FACTORY_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/factory-push-url}"
 FACTORY_HEALTH_URL="${FACTORY_HEALTH_URL:-http://127.0.0.1:7793/health}"
 SECRETS_FRESHNESS_PUSH_URL_FILE="${SECRETS_FRESHNESS_PUSH_URL_FILE:-$HOME/.config/secrets/freshness-push-url}"
+DETAIL_PUSH_URL_FILE="${DEVHOST_DETAIL_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/devhost-detail-push-url}"
+
+# --- Liveness first ------------------------------------------------------------
+# `MacMini Dev Host - Push` means ONE thing: the mini is reachable and its core is alive. It does not mean
+# "healthy", and it must never mean "slow". 2026-11-10..12: nine DOWN/UP pairs, every one a swap-thrashing host
+# (swapouts 5 GB per 300 s, load 200+) whose slow components (check_core 40 s, factory 20 s, the budget spent)
+# delayed or lost the one push at the END of the run. None was a dead mini.
+#
+# So the order is: the dead-machine checks (tailnet up, sshd listening, herdr-core socket answers; each bounded at
+# LIVENESS_STEP_TIMEOUT, ~15 s in all) -> push THAT verdict at once -> only then the side monitors and the slow
+# components, whose result goes in a second push. A hung or slow component, swap pressure or a spent budget can no
+# longer withhold or delay the liveness push, and never turn the monitor DOWN: it is WARN text in the second push (and, when the
+# optional detail monitor exists, that monitor's DOWN, which the factory door routes to a lead).
+#
+# Only a definite failure of a dead-machine check pushes `down`, after the usual transient streak (and never inside
+# the boot grace). A check that merely TIMED OUT is inconclusive (slow, not dead) and needs a much longer streak.
+LIVENESS_CHECKS="${DEVHOST_LIVENESS-liveness_tailnet liveness_sshd liveness_core}"
+LIVENESS_TIMEOUT_STREAK="${DEVHOST_LIVENESS_TIMEOUT_STREAK:-6}"
+
+liveness_tailnet() {
+  local state=${_TS_SELF%%|*}
+  if [[ "$state" == "Running" ]]; then echo "tailnet up"; return 0; fi
+  if (( _TS_SNAPSHOT_RC == 124 )); then echo "tailscale status timed out after ${LIVENESS_STEP_TIMEOUT}s (slow, not proven dead)"; return 124; fi
+  echo "tailscaled not Running (state=${state:-unreachable})"
+  return 1
+}
+liveness_sshd() { check_sshd; }
+# core_up is a bare socket connect + ps (lib/core-up.sh): no `hc` call, which would auto-start a stray core.
+liveness_core() {
+  core_up || { echo "$CORE_UP_WHY"; return 1; }
+  echo "core answering"
+}
+
+uptime_s=$(host_uptime_seconds)
+# `if`, not `(( … )) && assign`: under `set -e` an arithmetic compound that
+# evaluates false returns 1, and as the last command of an && list that exits
+# the whole script — silently, in the COMMON case (a host that booted long ago).
+in_boot_grace=0
+if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
+
+# Test hook: a file of extra liveness functions (scripts/devhost-heartbeat.test.sh), sourced only when asked for.
+# shellcheck disable=SC1090
+[[ -z "${DEVHOST_TEST_LIB:-}" ]] || source "$DEVHOST_TEST_LIB"
+
+liveness_down=""
+liveness_notes=""
+# Word-splitting is the point: $LIVENESS_CHECKS is a list of function names.
+# shellcheck disable=SC2086
+for lcheck in $LIVENESS_CHECKS; do
+  lrc=0
+  ldetail=$(run_bounded "$LIVENESS_STEP_TIMEOUT" "$lcheck") || lrc=$?
+  lstreak_file="$STATE_DIR/fail-$lcheck"
+  if (( lrc == 0 || lrc == 2 )); then
+    rm -f "$lstreak_file" 2>/dev/null || true
+    liveness_notes="${liveness_notes:+$liveness_notes; }$ldetail"
+    continue
+  fi
+  if (( in_boot_grace )); then
+    liveness_notes="${liveness_notes:+$liveness_notes; }$ldetail (starting, booted ${uptime_s}s ago)"
+    continue
+  fi
+  lstreak=$(cat "$lstreak_file" 2>/dev/null || echo 0)
+  case "$lstreak" in ''|*[!0-9]*) lstreak=0 ;; esac
+  lstreak=$(( lstreak + 1 ))
+  echo "$lstreak" > "$lstreak_file" 2>/dev/null || true
+  lneed=$TRANSIENT_FAILS_BEFORE_ALERT
+  if (( lrc == 124 )); then lneed=$LIVENESS_TIMEOUT_STREAK; fi
+  if (( lstreak < lneed )); then
+    liveness_notes="${liveness_notes:+$liveness_notes; }WARN: $ldetail (degraded ${lstreak}/${lneed}, may self-heal)"
+    continue
+  fi
+  liveness_down="${liveness_down:-$ldetail}"
+  liveness_notes="${liveness_notes:+$liveness_notes; }FAIL: $ldetail (persisted ${lstreak} runs)"
+done
+
+push_rc=0
+if [[ -n "$liveness_down" ]]; then
+  push down "dead machine: ${liveness_notes}" || push_rc=$?
+  echo "✗ liveness: $liveness_notes" >&2
+else
+  push up "alive: ${liveness_notes:-no liveness checks}" || push_rc=$?
+  echo "✓ liveness: ${liveness_notes:-no liveness checks}"
+fi
+echo "liveness pushed after ${SECONDS}s" >&2
+
+# The slow phase may need the real snapshot (check_tailscale, check_dev_vhosts): retake it with the full bound.
+if [[ -z "$_TS_SELF" ]]; then
+  _TS_SELF=$(run_bounded "$COMPONENT_TIMEOUT" _ts_snapshot) || _TS_SELF=""
+fi
 
 # --- Run --------------------------------------------------------------------
 
@@ -1417,12 +1517,6 @@ side_monitor secrets "$SECRETS_FRESHNESS_PUSH_URL_FILE" "${SECRETS_FRESHNESS_PUS
 details=()
 failure=""
 
-uptime_s=$(host_uptime_seconds)
-# `if`, not `(( … )) && assign`: under `set -e` an arithmetic compound that
-# evaluates false returns 1, and as the last command of an && list that exits
-# the whole script — silently, in the COMMON case (a host that booted long ago).
-in_boot_grace=0
-if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 # Reboots are otherwise invisible here: check_launchd_restarts does delta
 # detection on AGENTS, not on the host, so a 3am power cut that recovers
 # perfectly leaves no trace in any heartbeat. One line fixes that, and it is
@@ -1431,7 +1525,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 
 # DEVHOST_COMPONENTS overrides the list (space-separated function names) so the bounded-run
 # and budget paths can be driven hermetically (scripts/devhost-heartbeat.test.sh).
-components="${DEVHOST_COMPONENTS:-check_tailscale check_sshd check_core check_git_push check_dev_vhosts \
+components="${DEVHOST_COMPONENTS:-check_tailscale check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
                  check_obsidian check_disk check_runaways \
                  check_jobs check_quota}"
@@ -1515,16 +1609,20 @@ done
 # explicitly rather than setting IFS='; ' and silently getting ';'.
 summary=$(printf '%s; ' "${details[@]}"); summary=${summary%; }
 
-# Push and health are reported independently: a failed push must not swallow the
-# health summary, which is the only diagnosis the local log will ever carry.
-push_rc=0
-if [[ -n "$failure" ]]; then
-  push down "$summary" || push_rc=$?
-  echo "✗ $summary" >&2
-else
-  push up "$summary" || push_rc=$?
-  echo "✓ $summary"
+# SECOND push: the detail. The liveness push above already told Kuma the mini is alive, so a component FAIL is
+# WARN text on that monitor (never DOWN, and a DOWN verdict from the liveness phase is never overwritten by this).
+# The optional detail monitor (`MacMini Dev Host Detail - Push`, URL file below, opt-in like collie) carries the
+# component verdict: its DOWN is what the factory door routes to a lead, not a page to the owner. No file, no monitor.
+if [[ -n "$failure" ]]; then echo "✗ $summary" >&2; else echo "✓ $summary"; fi
+detail_push_rc=0
+if [[ -f "$DETAIL_PUSH_URL_FILE" ]] && detail_url=$(kuma_resolve_push_url "${DEVHOST_DETAIL_PUSH_URL:-}" "$DETAIL_PUSH_URL_FILE"); then
+  if [[ -n "$failure" ]]; then kuma_push "$detail_url" down "$summary" || detail_push_rc=$?
+  else kuma_push "$detail_url" up "$summary" || detail_push_rc=$?; fi
 fi
+if [[ -z "$liveness_down" ]]; then
+  push up "$summary" || push_rc=$?
+fi
+(( detail_push_rc == 0 )) || push_rc=$detail_push_rc
 
 if (( push_rc != 0 )); then
   echo "✗ push to Uptime Kuma failed (rc=$push_rc) — Kuma will alert on the missed heartbeat" >&2
@@ -1564,7 +1662,7 @@ if (( drift_due )) && [[ -f "$DRIFT_CHECK_BIN" ]]; then
 fi
 
 # Exit semantics (this runs under jobrun, where non-zero is a recorded job failure
-# that jobs-grade alerts via ntfy): a DOWN verdict is a DELIVERED state and Kuma
+# that jobs-grade files as a signal on dotfiles): a DOWN verdict is a DELIVERED state and Kuma
 # alerts on it, so it exits 0. Non-zero means a push did not go out (or, above,
 # no push URL resolved) — the one case Kuma cannot see for itself.
 (( push_rc == 0 && side_push_rc == 0 )) || exit 1
