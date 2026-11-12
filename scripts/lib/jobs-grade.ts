@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // jobs-grade — the ONLY grading logic for background jobs (ops-signals.md §3 T1, §5).
 // Reads the jobrun state dir plus `launchctl print` and grades every label:
-//   ok | failing | stale | flapping | unloaded
+//   ok | failing | stale | flapping | unloaded | retired
 // Called by the heartbeat (WARN), `make doctor` (table) and any remediation consumer.
 //
 //   jobs-grade            JSON array on stdout
@@ -22,6 +22,12 @@
 // grader must see. A declared label with no state file is graded (never invisible); the plists are
 // the single source, there is no hand list.
 //
+// Retired: a job stopped on purpose (an owner repo froze, a job waiting to come back) is retired by a marker file
+// `<state dir>/<label>.retired` (its text is the reason): `echo "V1 frozen" > ~/.local/state/jobs/<label>.retired`.
+// A marked label that is NOT loaded in launchd grades `retired` (counts as ok, files nothing). A marked label that IS
+// loaded grades normally, so reinstalling the plist brings the job back without touching the marker; remove the marker
+// on the way back anyway.
+//
 // Hermes cron jobs (~/.hermes/cron/jobs.json) are graded too, through an adapter below.
 //
 // Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
@@ -34,7 +40,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { homedir, hostname } from "node:os"
 import { dirname, join } from "node:path"
 
-export type Grade = "ok" | "failing" | "stale" | "flapping" | "unloaded"
+export type Grade = "ok" | "failing" | "stale" | "flapping" | "unloaded" | "retired"
 
 export interface JobState {
   label: string
@@ -79,6 +85,25 @@ export const RECOVERED_RUNS = 3
 export const MIN_WINDOW_S = 30 * 60
 export const DAILY_EVERY_S = 86400
 export const DAILY_GRACE_S = 2 * 3600
+
+export const RETIRED_SUFFIX = ".retired"
+
+/** Retire markers in the state dir: label -> reason (the marker's text). A missing dir retires nothing. */
+export function readRetired(dir: string): Map<string, string> {
+  const out = new Map<string, string>()
+  if (!existsSync(dir)) return out
+  for (const f of readdirSync(dir).sort()) {
+    if (!f.endsWith(RETIRED_SUFFIX)) continue
+    let reason = ""
+    try {
+      reason = readFileSync(join(dir, f), "utf8").trim()
+    } catch {
+      // an unreadable marker still retires: the reason is only text
+    }
+    out.set(f.slice(0, -RETIRED_SUFFIX.length), reason)
+  }
+  return out
+}
 
 export const defaultStateDir = () => process.env.JOBRUN_STATE_DIR || join(homedir(), ".local/state/jobs")
 
@@ -208,6 +233,7 @@ export interface GradeOpts {
   loaded: (label: string) => boolean
   expected?: Expected[]
   cron?: JobState[] // Hermes cron jobs, already translated by readCronStates
+  retired?: Map<string, string> // label -> reason, from readRetired
 }
 
 export const defaultPlistDir = () => process.env.JOBRUN_PLIST_DIR || join(homedir(), "Library/LaunchAgents")
@@ -247,10 +273,17 @@ export function readExpected(plistDir: string): Expected[] {
   return out
 }
 
+const retiredReason = (why: string) => (why ? `retired on purpose: ${why}` : "retired on purpose")
+
 /** Declared by a plist, but jobrun never wrote a state file: not loaded = unloaded, past its first window = stale. */
 export function gradeNeverRecorded(e: Expected, o: GradeOpts): Graded {
   const base = { label: e.label, owner: e.owner, rc: -1, consecutive_fail: 0, fails_24h: 0, last_ok: null, last_started: "", every: e.every }
-  if (!o.loaded(e.label)) return { ...base, grade: "unloaded", reason: "declared by a plist but not loaded in launchd" }
+  if (!o.loaded(e.label)) {
+    const why = o.retired?.get(e.label)
+    return why === undefined
+      ? { ...base, grade: "unloaded", reason: "declared by a plist but not loaded in launchd" }
+      : { ...base, grade: "retired", reason: retiredReason(why) }
+  }
   const windowS = windowSeconds(e.every ?? 0)
   const sinceInstallS = (o.now - e.installedAt) / 1000
   if (sinceInstallS > windowS) return { ...base, grade: "stale", reason: `never recorded, installed ${Math.round(sinceInstallS / 60)} min ago, window ${Math.round(windowS / 60)} min` }
@@ -283,7 +316,10 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
   // On demand: started by hand or a hook through `jobrun`, no plist, no cadence. There is nothing to load and
   // nothing to be late for, so only the outcome of the last run grades.
   if (isOnDemand(s, o)) return done(s.consecutive_fail > 0 ? "failing" : "ok", s.consecutive_fail > 0 ? `on-demand job's last run failed (rc=${s.rc})` : "ok")
-  if (!o.loaded(s.label)) return done("unloaded", "not loaded in launchd")
+  if (!o.loaded(s.label)) {
+    const why = o.retired?.get(s.label)
+    return why === undefined ? done("unloaded", "not loaded in launchd") : done("retired", retiredReason(why))
+  }
 
   const ageS = (iso: string | null) => (iso ? (o.now - Date.parse(iso)) / 1000 : Number.POSITIVE_INFINITY)
   const windowS = s.every ? windowSeconds(s.every) : null
@@ -346,9 +382,12 @@ export function renderTable(rows: Graded[]): string {
   return rows.map((r) => `${r.grade.padEnd(9)} ${r.label.padEnd(w)}  ${r.owner.padEnd(14)} ${r.reason}`).join("\n")
 }
 
+/** Retired is a decision, not a problem: it never warns and never files. */
+const isBad = (r: Graded) => r.grade !== "ok" && r.grade !== "retired"
+
 /** One-line verdict for consumers that must not re-grade (heartbeat, doctor). Exit 0 = all ok, 2 = at least one is not. */
 export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
-  const bad = rows.filter((r) => r.grade !== "ok")
+  const bad = rows.filter(isBad)
   if (bad.length === 0) return { line: `jobs ok (${rows.length})`, code: 0 }
   return { line: `jobs WARN (${rows.length}): ${bad.map((r) => `${r.label}=${r.grade}`).join(", ")}`, code: 2 }
 }
@@ -399,7 +438,7 @@ export function reportPlan(prev: ReportState, rows: Graded[], now: number): { ne
   const due: Graded[] = []
   for (const r of rows) {
     const old = prev[r.label] ?? { bad: 0, filedAt: null, ntfyAt: null }
-    if (r.grade === "ok") {
+    if (!isBad(r)) {
       // history only: a job that recovered keeps its last-report stamps for a day so a quick relapse is still one signal a day
       next[r.label] = { bad: 0, filedAt: old.filedAt, ntfyAt: old.ntfyAt }
       continue
@@ -531,7 +570,7 @@ export async function reportJobs(rows: Graded[], statePath: string = defaultRepo
 const readAwakeSeconds = () => awakeSeconds(Bun.spawnSync(["/usr/sbin/sysctl", "-n", "kern.waketime"], { stderr: "ignore" }).stdout.toString(), Date.now())
 
 if (import.meta.main) {
-  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), cron: readCronStates(defaultCronJobs()) })
+  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), retired: readRetired(defaultStateDir()), cron: readCronStates(defaultCronJobs()) })
   if (process.argv.includes("--notify")) {
     const { line, code } = summarize(judgeAgainstAwake(rows, readAwakeSeconds()))
     if (code !== 0) notify(line)

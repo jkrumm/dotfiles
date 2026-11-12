@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type Expected, type Graded, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, REPORT_AFTER_GRADES, REPORT_EVERY_MS, reportJobs, reportPlan, signalFor, summarize, windowSeconds } from "./jobs-grade.ts"
+import { type Expected, type Graded, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, readRetired, renderTable, REPORT_AFTER_GRADES, REPORT_EVERY_MS, reportJobs, reportPlan, signalFor, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -412,6 +412,46 @@ describe("--report: signals to the factory, not ntfy", () => {
       expect(args[7]).toBe("Background job com.jkrumm.t needs a fix")
     } finally {
       process.env = saved
+    }
+  })
+})
+
+describe("retired jobs (stopped on purpose)", () => {
+  const never = () => false
+  const retired = new Map([["com.jkrumm.t", "V1 frozen"]])
+
+  test("readRetired maps each <label>.retired marker to its text; state files and a missing dir are ignored", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jg-"))
+    writeFileSync(join(dir, "com.jkrumm.t.retired"), "V1 frozen\n")
+    writeFileSync(join(dir, "com.jkrumm.empty.retired"), "")
+    writeFileSync(join(dir, "com.jkrumm.live.json"), "{}")
+    expect(readRetired(dir)).toEqual(new Map([["com.jkrumm.empty", ""], ["com.jkrumm.t", "V1 frozen"]]))
+    expect(readRetired(join(dir, "missing"))).toEqual(new Map())
+  })
+  test("a marked job that is not loaded grades retired, with the reason", () => {
+    const g = gradeOne(job({ consecutive_fail: 9 }), { now: NOW, loaded: never, retired })
+    expect(g.grade).toBe("retired")
+    expect(g.reason).toContain("V1 frozen")
+  })
+  test("a marked job that is loaded again grades normally", () => {
+    expect(gradeOne(job({ consecutive_fail: 9 }), { now: NOW, loaded, retired }).grade).toBe("failing")
+  })
+  test("an unmarked job that is not loaded stays unloaded", () => {
+    expect(gradeOne(job({ label: "com.jkrumm.other" }), { now: NOW, loaded: never, retired }).grade).toBe("unloaded")
+  })
+  test("a marked plist-declared job with no state file grades retired", () => {
+    const e: Expected = { label: "com.jkrumm.t", owner: "weatherorb", every: 300, installedAt: NOW - 3600_000 }
+    const rows = gradeAll(mkdtempSync(join(tmpdir(), "jg-")), { now: NOW, loaded: never, expected: [e], retired })
+    expect(rows.map((r) => r.grade)).toEqual(["retired"])
+  })
+  test("retired is not a warning and is never reported", () => {
+    const rows = gradeAll(mkdtempSync(join(tmpdir(), "jg-")), { now: NOW, loaded: never, expected: [{ label: "com.jkrumm.t", owner: "weatherorb", every: 300, installedAt: NOW }], retired })
+    expect(summarize(rows)).toEqual({ line: "jobs ok (1)", code: 0 })
+    let state = {} as ReturnType<typeof reportPlan>["next"]
+    for (let i = 0; i < 5; i++) {
+      const plan = reportPlan(state, rows, NOW + i * 300_000)
+      expect(plan.due).toEqual([])
+      state = plan.next
     }
   })
 })
