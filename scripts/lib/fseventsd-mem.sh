@@ -11,7 +11,8 @@
 #
 # Prints nothing when fseventsd is fine or unreadable (a missing process is not a leak, and this
 # is a warning aid, never a verdict); prints one clause when it is over the limit.
-fseventsd_leak_note() {
+# fseventsd_mem_mb — prints "<pid> <mem_mb>" for the running fseventsd, nothing when there is none or top is unreadable.
+fseventsd_mem_mb() {
   local pid line mem_mb
   pid=$("${PGREP_BIN:-/usr/bin/pgrep}" -x fseventsd 2>/dev/null | "${AWK_BIN:-/usr/bin/awk}" 'NR==1') || pid=""
   [[ -n "$pid" ]] || return 0
@@ -21,6 +22,14 @@ fseventsd_leak_note() {
       if (u == "G") n *= 1024; else if (u == "K") n /= 1024; else if (u == "B") n /= 1048576
       else if (u != "M") n = 0
       printf "%d", n }') || mem_mb=0
+  echo "$pid $mem_mb"
+}
+
+fseventsd_leak_note() {
+  local pm mem_mb
+  pm=$(fseventsd_mem_mb) || pm=""
+  [[ -n "$pm" ]] || return 0
+  mem_mb=${pm#* }
   (( mem_mb > ${FSEVENTSD_MAX_MB:-10240} )) || return 0
-  echo "fseventsd holds $(( mem_mb / 1024 ))G (leak; restart: sudo killall fseventsd, launchctl kickstart is refused by SIP)"
+  echo "fseventsd holds $(( mem_mb / 1024 ))G (leak; restart: sudo killall fseventsd, launchctl kickstart is refused by SIP; the daily com.jkrumm.fseventsd-watch job restarts it past 1.5G)"
 }

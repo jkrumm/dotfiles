@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.fseventsd-watch</string>
+  <!-- Daily restart of a leaking fseventsd (memory past 1.5 GB, or CPU at 150 % for 10 min). The restart is
+       `sudo -n killall fseventsd` through ONE sudoers rule (`make fseventsd-sudoers`, run once through
+       ask-human); without the rule the job logs that and exits 0. See scripts/fseventsd-watch.sh. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.fseventsd-watch</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--timeout</string><string>900</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/fseventsd-watch.sh</string>
+  </array>
+  <!-- --timeout 900: the CPU rule samples for up to 10 min, then one killall. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>5</integer>
+    <key>Minute</key><integer>10</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/fseventsd-watch.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/fseventsd-watch.log</string>
+</dict>
+</plist>

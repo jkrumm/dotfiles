@@ -7,13 +7,14 @@ one-line gotchas live in `AGENTS.md`.
 
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent, wrapped in `jobrun` (below), and pushes **three** Uptime Kuma
-monitors. `MacMini Dev Host - Push` is the composite, covering **nineteen**
-components:
+monitors. `MacMini Dev Host - Push` is the **liveness** monitor: it says the mini is reachable and its core is alive,
+never "healthy" and never "slow" (next section). The **eighteen** components below (sshd moved to the liveness phase) grade the host's health and ride
+a second push:
 
 | Component | Checks |
 |-|-|
 | tailscale | daemon state + node-key expiry days |
-| sshd | listener present |
+| sshd | listener present (graded in the liveness phase, not repeated here) |
 | core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh`): `scripts/lib/core-up.sh` (the default socket answers AND a launchd-born core exists, `herdr-core --hc-launchd` with parent pid 1), then `hc server status` — **FAIL** when `core_up` is false (message = why + fix; a core that answers without being launchd-born is a stray, attributed to sshd with no keychain) or `hc` does not answer, **WARN** when `scripts/hc-responsible.py` finds the core or a holder not attributed to `Herdr Core.app` (old Cellar holders stay until their terminals end) or the other machine's core version differs (`hc machine ls`, else `ssh <peer-host> hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: `core_up` (bare socket connect + `ps`) comes first, because any `hc` call auto-starts a stray core; `make herdr-core-test` |
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
@@ -29,7 +30,7 @@ components:
 | obsidian | CLI answers (i.e. the app is running) |
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
-| jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL (job failures reach ntfy topic `alerts` through `jobs-grade --ntfy`); a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |
+| jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL. A job not ok for 2 consecutive grades is filed as a **signal on its owner repo** through the factory (`jobs-grade --report`, below), not posted to ntfy; a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |
 | quota | both Claude accounts from the picker's cache (`claude-account usage --json`; falls back to `agw quota`), appended (`quota iu 5h 8% · 7d 88% \| me 5h 3% · 7d 12%`); **WARN** at 5 h ≥ 90 % on the interactive account, or a sample older than 6 h |
 
 A component exits 0 (healthy), 2 (WARN — named in the msg, no streak, never a
@@ -40,6 +41,37 @@ page) or anything else (FAIL — subject to the boot grace and streak rules belo
 | `make devhost-health-setup` | Install the agent. Refuses unless the push URL exists, and prints the runbook to create it. |
 | `make devhost-health-check` | Run once, print per-component status. |
 | `make devhost-health-teardown` | Unload + remove. |
+
+### Liveness first, detail second (issue 870)
+
+`MacMini Dev Host - Push` paged DOWN nine times in 48 h (2026-11-10..12) and not once because the mini was dead: each time the
+host was swap-thrashing (swapouts 5 GB per 300 s, load 200+, fseventsd at 260 % CPU) and the slow components (`check_core` 40 s,
+the factory relay 20 s, the spent budget) delayed or lost the single push that used to sit at the END of the run. The monitor
+now means *the mini is unreachable or its core is dead*. The run is ordered:
+
+1. **Dead-machine checks**, each bounded at `DEVHOST_LIVENESS_STEP_TIMEOUT` (5 s, ~15 s in all): tailnet `Running` (from the
+   snapshot, itself bounded at 5 s), sshd listening, herdr-core socket answering (`core_up`, a bare connect plus `ps`; no
+   `hc` call).
+2. **The liveness push, at once.** `up` with the check notes, or `down` (`dead machine: …`) when a check *definitely* fails.
+   Transient tolerance is unchanged (`DEVHOST_TRANSIENT_FAILS` runs in a row, never inside the boot grace). A check that
+   merely **timed out** is "slow, not proven dead": it stays `up` as WARN text until `DEVHOST_LIVENESS_TIMEOUT_STREAK` (6)
+   timeouts in a row. Measured by the test suite: the liveness push lands about 1 s after the start while a component
+   hangs for 6 s.
+3. **Side monitors**, then the **slow components** (the nineteen), unchanged and still bounded and budgeted.
+4. **The detail push.** The main monitor gets a second `up` with the full summary: a component FAIL is WARN text there and
+   never turns it DOWN, and a liveness DOWN is never overwritten. The component verdict goes to the optional **detail
+   monitor** (`MacMini Dev Host Detail - Push`, URL file `~/.config/uptime-kuma/devhost-detail-push-url`, opt-in like collie:
+   no file, no push): its DOWN is what the factory door routes to a lead, so a full disk or a dead login reaches a
+   repo, not the owner's phone. The monitor is made in homelab (`make uk-sync`); the file is written once the monitor exists.
+
+### Job failures reach a lead, not the owner (`jobs-grade --report`)
+
+`jobs-grade --summary --report` (run in the `jobs` component) replaced `--ntfy`. A job not ok for **2 consecutive grades**
+(the heartbeat grades every 5 min) files `factory signal file --from agent:dotfiles --repo <owner>` with one stable title per
+job (`Background job <label> needs a fix`, so a repeat amends the same item) and the run tail in the text. A job is reported
+**at most once per 24 h**, so a flapping job costs one signal a day; recovery sends nothing. ntfy topic `alerts` is only
+the fallback when `factory` cannot be reached, at priority 3, also at most once a day per job, and the factory is retried
+every tick. State: `~/.local/state/jobs-grade/report.json` (`JOBS_GRADE_REPORT_STATE`).
 
 **One hung tool fails only its own component.** On 2026-11-06 `obsidian version` hung
 ~28 h inside the script; launchd never starts a second instance of a running job, so the
@@ -69,12 +101,11 @@ one pusher behind three monitors froze and all three went DOWN. Now:
   composite loop, and each component gets at most the budget that is left. Once it is spent the remaining components are not run: each contributes
   `FAIL: <component> not run (heartbeat budget spent)` through the normal grading, so the
   composite push is always reached. Side monitors: `DEVHOST_SIDE_MONITOR_TIMEOUT` (20 s).
-- **Order:** the three side monitors (collie, factory, secrets freshness) run and push
-  **first**, each independently, then the composite loop, then the composite push. A composite
-  hang can no longer starve them.
+- **Order:** the liveness push first (above), then the three side monitors (collie, factory, secrets freshness), each
+  independently, then the component loop, then the detail push. A component hang can starve neither.
 - **Under `jobrun`** (`--every 300 --timeout 270`, owner `dotfiles`; state
   `~/.local/state/jobs/com.jkrumm.devhost-health.json`, removed by `make devhost-health-teardown`):
-  a non-zero exit is a recorded job failure that `jobs-grade --ntfy` alerts. So the script exits
+  a non-zero exit is a recorded job failure that `jobs-grade --report` files as a signal on this repo. So the script exits
   **0 whenever every Kuma push was delivered** (a DOWN verdict is a delivered state, and Kuma
   alerts on it) and **1 only when a push failed or no push URL resolved**.
 - `DEVHOST_COMPONENTS` replaces the component list (space-separated function names); it exists

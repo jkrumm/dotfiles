@@ -9,7 +9,8 @@
        Push rather than probe: the ACL has no tag:homelab → tag:mac grant, so
        Uptime Kuma cannot reach the mini. See scripts/devhost-health-check.sh.
        Runs under jobrun: the script exits non-zero only when a Kuma push was not
-       delivered, and that is a recorded job failure graded by jobs-grade (ntfy). -->
+       delivered, and that is a recorded job failure graded by jobs-grade (a signal on dotfiles).
+       The liveness push goes out FIRST (~15 s after start); the slow components follow. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/.local/bin/jobrun</string>
@@ -31,7 +32,7 @@
        (600s is the paired value) so a single skipped run — laptop lid, a slow
        boot, a Tailscale reconnect — does not page on its own. The jobrun timeout
        (270) stays under the interval; the script's own bounds (per-component
-       40 s, composite budget 150 s) keep a hung tool from ever reaching it. -->
+       40 s, composite budget 200 s) keep a hung tool from ever reaching it, and none of them delays the liveness push. -->
   <key>StartInterval</key><integer>300</integer>
   <!-- Fire on load so a reboot re-establishes the heartbeat immediately rather
        than leaving a 5-minute hole that reads as an outage. -->

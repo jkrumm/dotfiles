@@ -17,10 +17,13 @@
     <string>com.jkrumm.log-rotate</string>
     <string>--owner</string><string>dotfiles</string>
     <string>--every</string><string>900</string>
-    <string>--timeout</string><string>660</string>
+    <string>--timeout</string><string>840</string>
     <string>--</string>
     <string>__DOTFILES_DIR__/scripts/log-rotate.sh</string>
   </array>
+  <!-- 840 s, was 660: under load the Chrome clone sweep outlived 660 s (rc=124, issue 870). The script now bounds
+       itself (background priority, lsof 90 s, removal budget 300 s from start); this deadline is only the hard stop
+       for one batch that outlives that, and stays under the 900 s interval. -->
   <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
        PATH, so bun's dir must be on it. The wrapped script keeps its own PATH setup. -->
   <key>EnvironmentVariables</key>
