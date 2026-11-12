@@ -110,6 +110,7 @@ setup:
 	@$(MAKE) --no-print-directory claude-accounts-keepalive-setup
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
+	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
 	@$(MAKE) --no-print-directory hc-events-setup
