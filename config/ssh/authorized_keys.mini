@@ -15,8 +15,13 @@
 # agent/X11/user-rc stay off. `pty` keeps interactive shells, `port-forwarding`
 # keeps the -L tunnels (db-tunnel, dev ports). Exec, scp/rsync, ControlMaster and
 # herdr-core's `connect` need nothing more. No `from=`: source restriction is the
-# tailnet ACL's job (only tag:mac reaches tcp:22), and a Tailscale IP must not
+# tailnet ACL's job (tag:mac, and tag:phone for the line below, reach tcp:22), and a Tailscale IP must not
 # enter git.
 # An install is append-if-missing: replace the old bare line by hand when this
 # one changes (the old unrestricted line would otherwise sit beside it).
 restrict,pty,port-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFV6VLkwTt7YVwApTOgd7bMOIa1+F8Fk1jftN0sSMOsG macbook->mini
+
+# iPhone -> mini — the Herdr phone app's key (generated on the phone, private half in its
+# iOS Keychain). `restrict,pty`: a shell and herdr-core's connect, no forwarding of any
+# kind. Reached through the tag:phone -> tag:devhost tcp:22 grant (dotfiles-private).
+restrict,pty ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHF+lTrT7v78ma4daC7EAkLJtstz0lM/l+r7ZNFwrO2L iphone-herdr->mini
