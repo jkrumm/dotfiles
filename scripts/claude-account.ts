@@ -24,7 +24,7 @@ import { homedir, hostname } from "node:os"
 import { dirname, join } from "node:path"
 import { type HealthRow, type PendingAsk, gradeMachine, healthSignature, worst } from "./lib/claude-health.ts"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, type SpawnResult, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
   hasSessionLimit, mergeSample, newestAge, planTier, pick, pickLine, rank, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL, withoutSessionWindows,
 } from "./lib/claude-accounts.ts"
 
@@ -71,11 +71,30 @@ function readClaudeJson(reg: Registry, cache: Cache): Cache {
 
 const claudeBin = () => Bun.which("claude") ?? join(homedir(), ".local", "bin", "claude")
 
-const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
-  const r = spawnSync(cmd, args, { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: timeoutMs })
-  const err = r.error as (Error & { code?: string }) | undefined
-  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: err ? { code: err.code, message: err.message } : undefined }
+/**
+ * `spawnSync` with a deadline that actually returns. Node's `timeout` kills only the direct child; a helper it
+ * spawned (claude's, ssh's mux master) keeps the capture pipe open, so `spawnSync` waits for it, unbounded: the
+ * keepalive's 2026-11-12 09:58 run sat 900 s on one such call until jobrun killed it. Here the command runs in its
+ * own process group under a perl alarm that KILLs the whole group, so the pipes close with it. Exit 124 = deadline,
+ * 127 = the command did not start; both come back as `error` like a plain spawnSync would report them.
+ * perl because macOS ships no timeout(1) (same wrapper as claude_bounded in scripts/lib/claude-auth-check.sh).
+ */
+const BOUND_PERL = `my $s = shift; my $pid = fork; defined $pid or exit 125;
+if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV or exit 127 }
+$SIG{ALRM} = sub { kill "KILL", -$pid; waitpid $pid, 0; exit 124 };
+alarm $s; waitpid $pid, 0;
+exit($? & 127 ? 128 + ($? & 127) : $? >> 8);`
+export function boundedSpawnSync(cmd: string, args: string[], o: { env?: Record<string, string | undefined>; timeoutMs: number }): SpawnResult {
+  const secs = Math.max(1, Math.ceil(o.timeoutMs / 1000))
+  const r = spawnSync("/usr/bin/perl", ["-e", BOUND_PERL, String(secs), cmd, ...args], { env: o.env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: o.timeoutMs + 5_000, killSignal: "SIGKILL" })
+  const out = { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }
+  if (r.error) return { ...out, error: { code: (r.error as Error & { code?: string }).code, message: r.error.message } } // the wrapper itself failed or overran
+  if (r.status === 124) return { ...out, status: null, error: { code: "ETIMEDOUT", message: `${cmd} timed out after ${secs}s (process group killed)` } }
+  if (r.status === 127 && !out.stdout) return { ...out, status: null, error: { code: "ENOENT", message: `spawn ${cmd} failed to start` } }
+  return out
 }
+
+const spawner: Spawner = (cmd, args, { env, timeoutMs }) => boundedSpawnSync(cmd, args, { env, timeoutMs })
 
 const httpGet: HttpGet = async (url, headers, timeoutMs) => {
   const r = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(timeoutMs) })
@@ -188,7 +207,7 @@ const PEER_USAGE_TIMEOUT_MS = 20_000
 
 /** The peer's `claude-account usage --json` (a pure file read there: it never refreshes, so no loop). Throws when unreachable or garbled. */
 function fetchPeerUsage(): unknown {
-  const r = spawnSync(sshBin(), [...SSH_OPTS, ...peerMachine().peer.ssh, peerCmd(peerMachine().peer.name, "usage", `${HOME_BIN} usage --json`)], { encoding: "utf8", timeout: PEER_USAGE_TIMEOUT_MS })
+  const r = boundedSpawnSync(sshBin(), [...SSH_OPTS, ...peerMachine().peer.ssh, peerCmd(peerMachine().peer.name, "usage", `${HOME_BIN} usage --json`)], { timeoutMs: PEER_USAGE_TIMEOUT_MS })
   if (r.error || r.status !== 0) throw new Error(`ssh ${peerMachine().peer.ssh.join(" ")} failed (${r.error?.message ?? `rc=${r.status}`})`)
   return JSON.parse(r.stdout)
 }

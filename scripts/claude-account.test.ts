@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { HOME_BIN, PEER_SCRIPT } from "./claude-account.ts"
+import { HOME_BIN, PEER_SCRIPT, boundedSpawnSync } from "./claude-account.ts"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
   mergeSample, newestAge, pick, rank, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
@@ -1624,5 +1624,23 @@ describe("rank: the picker's order of every eligible account", () => {
     expect(r[0].account).toBe("iu")
     expect(r.some((e) => e.reason === "interactive-fallback")).toBe(false)
     expect(order(cache3(sample(10, 96), sample(10, 96), sample(10, 96)), "interactive")).toEqual([])
+  })
+})
+
+describe("boundedSpawnSync", () => {
+  test("a helper holding the capture pipe is killed with the group: returns at the deadline, ETIMEDOUT", () => {
+    const n = 20000 + Math.floor(Math.random() * 9000) // unique, so no other process (or this run's own command line) matches below
+    const t0 = Date.now()
+    const r = boundedSpawnSync("/bin/sh", ["-c", `sleep ${n} & wait`], { timeoutMs: 1000 })
+    expect(Date.now() - t0).toBeLessThan(8000)
+    expect(r.error?.code).toBe("ETIMEDOUT")
+    expect(r.status).toBeNull()
+    const left = Bun.spawnSync(["/bin/sh", "-c", `/bin/ps -axo command | /usr/bin/grep -c '[s]leep ${n}' || true`]).stdout.toString().trim()
+    expect(left).toBe("0")
+  })
+  test("passes status and output through, and reports a missing binary as ENOENT", () => {
+    const ok = boundedSpawnSync("/bin/sh", ["-c", "echo hi; echo err >&2; exit 3"], { timeoutMs: 5000 })
+    expect(ok).toEqual({ status: 3, stdout: "hi\n", stderr: "err\n" })
+    expect(boundedSpawnSync("/nonexistent/claude", ["auth", "status"], { timeoutMs: 5000 }).error?.code).toBe("ENOENT")
   })
 })
