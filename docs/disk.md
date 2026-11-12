@@ -72,6 +72,24 @@ volume holds ~110 GiB free. Nothing leaks: confirm with
 or `.building-*` outlives its round (> 3 h, a crashed build leaves it). The Beszel rule is
 software-factory's (`config/infra.json`), not this repo's.
 
+Issue 909 (2026-11-12, 90.2-90.4% for ~25 min) was the same transient with less headroom: the
+`1300Z` build held 23 GB of ~24 GB, `products/` read 73 GB (three rounds), and the commit at
+~16:30 brought used to 88% (120 GiB free). The line is now crossed at the peak because the rest
+of the volume grew since 2026-10-20 (re-measured the same day, `du -xk`, GiB):
+
+| Path | GiB | Was | Note |
+|-|-|-|-|
+| `~/.colima/_lima/_disks/colima` | 91 | 78 (whole `~/.colima`) | main docker VM, swept daily |
+| `~/.colima/_lima/_disks/colima-teamchat` | 30 | n/a | teamchat VM data disk, running, owner-timed restart pending |
+| `~/.colima/_lima/_disks/colima-athena-poc` | 4.7 | n/a | no `in_use_by`, last written 2026-10-31: orphan PoC disk, ask owner before `colima delete --data` |
+| `~/Library` | 66 | 36 | `Application Support` 20 (Chrome 9.8), `Developer` 18 (CoreSimulator 11, Xcode 6.6), `Caches` 14 |
+| `~/.claude` | 27 | 16 | transcripts (`projects/`) |
+| `$TMPDIR` / `/private/tmp` | 23 / 21 | 17 / 12 | |
+
+A page with `.building-*` present and `products/` near 73 GB needs no action; a repeat at the
+same peak means the baseline above, not weatherorb, needs trimming (CoreSimulator runtimes
+and the orphan PoC disk are the cheap first cuts, both owner calls).
+
 ## What lives on the HomeLab
 
 The 2026-10 sweep moved `~/Movies/{Squid Game,YT Saver}`, `~/Downloads/mindsera_memos` and `~/SY`
