@@ -52,11 +52,25 @@ the Data volume.
 | Job | Cadence | Bounds |
 |-|-|-|
 | `com.jkrumm.disk-sweep` (`scripts/disk-sweep.sh`) | 04:40 daily | Docker build cache LRU-capped at 15 GB and dangling images removed (never tagged images, volumes or containers), `colima ssh -- sudo fstrim -a`, `$TMPDIR` top-level entries > 3 days that nothing holds open, `uv cache prune` (probes the cache lock for 20 s; a lock held by another uv process logs `uv prune skipped: cache lock held by pid N` and is not a failure) and `brew cleanup -s`, npm and bun caches over 3 / 5 GB, unavailable simulators |
-| `com.jkrumm.log-rotate` | every 15 min | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 2 h (one `lsof`, background priority, 4 rm workers, at most 1500 removals or 10 min per run). Agents launch ~300-600 Chrome/h; the 24 h gate at 400/h grew the stock to 14k clones (a clone is mostly shared APFS blocks, ~0.5 MB real, so the stock is a load and inode burden more than a disk one; the 16-49 GB/h Beszel page of issue 839 recovered on its own to 86.6% within the hour, consistent with the weatherorb round-build transient of ~22 GB above; the writer was not caught in the act) |
+| `com.jkrumm.log-rotate` | every 15 min | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 2 h (one `lsof`, background priority, 4 rm workers, at most 1500 removals or 10 min per run). Agents launch ~300-600 Chrome/h; the 24 h gate at 400/h grew the stock to 14k clones (a clone is mostly shared APFS blocks, ~0.5 MB real, so the stock is a load and inode burden more than a disk one; the 16-49 GB/h Beszel page of issue 839 recovered on its own to 86.6% within the hour, consistent with the weatherorb round-build transient of ~22 GB above; the writer was not caught in the act, see "Round-build page" below) |
 
 Each step writes one `free space +N MB` line to `~/Library/Logs/disk-sweep.log`. Run it once
 with `make disk-sweep-run`. That target is also the sanctioned route for the docker prunes,
 because the `docker-makefile` hook blocks raw docker in this repo.
+
+## Round-build page (Beszel "disk filling fast")
+
+Caught in the act on 2026-11-12 (issue 864, 87.7%, "+13.9 GB/h"): weatherorb's `worker-round`
+writes the next blend round to `products/weatherorb_blend/.building-<round_id>/` (hidden, so a
+plain `ls` misses it) while `current` and `previous` (~24.4 GB each) are still on disk, so a
+round in flight is three rounds, ~73 GB, for the ~2 h a build runs. At commit the oldest is
+removed and the stock falls back to ~49 GB. The page fires every 3 h round with a growth slope
+over 0.5 GB/h and ~87-89% used; the peak stays under the 90% line only while the rest of the
+volume holds ~110 GiB free. Nothing leaks: confirm with
+`du -xsk ~/SourceRoot/weatherorb/products/weatherorb_blend/.building-*` (grows ~7 MB/s) and the
+`free space` drop after the round commits. Act only when used stays above 90% after a commit
+or `.building-*` outlives its round (> 3 h, a crashed build leaves it). The Beszel rule is
+software-factory's (`config/infra.json`), not this repo's.
 
 ## What lives on the HomeLab
 
