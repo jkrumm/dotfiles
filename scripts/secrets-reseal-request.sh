@@ -173,7 +173,24 @@ cmd_request() {
   for ((i = 0; i < n; i++)); do text+=$'\n'"  ${MISSING[$i]}  (account ${MISSING_ACCT[$i]})"; done
   text+=$'\n'"1Password must be signed in on the MacBook for: $accts. If an account is unreachable the seal still delivers the reachable ones and names the one to sign in."
 
-  local cmd="git -C ~/SourceRoot/dotfiles-private pull --ff-only && cd ~/SourceRoot/dotfiles && hc run --timeout 900 'make secrets-seed-new'"
+  # What runs on the MacBook. The seal reads the refs from the MacBook's OWN checkout of
+  # dotfiles-private, so it is pulled first — over the 1Password ssh agent (a non-login
+  # context has none of its own: the first live request died on "Permission denied
+  # (publickey)", 2026-11-13). A failed pull is not fatal by itself; what is fatal is a
+  # checkout that still lacks a missing ref, because the seal would then read nothing and
+  # report success (the 2026-09-07 failure). Each missing ref is asserted before sealing.
+  local cmd guard="" listfile qref
+  # shellcheck disable=SC2016  # $HOME must expand on the MacBook, not here
+  cmd='export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"; '
+  cmd+="git -C ~/SourceRoot/dotfiles-private pull --ff-only || echo '! pull failed — sealing from the checkout as it is'; "
+  for ((i = 0; i < n; i++)); do
+    listfile=headless.refs
+    [[ "${MISSING_ACCT[$i]}" == "$IU_ACCOUNT" ]] && listfile=headless.iu.refs
+    printf -v qref '%q' "${MISSING[$i]}"
+    guard+="sed 's/^[[:space:]]*//;s/[[:space:]]*\$//' ~/SourceRoot/dotfiles-private/$listfile | grep -qxF -- $qref || { echo \"✗ \"$qref\" is not in this Mac's dotfiles-private checkout (pull failed?) — nothing sealed\"; exit 1; }; "
+  done
+  cmd+="$guard"
+  cmd+="cd ~/SourceRoot/dotfiles && hc run --timeout 900 'make secrets-seed-new'"
   "$ASK_HUMAN" ask "$text" --cmd "$cmd" --key "$key" --check "bash \"$CHECK_SCRIPT\" needed" || true
   printf '%s\n' "$key" > "$LAST_KEY_FILE"
   echo "requested $what (key $key)"
