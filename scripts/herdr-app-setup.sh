@@ -9,7 +9,7 @@ DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 MODS=(jk-spaces jk-status jk-details jk-keys jk-tabs jk-new jk-pane)
-# jk-glance is the factory's own client piece: linked from the software-factory checkout, not carried here.
+# jk-glance is the factory's own client piece: linked from the software-factory checkout, or (no checkout) copied from the mini.
 FACTORY_DIR="${FACTORY_DIR:-$HOME/SourceRoot/software-factory}"
 GLANCE_SRC="$FACTORY_DIR/integrations/herdr/jk-glance"
 
@@ -35,6 +35,15 @@ link() { # src dst
 
 for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
 # link replaces a symlink that points elsewhere (the old dotfiles copy included).
+# No software-factory checkout here (the MacBook, a thin client): copy the mod from the dev host, refreshed on every run.
+# A copy, not a link into a repo: it is as current as the last `make herdr-app-setup`.
+if [ ! -d "$GLANCE_SRC" ] && [ -z "${HERDR_NO_MINI_GLANCE:-}" ] && ssh -o BatchMode=yes -o ConnectTimeout=5 mini true 2>/dev/null; then
+  GLANCE_COPY="$HOME/.local/share/herdr-app/jk-glance"
+  mkdir -p "$GLANCE_COPY"
+  if rsync -a --delete "mini:SourceRoot/software-factory/integrations/herdr/jk-glance/" "$GLANCE_COPY/"; then
+    GLANCE_SRC="$GLANCE_COPY"; say "✓ jk-glance copied from the mini"
+  fi
+fi
 if [ -d "$GLANCE_SRC" ]; then
   link "$GLANCE_SRC" "$HOME_DIR/mods/jk-glance"; MODS+=(jk-glance)
 else
