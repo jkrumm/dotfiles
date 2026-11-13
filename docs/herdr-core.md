@@ -319,44 +319,63 @@ rewrite those links).
 - `make op-tcc-probe` (MacBook): `op` in a Herdr terminal raises no AppData dialog; re-run after every core update.
 
 **Updates.** `make herdr-core-update`, on each machine, runs `scripts/herdr-core-preflight.sh` first and then the official
-`hc update` (run again when hc asks). Preflight, read-only: latest vs installed (equal = exit 0, nothing to do); the release
-notes; the tarball's SHA-256 and its `Herdr Core.app` designated requirement against the installed bundle's; the live
-agents. Afterwards it checks `hc --version`, `core_up`, the terminal count, responsibility, that the requirement did not
-change, and runs `make tcc-probe`.
+`hc update` (run again when hc asks). Preflight, read-only: latest vs installed (equal = exit 0, nothing to do); the
+changelog headlines between the two (`scripts/herdr-changelog.sh` prints them in full, core and app); the tarball's SHA-256
+and its `Herdr Core.app` designated requirement against the installed bundle's; the live agents. Afterwards it checks
+`hc --version`, `core_up`, the terminal count, responsibility, that the requirement did not change, and runs `make tcc-probe`.
 
-*Can a running core be updated with agents live?* Mechanically yes: `hc update` swaps the bundle and restarts `serve`; the
-holder (`herdr-core hold`) is a separate process and keeps every terminal (`hc update --help`: "terminals keep running").
-What is not guaranteed is the **program inside** a terminal: a reporter lost 15 Claude sessions on a remote machine to an
-app-triggered 0.1.14 to 0.1.18 update (herdr-core #133, open); upstream could not reproduce it on Linux. We have no
-first-hand bundle-to-bundle data yet (the 2026-11-05 resumes came from the Homebrew cutover). So the preflight refuses
-while any terminal has `status: working` (a turn in flight; `FORCE=1` is the owner's call), and `hc-resume` types `claude
---resume <id>` into login shells that remain, only where the foreground is positively a login shell. The invoking
-session counts too: run it from a plain terminal, not from the agent being updated. 0.1.19 changes nothing for existing
-terminals ("opened before this update keep the old behavior"), so there is no reason to recreate them.
+**Measured on 0.1.18 to 0.1.21 (2026-11-13, mini, 39 terminals, 18 Claude sessions idle):**
+- The update itself kept every program (its own `make` kept running under the old holder). Upstream: "Updates restart the
+  core while holders keep the terminals running"; `hc server restart` "programs keep running".
+- The restarted core came up as a **stray** (`herdr-core serve` under `herdr-core connect` under sshd): the MacBook core's
+  machine link reconnects at once over a persistent ssh master and wins against launchd (herdr-core #12). `core_up` FAILs.
+- **`hc server stop` is not a repair: it replaces the holder, every terminal comes back as a shell and every program ends**
+  (18 sessions; `hc-resume` resumed all 18 within seconds, a 295-turn session drew its screen after about three minutes).
+- **`hc server restart` is:** all 18 programs kept, holder unchanged, the new core came up launchd-born. It runs as
+  `hc --hc-launchd` (not `herdr-core --hc-launchd`), which `core_up` and `hc-responsible.py` now accept (they matched the
+  binary name and called a healthy core a stray). The target therefore repairs a stray with `hc server restart`. Untested:
+  whether that also cures a core that was born as a stray (the test ran from a launchd-born core).
+- Resumed sessions come back idle at their prompt, they do not carry on the turn.
+- Run the mini's update from a core terminal on the mini (`hc run --on mini --no-parent --bg --name core-update --cwd <repo>
+  "make herdr-core-update"`, then `hc read`), never over ssh. The update's own terminal outlives the restart.
 
-*The mini's update meets a race.* `hc update` ends the core; the MacBook core's machine link (`ssh mini herdr-core connect`,
-reconnecting at once over a persistent ssh master) wins against launchd and starts the replacement under sshd: a stray
-(measured 2026-11-13, 0.1.18 to 0.1.21; `core_up` fails, no keychain; hc-resume refuses to act). Measured on the same run:
-the update itself kept every program (the update's own `make` kept running under the old holder), but the repair did not:
-**`hc server stop` replaces the holder, every terminal comes back as a shell and every program ends** (18 Claude sessions;
-`hc-resume` typed `claude --resume` into all 18 within seconds). Docs said "stop keeps every terminal": true for the
-terminals, not for what runs in them. The target therefore repairs a stray once, only after the preflight proved nothing is
-mid-turn; if the link wins again, repeat by hand. Whether a plain SIGTERM of the stray `serve` (holder untouched) would
-keep the programs is untested. A resumed session needs minutes to draw (a 295-turn session: the screen shows only the typed
-command for about three minutes, then the prompt), and it comes back idle at its prompt, it does not carry on the turn.
-The update's own terminal ends with the core restart, so read the result with `hc read`.
+**Can a running core be updated with agents live?** Yes. Terminals and programs survive (above); the open risk is upstream
+#133 (a reporter lost 15 sessions on a remote machine; upstream could not reproduce). The preflight refuses while any
+terminal is `working` (`FORCE=1` is the owner's call), and counts the invoking session. 0.1.19 and later keep the core's
+own environment across updates and restarts, **except the update to 0.1.19 or later itself, which takes the updater's
+environment once**: run that one from a plain terminal outside Herdr and Claude, then `hc server restart --fresh` (0.1.20,
+run outside Herdr) cures an inherited environment without ending programs, where `make herdr-core-clean-restart` ends them.
 
-*The app as a trigger.* Upstream says the app (hourly check, no off switch, herdr-app #207) also updates linked cores on its
-first start after an app update. Unconfirmed here: the MacBook app went 0.1.13 to 0.1.15 and neither core moved. Update the
-cores yourself in a quiet window anyway. A staged app update (`~/Applications/Herdr.app.new.noindex`) applies on the next app start.
+**Full Disk Access.** The grant is keyed on the bundle path plus the designated requirement (`identifier "dev.herdr.core"`,
+team `2W9652Q7QR`, Developer ID). The path is fixed and the swap in place, so while the requirement is unchanged the grant
+stays and nothing is asked again: verified identical for 0.1.18, 0.1.19 and 0.1.21 before updating (the preflight compares
+it every time and exits 4 when it differs), and `make tcc-probe` passed on the mini after 0.1.21. Local Network and
+microphone prompts appear once per core app; AppData prompts stay session-scoped on macOS 26 and may still appear: answer Local
+Network/microphone, never "Allow" on AppData as a fix. There is no unattended update job: the Herdr app also updates cores,
+and a second updater would race it.
 
-*Full Disk Access.* The grant is keyed on the bundle path plus the designated requirement
-(`identifier "dev.herdr.core"`, team `2W9652Q7QR`, Developer ID). The path is fixed and the swap is in place, so as long
-as the requirement is unchanged the grant stays and nothing is asked again; verified identical for 0.1.18 and 0.1.19
-before the update (2026-11-09). The preflight exits 4 when it differs (re-grant at the machine's screen), and the post-check
-plus `make tcc-probe` prove it live. Local Network, microphone and AppData prompts stay session-scoped on macOS 26 and may
-still appear; answer Local Network/microphone, never "Allow" on AppData as a fix. There is no unattended update job: a
-second updater would race the app.
+**The app.** It checks hourly and has no off switch (herdr-app #207). Upstream says its first start after an app update also
+updates linked cores; not observed here (the MacBook app went 0.1.13 to 0.1.15 and neither core moved). A staged update sits
+in `~/Applications/Herdr.app.new.noindex` and applies on the next app start; the app quits once for it.
+
+**Reading the changelogs** (`scripts/herdr-changelog.sh`; upstream `herdrdev/herdr-core` and `herdrdev/herdr-app`,
+`CHANGELOG.md` on `master`). Triage every release between installed and latest into three piles:
+1. **Needs an action from us.** Examples found 2026-11-13: app 0.1.15 / core 0.1.20, "terminals opened before core 0.1.20 can
+   still end when Herdr quits": after the MacBook core is at 0.1.20 or newer, close and reopen the old terminals once or
+   restart the Mac; core 0.1.18 Local Network and microphone prompts at the screen; app 0.1.13 Find needs
+   `terminal:cmd-f terminal.search` in keys.json (`scripts/herdr-app-keys.sh` binds it); app 0.1.14 mod API (top of a mod's
+   file runs once and is shared by all copies: per-copy state belongs in the class; our `config/herdr-app/mods/jk-*`).
+2. **Fixes something we hit.** 0.1.20: the core starts apart from the app also after login or reboot (the MacBook's
+   force-quit-ends-terminals path), a command during a core restart no longer fails with "core did not start"; 0.1.19: a slow
+   core gets 15 s to start; 0.1.21: a failing ssh login backs off (2, 5, then every 10 minutes) instead of hammering the
+   mini, `hc machine login` reconnects at once; app 0.1.14: mods no longer all break after a while ("This view could not be
+   re-rendered"), `herdr-app check` no longer adds a second Dock icon whose quit ends every terminal.
+3. **Worth adopting.** Config, not code: core `config.toml` `restore_screen = true` (0.1.21: a kept terminal shows its last
+   screen after a reboot, which helps reading a session `hc-resume` is about to resume; off by default, not set here yet),
+   `draft_wait` (0.1.20: an agent message waits for an unfinished human draft, default at most a minute; `rd say` and
+   `hc send` into a terminal someone is typing in), `hc wait --children`, `hc wait` exit codes; app 0.1.15 drag a screenshot
+   or file into a terminal (reaches Claude Code), a layout can name its toast mod, rows as tall as Ghostty.
+Record the result in the update's commit message or a doc line; anything adopted is a tracked change, never a hand edit.
 
 **What breaks it.**
 - A wrapper at `~/.local/bin/{hc,herdr-core}` (the installer and `hc update` rewrite those links).

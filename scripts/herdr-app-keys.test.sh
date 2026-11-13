@@ -13,9 +13,10 @@ BASE='{"global":{"cmd-q":"app.quit","cmd-shift-b":"layout.toggle:board"},"termin
 # 1. fresh: our key added, nothing else touched
 echo "$BASE" > "$T/keys.json"
 "$HERE/herdr-app-keys.sh" "$T" >/dev/null
+expect "binds terminal cmd-f" "$(jq -r '.terminal["cmd-f"]' "$T/keys.json")" "terminal.search"
 expect "binds cmd-e" "$(jq -r '.global["cmd-e"]' "$T/keys.json")" "jk-keys.brain-note"
-expect "other bindings unchanged" "$(jq -c 'del(.global["cmd-e"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .)"
-expect "terminal section unchanged" "$(jq -c .terminal "$T/keys.json")" "$(echo "$BASE" | jq -c .terminal)"
+expect "other bindings unchanged" "$(jq -c 'del(.global["cmd-e"]) | del(.terminal["cmd-f"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .)"
+expect "terminal section keeps its keys" "$(jq -c '.terminal | del(.["cmd-f"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .terminal)"
 
 # 2. idempotent
 cp "$T/keys.json" "$T/once.json"

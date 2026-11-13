@@ -80,8 +80,8 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
      patches and restarts the gateway unpatched. Run it through the
      `hermes-update` skill in an agent in the mini's `hermes-agent` workspace
      (`rd work hermes-agent` + `rd say`); `make patch-check` must end green.
-   - **herdr-core** is its own subsection below (*herdr-core*): not Homebrew,
-     never part of `brew upgrade`. The Herdr app self-updates.
+   - **herdr-core and the Herdr app** are their own subsection below (*herdr-core and the Herdr app*): not Homebrew,
+     never part of `brew upgrade`.
    - **collie:** `make collie-upgrade` (mini). Read the scope it prints;
      unattended needs `COLLIE_UPGRADE_YES=1`. A new pairing rule means
      `collie pair` on the phone.
@@ -104,37 +104,41 @@ tailscale-upgrade [HOST=homelab|vps|mini]` runs one node at a time and proves th
 `docs/tailnet.md` §Updates. Linux auto-update stays on but lags by a week or more, so the daily drift check names a behind server.
 The MacBook and iPhone update through the App Store, which can trail the stable feed.
 
-### herdr-core
+### herdr-core and the Herdr app
 
-Upstream's `Herdr Core.app`, installed by the official installer, **not Homebrew** (no formula; a brew core has no bundle
-identity and `hc update` refuses it). The Homebrew machine procedure is steps 1–7 above and never touches it; `caddy`
-and `tailscale` stay the pins.
+Upstream's `Herdr Core.app` (official installer, **not Homebrew**: a brew core has no bundle identity and `hc update` refuses
+it) and the Herdr app (MacBook, self-updating). `caddy` and `tailscale` stay the pins. Facts, measurements and the changelog
+triage rules: `docs/herdr-core.md` §Updates. Done when both machines report the same `hc --version`, `core_up` is silent,
+`make tcc-probe` passes and every changelog item is in one of the three piles of step 1.
 
-0. **Is there anything to do?** `bash scripts/herdr-core-preflight.sh` prints installed vs latest core (exit 3 = current),
-   the notes, and whether the new bundle keeps the signing requirement. Also compare the Herdr app
-   (`~/Applications/Herdr.app` CFBundleShortVersionString vs `releases.herdr.dev/app/latest.json`); a staged
-   `Herdr.app.new.noindex` applies on the next app start.
-1. **Read the release notes first:** the preflight prints them; the CHANGELOG of herdrdev/herdr-core adds the privacy
-   lines (new prompts: Local Network, microphone, file access) and anything on holders, `serve`, launchd or responsibility.
-2. **Quiet window, not a stop:** an update is possible with agents live (measured 2026-11-13: the update kept every program; the stray repair `hc server stop` ended all of them), and the program
-   inside a terminal may end (upstream herdr-core #133, open). `make herdr-core-update` refuses while any terminal is
-   `working`; wait for idle/done, `FORCE=1` only on the owner's word. Never run it from the session being updated.
-   `hc-resume` then types `claude --resume <id>` into the surviving login shells.
-3. **Update cores yourself, in a quiet window.** Upstream says the app's self-update also updates linked cores (unconfirmed
-   here). `make herdr-core-update` on the mini from a Herdr terminal on the mini (`hc run --on mini --no-parent --bg --name
-   core-update --cwd <repo> "make herdr-core-update"`, then `hc read`), never over ssh; then on the MacBook from a plain
-   terminal. The mini's restarted core can come up as a stray (the MacBook link races launchd): the target repairs it once.
-   It ends with `make tcc-probe`.
-4. **Verify, both machines:** `hc --version` equal; `bash scripts/lib/core-up.sh` silent; `python3 scripts/hc-responsible.py`
-   (old Cellar holders end with their terminals, nothing new); `make op-tcc-probe` (MacBook); the tail of
-   `~/Library/Logs/hc-resume.log` on the mini; `make doctor`.
-5. **An agent never starts a core or opens the app.** A core's environment becomes every terminal's, and `open` passes the
-   caller's: one `open -a Herdr` from a Claude session put `CLAUDE_CODE_CHILD_SESSION` in every terminal ("Transcript saving
-   is off"). `hc-responsible.py` flags it; `make herdr-core-clean-restart` cures it (MacBook, ends the terminals' programs).
-6. **Grants:** Full Disk Access on `Herdr Core.app` survives an update when the designated requirement is unchanged: the
-   preflight compares old and new (exit 4 = re-grant at the machine's screen) and the target re-checks it plus `make tcc-probe`
-   afterwards. New Local Network / microphone prompts are answered at the machine's screen. Never click Allow on an AppData
-   dialog as a fix.
+1. **Changelog triage, before any command.** `bash scripts/herdr-changelog.sh` prints the core and app sections newer than
+   what is installed (`herdrdev/herdr-core` and `herdrdev/herdr-app`, `CHANGELOG.md` on `master`; `latest.json` carries only
+   the newest note). Sort every item into: **needs an action** (reopen terminals, a keys.json or config key to add, a mod API
+   change against `config/herdr-app/mods`, a new macOS prompt), **fixes something we hit**, **worth adopting** (config keys
+   such as `restore_screen`, `draft_wait`; app features). Adopt through a tracked change (`scripts/herdr-app-keys.sh`,
+   `config/`), never a hand edit; say what was left out in one line.
+2. **Preflight.** `bash scripts/herdr-core-preflight.sh`: installed vs latest (exit 3 = current), headlines, the new bundle's
+   signing requirement vs the installed one (exit 4 = Full Disk Access must be re-granted at the screen after the update; it
+   is unchanged for 0.1.18 to 0.1.21), agents mid-turn (exit 5). Compare the app too: `~/Applications/Herdr.app`
+   `CFBundleShortVersionString` vs `releases.herdr.dev/app/latest.json`.
+3. **Quiet window.** An update is possible with agents live: terminals and programs survive (measured 2026-11-13), the open
+   risk is upstream herdr-core #133. `make herdr-core-update` refuses while a terminal is `working`; wait for idle or done,
+   `FORCE=1` only on the owner's word. The invoking session counts: never run it from the session being updated.
+4. **Update.** Mini: from a core terminal on the mini, never over ssh: `hc run --on mini --no-parent --bg --name core-update
+   --cwd <repo> "make herdr-core-update"`, then `hc read mini/<t>`. MacBook: the owner runs it in a plain terminal outside
+   Herdr and Claude (the update to 0.1.19 or later takes the updater's environment once); every program in the MacBook's
+   terminals ends then, there is no `hc-resume` there (`claude --resume`). The mini's restarted core can come up a stray
+   (the MacBook link races launchd): the target repairs it with `hc server restart` (programs keep running). **Never
+   `hc server stop` as a repair: it ends every program.** Update the cores yourself rather than waiting for the app.
+5. **Verify, both machines:** `hc --version` equal; `bash scripts/lib/core-up.sh` silent; `python3 scripts/hc-responsible.py`
+   (core and holders under `Herdr Core.app`, nothing tainted: a tainted environment is cured by `hc server restart --fresh`
+   from a terminal outside Herdr); `make tcc-probe`; `make op-tcc-probe` (MacBook); the tail of `~/Library/Logs/hc-resume.log`
+   on the mini (a resumed session takes minutes to draw, it comes back idle). `make doctor`.
+6. **After a core of 0.1.20 or newer is on the MacBook:** close and reopen older terminals once, or restart the Mac (they
+   can still end when Herdr quits). New Local Network / microphone prompts are answered at the machine's screen, never
+   "Allow" on an AppData dialog as a fix.
+7. **An agent never starts a core or opens the app.** A core's environment becomes every terminal's and `open` passes the
+   caller's (one `open -a Herdr` from Claude put `CLAUDE_CODE_CHILD_SESSION` in every terminal).
 
 ---
 

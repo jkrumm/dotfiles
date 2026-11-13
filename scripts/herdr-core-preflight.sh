@@ -30,7 +30,9 @@ if [ "$installed" = "$latest" ]; then
   echo "  · already current"
   exit 3
 fi
-printf '%s' "$meta" | jq -r '"  notes: " + (.notes | gsub("\n"; "\n         "))'
+# Headlines (the bold items) of every release between the two; the full text and the app: scripts/herdr-changelog.sh.
+echo "  changelog headlines since $installed (full: scripts/herdr-changelog.sh, triage: skills/upgrade-deps herdr-core step 1):"
+bash "$(dirname "$0")/herdr-changelog.sh" core "$installed" 2>/dev/null | grep -E '^## \[|^- \*\*|^- `hc ' | cut -c1-200 | sed 's/^/    /'
 
 # 2. Signing requirement of the new bundle must equal the installed one.
 url=$(printf '%s' "$meta" | jq -r '.targets["macos-aarch64"].url')
