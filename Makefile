@@ -2725,11 +2725,11 @@ herdr-core-update: ## Update this machine's core (official hc update) after the 
 	if printf '%s' "$$out" | grep -qi 'again'; then echo "  · hc asked to run again"; "$$HC" update || { echo "  ✗ second hc update failed"; exit 1; }; fi; \
 	i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do i=$$((i+1)); \
 		if [ $$i -gt 20 ] && [ -z "$$repaired" ] && launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" >/dev/null 2>&1; then \
-			echo "  · the restarted core is a stray (a linked machine's connect won the race against launchd, measured 2026-11-13): $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; \
+			echo "  · the restarted core is a stray (a linked machine's connect won the race against launchd): stopping it ends the programs in every terminal, hc-resume resumes the Claude sessions (nothing was mid-turn, the preflight checked): $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; \
 			"$$HC" server stop >/dev/null 2>&1; launchctl kickstart "gui/$$(id -u)/com.jkrumm.herdr-core"; repaired=1; i=0; \
 		fi; \
 		[ $$i -gt 120 ] && { echo "  ✗ core not up after the update: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; sleep 0.5; done; \
-	[ -z "$$repaired" ] || echo "  ✓ stray stopped (terminals kept) and the launchd core started"; \
+	[ -z "$$repaired" ] || echo "  ✓ stray stopped (terminals kept as shells) and the launchd core started; watch hc-resume.log, a resumed session takes minutes to draw"; \
 	v1=$$("$$HC" --version); n1=$$("$$HC" ls | jq '.terminals | length'); \
 	echo "  after:  $$v1, $$n1 live terminal(s)"; \
 	[ "$$n0" = "$$n1" ] || { echo "  ✗ terminal count changed ($$n0 -> $$n1)"; exit 1; }; \

@@ -336,10 +336,15 @@ terminals ("opened before this update keep the old behavior"), so there is no re
 
 *The mini's update meets a race.* `hc update` ends the core; the MacBook core's machine link (`ssh mini herdr-core connect`,
 reconnecting at once over a persistent ssh master) wins against launchd and starts the replacement under sshd: a stray
-(measured 2026-11-13, 0.1.18 to 0.1.21; `core_up` fails, no keychain; terminals kept, hc-resume refuses to act). The target
-repairs it once (`hc server stop`, `launchctl kickstart gui/<uid>/com.jkrumm.herdr-core`); if the link wins again, repeat by
-hand or run the update while the MacBook is asleep. Programs in the mini's terminals were not touched (39 of 39 kept,
-nothing was working). The update's own terminal ends with the core restart, so read the result with `hc read`.
+(measured 2026-11-13, 0.1.18 to 0.1.21; `core_up` fails, no keychain; hc-resume refuses to act). Measured on the same run:
+the update itself kept every program (the update's own `make` kept running under the old holder), but the repair did not:
+**`hc server stop` replaces the holder, every terminal comes back as a shell and every program ends** (18 Claude sessions;
+`hc-resume` typed `claude --resume` into all 18 within seconds). Docs said "stop keeps every terminal": true for the
+terminals, not for what runs in them. The target therefore repairs a stray once, only after the preflight proved nothing is
+mid-turn; if the link wins again, repeat by hand. Whether a plain SIGTERM of the stray `serve` (holder untouched) would
+keep the programs is untested. A resumed session needs minutes to draw (a 295-turn session: the screen shows only the typed
+command for about three minutes, then the prompt), and it comes back idle at its prompt, it does not carry on the turn.
+The update's own terminal ends with the core restart, so read the result with `hc read`.
 
 *The app as a trigger.* Upstream says the app (hourly check, no off switch, herdr-app #207) also updates linked cores on its
 first start after an app update. Unconfirmed here: the MacBook app went 0.1.13 to 0.1.15 and neither core moved. Update the

@@ -47,7 +47,7 @@ core_up() {
   fi
   if ! core_launchd_born; then
     CORE_UP_WHY="a core answers but launchd did not start it (a client-started core is attributed to sshd and has no keychain)"
-    CORE_UP_FIX="stop it (hc server stop keeps every terminal), then launchctl kickstart gui/$uid/$CORE_LABEL"
+    CORE_UP_FIX="stop it (hc server stop keeps the terminals as shells but ends their programs; hc-resume resumes Claude sessions), then launchctl kickstart gui/$uid/$CORE_LABEL"
     return 1
   fi
   return 0

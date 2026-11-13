@@ -116,7 +116,7 @@ and `tailscale` stay the pins.
    `Herdr.app.new.noindex` applies on the next app start.
 1. **Read the release notes first:** the preflight prints them; the CHANGELOG of herdrdev/herdr-core adds the privacy
    lines (new prompts: Local Network, microphone, file access) and anything on holders, `serve`, launchd or responsibility.
-2. **Quiet window, not a stop:** an update is possible with agents live (the holder keeps every terminal), but the program
+2. **Quiet window, not a stop:** an update is possible with agents live (measured 2026-11-13: the update kept every program; the stray repair `hc server stop` ended all of them), and the program
    inside a terminal may end (upstream herdr-core #133, open). `make herdr-core-update` refuses while any terminal is
    `working`; wait for idle/done, `FORCE=1` only on the owner's word. Never run it from the session being updated.
    `hc-resume` then types `claude --resume <id>` into the surviving login shells.
