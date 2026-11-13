@@ -90,6 +90,20 @@ A page with `.building-*` present and `products/` near 73 GB needs no action; a 
 same peak means the baseline above, not weatherorb, needs trimming (CoreSimulator runtimes
 and the orphan PoC disk are the cheap first cuts, both owner calls).
 
+## Factory worktree stock (Beszel "disk above 90%", no `.building-*`)
+
+Issue 1000 (2026-11-13, 90.1% flat for 10 min, 794 GiB used) was the baseline, not a round build:
+`~/SourceRoot/<repo>/.claude/worktrees/factory-N-1` is never removed after the Issue closes
+(the factory's Reaper ends processes, not directories; filed as issue 1003). basalt-ui held 84
+(51 GB, ~600 MB each of `node_modules`), software-factory 71 (26 GB), iris 8, agent-workflows 12.
+Removing those whose Issue is closed and whose branch has a MERGED PR (or, direct-to-master, whose
+HEAD is an ancestor of `origin/HEAD`) took the volume from 90% to 88% (108 GiB free). A page that
+arrives with no `.building-*` present: `du -xsh ~/SourceRoot/*/.claude/worktrees`, then
+`factory issue show issue_<N> | jq -r .state` per directory, and `git worktree remove --force`
+the closed, merged ones. Keep a closed one whose branch has no merged PR and unmerged commits.
+Other cheap cuts if it recurs: `~/.local/state/athena-poc` 22 GB (Oct 30 - Nov 2 PoC runs),
+`~/.cache/cloud-wave` 10 GB, `~/.colima/_lima/_disks/colima-athena-poc` 30 GB sparse (owner calls).
+
 ## What lives on the HomeLab
 
 The 2026-10 sweep moved `~/Movies/{Squid Game,YT Saver}`, `~/Downloads/mindsera_memos` and `~/SY`
