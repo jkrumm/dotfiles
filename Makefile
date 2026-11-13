@@ -2445,7 +2445,7 @@ swapout-rate-test:
 # on PATH, DEVHOST_COMPONENTS narrows the composite. Runs on either machine.
 .PHONY: devhost-heartbeat-test
 devhost-heartbeat-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/devhost-health-check.sh $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/devhost-health-check.sh $(DOTFILES_DIR)/scripts/lib/devhost-forensics.sh $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
 

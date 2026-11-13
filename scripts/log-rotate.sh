@@ -92,6 +92,8 @@ PLIST_DIR="${LOG_ROTATE_PLIST_DIR:-$HOME/Library/LaunchAgents}"
 #   stream): only the ones that grow without bound. Measured 2026-11-06 on the mini: tailscaled.log 121 MB,
 #   postgresql@18.log 60 MB; colima/herdr/caddy are under 250 KB, and the caddy logs are root-owned and
 #   rotated by caddy itself.
+# - devhost-snapshots.jsonl: the heartbeat's rolling pre-hang record (one JSON line per 5 min run, ~720 KB a day), appended
+#   by scripts/lib/devhost-forensics.sh; no plist names it. At the 16 MB cap that is ~3 weeks per generation.
 EXTRA=(
   /opt/homebrew/var/log/tailscaled.log
   /opt/homebrew/var/log/postgresql@18.log
@@ -99,6 +101,7 @@ EXTRA=(
   "$HOME/.hermes/logs/gateway.log"
   hermes-ops.log
   claude-relogin.log
+  devhost-snapshots.jsonl
 )
 
 # Log paths of every com.jkrumm.* / com.iu.* plist, one per line. log-rotate's own log stays

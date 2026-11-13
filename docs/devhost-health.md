@@ -20,7 +20,7 @@ a second push:
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM: **WARN** above `DEVHOST_MEM_SWAP_PCT_MAX` (25 %), **FAIL** above `DEVHOST_MEM_SWAP_PCT_FAIL` (75 %) or at pressure critical. Swap does not drain when its cause is gone (2026-11-07: 28 % stayed parked for hours after the leak was killed, DOWN with 0 swapouts), so the share alone pages only at leak size; the rate is `swapouts`. Also names `fseventsd` (`top` MEM, compressed pages included, no root; `ps` RSS shows 4.7G for 61G) above `DEVHOST_FSEVENTSD_MAX_MB` (10 GiB) as a WARN |
 | swapouts | cumulative `vm.compressor.swapper.swapouts_total` → MiB/300s delta — **FAIL** past `DEVHOST_SWAPOUT_MB_PER_300S_MAX` (2 GiB); a state write that fails **FAILs** too, never a silent re-seed |
-| kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
+| kernel panics | newest `panic-*.panic` / `panic-*.ips` (`panic-full-…` and the watchdog form `panic-base+socd-…`) / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL. The message carries the panic headline (the `panicString` before its first newline, without the `panic(cpu N caller 0x…):` prefix), e.g. `kernel panic 0d ago: watchdog timeout: no checkins from watchdogd in 94 seconds (…) (autorestart recovered, report panic-full-….panic)`. The reboot push below is the alert |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
 | services | hermes gateway, colima, caddy, dnsmasq, postgres, the Kuma door (`:8795/healthz`) — each gated on its plist. agent-workflows (host + audio), brain-web and walkingpad are **not** probed here: Kuma pulls them through the door (`kuma-door/registry.json`), so a second probe would be a duplicate signal. The audio-vs-host version-mismatch comparison went with the probe on purpose: the door proves liveness only, and agent-workflows' own `make verify` covers release parity |
@@ -63,6 +63,34 @@ now means *the mini is unreachable or its core is dead*. The run is ordered:
    monitor** (`MacMini Dev Host Detail - Push`, URL file `~/.config/uptime-kuma/devhost-detail-push-url`, opt-in like collie:
    no file, no push): its DOWN is what the factory door routes to a lead, so a full disk or a dead login reaches a
    repo, not the owner's phone. The monitor is made in homelab (`make uk-sync`); the file is written once the monitor exists.
+
+### Forensics: the rolling snapshot and the panic push (issue 1034)
+
+2026-11-13 the mini kernel-panicked (`watchdog timeout: no checkins from watchdogd in 94 seconds`); the report named no
+culprit, nothing had recorded what ran, and nobody was told (`docs/incident-2026-11-13-mini-panic.md`). Code:
+`scripts/lib/devhost-forensics.sh`, run right after the liveness push so neither can delay it.
+
+- **Snapshot.** Every run appends one compact JSON line to `~/Library/Logs/devhost-snapshots.jsonl`
+  (`DEVHOST_SNAPSHOT_LOG`; never `/tmp`): `ts`, `up_s`, `load` (1/5/15 min), `pressure` (the kernel's 1/2/4), `swap_used_mb`,
+  `swapfiles` (count in `/private/var/vm`), `free_pages` (`vm_stat`), `disk_free_gb` (the Data volume), `procs`, the counts
+  `claude`, `node`, `virtualization`, and `top_rss` / `top_cpu`, the top 8 processes each as `{cmd, pid, rss_mb | cpu}`
+  (command basename). About 2.5 KB a line, ~720 KB a day. Four tools (`sysctl`, `vm_stat`, `ps`, `df`), each bounded
+  at `DEVHOST_SNAPSHOT_TOOL_TIMEOUT` (5 s); a tool that fails leaves its fields `null`/empty, never the run. Skipped when the
+  liveness phase already used `DEVHOST_SNAPSHOT_START_LIMIT` (100 s). `scripts/log-rotate.sh` caps it (16 MB, one `.1`
+  generation: about three weeks each). Read the minutes before a hang with
+  `jq -c '[.ts,.load[0],.pressure,.swap_used_mb,.top_rss[0].cmd]' ~/Library/Logs/devhost-snapshots.jsonl | tail`.
+- **Reboot / panic push.** The first heartbeat that sees a panic report it has not announced (younger than
+  `DEVHOST_PANIC_MAX_AGE_DAYS`) sends **one ntfy push** (topic `alerts`, priority high, `DEVHOST_PANIC_NTFY_TOPIC`) with the
+  headline, the boot time and the time to ready (seconds from boot to the first heartbeat that found tailnet, sshd and the
+  core alive; "not ready" plus the failing check when one is down). Once per panic *report*: `<mtime> <name>` of the announced
+  report is stored in `~/.local/state/devhost-health/panic-notified` after a delivered push; a failed push stores nothing and
+  the next run retries until the age window ends. The bearer comes from the secrets cache, the server from the homelab ntfy
+  config (`NTFY_URL` overrides, as in `jobs-grade`). Tested through `DEVHOST_DIAGNOSTIC_REPORTS_DIR` (a fixture report) and
+  `DEVHOST_TEST_UPTIME_S`; never panic the host to test.
+- **Why a push at all.** The Dev Host monitor (interval 600 s, 1 retry, ntfy on DOWN) is PENDING after one missed push and
+  DOWN only after a second: **an outage shorter than 10 minutes never reaches DOWN**, and a panic that recovers by itself
+  (autorestart) is exactly that. The reboot push is the alert for it. The monitor intervals live in the homelab repo and are
+  unchanged here.
 
 ### Job failures reach a lead, not the owner (`jobs-grade --report`)
 
