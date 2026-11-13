@@ -230,6 +230,25 @@ session label (an unknown foreground, `null` or absent, is retried by the next s
 model/effort flags and the `c` launcher's env (`ENABLE_TOOL_SEARCH`, lane vars). A terminal sitting at a shell prompt
 that carries a session label (the claude exited without SessionEnd, e.g. the shell was reused) is resumed too, once.
 
+**Resume pacing (issue 1033).** After the 2026-11-13 panic reboot, 25 `claude --resume` started within 9 ms and the load
+average reached 404: sshd and tailscale answered only after about 7.5 minutes (`docs/incident-2026-11-13-mini-panic.md`).
+hc-resume now queues the terminals it would resume and starts them paced. Which terminals, the order and the account are
+unchanged; only when each starts differs.
+
+| Knob (env of `com.jkrumm.hc-resume`) | Default | Meaning |
+|-|-|-|
+| `HC_RESUME_MAX_INFLIGHT` | 3 | Sends in flight at once; the next starts when one settles |
+| `HC_RESUME_STAGGER_MS` | 3000 | Minimum gap between two starts, also when a slot is free |
+| `HC_RESUME_TAILNET_WAIT_MS` | 120000 | The first start waits up to this long for `tailscale status` to say Running (0 = off; no `tailscale` binary = no wait; on timeout it resumes anyway) |
+
+A missing or invalid value falls back to the default. To change one, add it to `EnvironmentVariables` in
+`scripts/com.jkrumm.hc-resume.plist.template` and run `make hc-resume-setup`. Expected curve for 25 sessions on defaults
+(design estimate from the cap, not yet measured on a reboot): sshd and tailscale are reachable as soon as the machine's own
+boot allows, because hc-resume adds at most 3 starting Claudes at any moment; the last send is typed about 25 × 3 s ≈ 75 s
+after the tailnet is up (a start is the typing of the line, Claude itself then takes its own time to load), so all agents are
+back about 2 to 3 minutes after tailnet-up. The startup line `pacing: …` in `~/Library/Logs/hc-resume.log` shows the values
+in force; each `resume <addr>` line is stamped, so the real curve reads straight from the log after the next reboot.
+
 ## Removal
 
 Classic herdr (the `herdr` 0.9 CLI/server, formula `herdr`, cask `penso/tap/herdr-gpui`) was removed in Wave 7 on

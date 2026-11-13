@@ -9,6 +9,12 @@
 // attempt per (terminal, session id), only into a terminal whose foreground is POSITIVELY a login shell
 // (an unknown foreground is skipped and re-evaluated by the next snapshot).
 //
+// Pacing (docs/herdr-core.md §Resume pacing): after a reboot every kept terminal qualifies at once, and 25 `claude --resume`
+// started in the same millisecond starved sshd and tailscale for 7 minutes (docs/incident-2026-11-13-mini-panic.md). So at most
+// HC_RESUME_MAX_INFLIGHT sends are in flight (default 3) and consecutive starts are HC_RESUME_STAGGER_MS apart (default 3000),
+// and the first start waits up to HC_RESUME_TAILNET_WAIT_MS (default 120000, 0 = off) for tailscale to be Running so
+// reachability returns first. Pacing changes WHEN, never WHICH terminal or WHICH account.
+//
 // Never starts a core: `hc connect` STARTS one when none runs, so before every connect (with HC_SESSION
 // unset, i.e. the real core) lib/core-up.sh must say a launchd-born core answers; otherwise it counts
 // as "no core" and retries with backoff.
@@ -37,6 +43,7 @@ export interface Deps {
   send: (address: string, text: string, session: string, argvFallback?: boolean) => Promise<void>
   log?: (line: string) => void
   backoffMs?: [number, number]
+  pacing?: Partial<Pacing>
   signal?: AbortSignal
 }
 
@@ -95,10 +102,90 @@ export function resumeLine(labels: Record<string, string>, argv?: string[]): str
   return [env, "claude", "--dangerously-skip-permissions", ...modelFlags(argv), "--resume", id].join(" ")
 }
 
-export function createResumer(send: Deps["send"], log: (l: string) => void = () => {}) {
-  const inflight = new Set<string>()
+export const DEFAULT_MAX_INFLIGHT = 3
+export const DEFAULT_STAGGER_MS = 3000
+export const DEFAULT_TAILNET_WAIT_MS = 120000
+
+export interface Pacing {
+  /** Sends in flight at once (>= 1). */
+  maxInFlight: number
+  /** Minimum gap between two send starts. */
+  staggerMs: number
+  /** Awaited once before the first start; a rejection is ignored (never blocks the resume for good). */
+  gate?: () => Promise<void>
+}
+
+/** Pacing from the environment; a missing or invalid value falls back to the default. */
+export function pacingFromEnv(env: Record<string, string | undefined> = process.env): Pick<Pacing, "maxInFlight" | "staggerMs"> & { tailnetWaitMs: number } {
+  const num = (v: string | undefined, d: number, min: number) => { const n = Number(v); return v !== undefined && v.trim() !== "" && Number.isInteger(n) && n >= min ? n : d }
+  return {
+    maxInFlight: num(env.HC_RESUME_MAX_INFLIGHT, DEFAULT_MAX_INFLIGHT, 1),
+    staggerMs: num(env.HC_RESUME_STAGGER_MS, DEFAULT_STAGGER_MS, 0),
+    tailnetWaitMs: num(env.HC_RESUME_TAILNET_WAIT_MS, DEFAULT_TAILNET_WAIT_MS, 0),
+  }
+}
+
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+/**
+ * Resolves when `up()` says so, or after `timeoutMs` (resume goes ahead without the tailnet: a slow tailnet must not
+ * keep sessions down). `up` throwing (no tailscale binary) also resolves at once: nothing to wait for.
+ */
+export async function waitForTailnet(up: () => Promise<boolean>, timeoutMs: number, intervalMs = 2000, log: (l: string) => void = () => {}): Promise<void> {
+  if (timeoutMs <= 0) return
+  const t0 = Date.now()
+  for (;;) {
+    try { if (await up()) { log(`tailnet up after ${Date.now() - t0} ms`); return } } catch { return }
+    if (Date.now() - t0 + intervalMs > timeoutMs) { log(`tailnet not up after ${timeoutMs} ms: resuming anyway`); return }
+    await delay(intervalMs)
+  }
+}
+
+/** `tailscale status --json` says BackendState Running; throws when the CLI is missing. */
+export async function tailnetRunning(bin = process.env.TAILSCALE_BIN || "tailscale"): Promise<boolean> {
+  const proc = Bun.spawn([bin, "status", "--json"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
+  const timer = setTimeout(() => proc.kill(), 5000)
+  try {
+    const out = await new Response(proc.stdout).text()
+    return (JSON.parse(out) as Json).BackendState === "Running"
+  } catch { return false } finally { clearTimeout(timer) }
+}
+
+export function createResumer(send: Deps["send"], log: (l: string) => void = () => {}, pacing: Partial<Pacing> = {}) {
+  const maxInFlight = Math.max(1, pacing.maxInFlight ?? DEFAULT_MAX_INFLIGHT)
+  const staggerMs = Math.max(0, pacing.staggerMs ?? DEFAULT_STAGGER_MS)
+  const inflight = new Set<string>() // queued or sending: one attempt at a time per terminal
   const attempted = new Map<string, string>() // address -> session id last tried
-  const pending = new Set<Promise<void>>()
+  const pending = new Set<Promise<void>>() // sends running now (at most maxInFlight)
+  type Job = { address: string; line: string; id: string; account: string; argvFallback: boolean }
+  const queue: Job[] = []
+  let pump: Promise<void> | null = null
+  let lastStart = 0
+  let gated = !pacing.gate
+
+  function start(j: Job): void {
+    const p = send(j.address, j.line, j.id, j.argvFallback)
+      .then(() => log(`resume ${j.address} ${j.id} (${j.account})`))
+      .catch((e) => {
+        // Nothing was typed: let the next snapshot try again. "skipped" and real send errors keep the attempt.
+        if (e instanceof RetryLater && attempted.get(j.address) === j.id) attempted.delete(j.address)
+        log(`resume ${j.address} failed: ${(e as Error).message}`)
+      })
+      .finally(() => { inflight.delete(j.address); pending.delete(p) })
+    pending.add(p)
+  }
+
+  /** Starts queued jobs: never more than maxInFlight at once, consecutive starts staggerMs apart, the first after the gate. */
+  async function drain(): Promise<void> {
+    if (!gated) { try { await pacing.gate!() } catch { /* never block the resume for good */ } gated = true }
+    while (queue.length) {
+      if (pending.size >= maxInFlight) { await Promise.race(pending); continue }
+      const wait = lastStart + staggerMs - Date.now()
+      if (wait > 0) { await delay(wait); continue }
+      lastStart = Date.now()
+      start(queue.shift()!)
+    }
+  }
 
   function consider(t: Terminal, argvFallback: boolean): void {
     const labels = t.labels ?? {}
@@ -110,15 +197,12 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     if (!line) { log(`skip ${t.address}: unusable session label`); return }
     inflight.add(t.address)
     attempted.set(t.address, id)
-    const p = send(t.address, line, id, argvFallback)
-      .then(() => log(`resume ${t.address} ${id} (${labels[CONFIG] || "iu"})`))
-      .catch((e) => {
-        // Nothing was typed: let the next snapshot try again. "skipped" and real send errors keep the attempt.
-        if (e instanceof RetryLater && attempted.get(t.address) === id) attempted.delete(t.address)
-        log(`resume ${t.address} failed: ${(e as Error).message}`)
-      })
-      .finally(() => { inflight.delete(t.address); pending.delete(p) })
-    pending.add(p)
+    queue.push({ address: t.address, line, id, account: labels[CONFIG] || "iu", argvFallback })
+    kick()
+  }
+
+  function kick(): void {
+    pump ??= drain().finally(() => { pump = null; if (queue.length) kick() })
   }
 
   return {
@@ -130,15 +214,15 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
         consider(t, m.kind === "restarted")
       }
     },
-    /** Resolves when every started send has finished. */
-    async settled(): Promise<void> { while (pending.size) await Promise.all([...pending]) },
+    /** Resolves when every queued send has started and finished. */
+    async settled(): Promise<void> { while (pump || pending.size) await Promise.all([pump, ...pending]) },
   }
 }
 
 export async function run(deps: Deps): Promise<void> {
   const log = deps.log ?? (() => {})
   const [minB, maxB] = deps.backoffMs ?? [1000, 30000]
-  const resumer = createResumer(deps.send, log)
+  const resumer = createResumer(deps.send, log, deps.pacing)
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
   let backoff = minB
   const onAbort = () => link?.close()
@@ -272,5 +356,8 @@ if (import.meta.main) {
   const ac = new AbortController()
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { ac.abort(); setTimeout(() => process.exit(0), 200) })
   log(`hc-resume started pid=${process.pid}`)
-  await run({ open: openHc, send: (a, t, s, fb) => sendHc(a, t, s, SEND_DEADLINE_MS, coreAvailable, fb), log, signal: ac.signal })
+  const { tailnetWaitMs, ...pace } = pacingFromEnv()
+  log(`pacing: max ${pace.maxInFlight} in flight, ${pace.staggerMs} ms apart, tailnet wait ${tailnetWaitMs} ms`)
+  const gate = () => waitForTailnet(tailnetRunning, tailnetWaitMs, 2000, log)
+  await run({ open: openHc, pacing: { ...pace, gate }, send: (a, t, s, fb) => sendHc(a, t, s, SEND_DEADLINE_MS, coreAvailable, fb), log, signal: ac.signal })
 }

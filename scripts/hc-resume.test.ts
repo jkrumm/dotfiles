@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, pacingFromEnv, waitForTailnet, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -16,7 +16,7 @@ const restarted = (t: Terminal): Msg => ({ kind: "restarted", terminals: [t] })
 
 function harness(delayMs = 0) {
   const sent: [string, string][] = []
-  const r = createResumer(async (a, l) => { sent.push([a, l]); if (delayMs) await Bun.sleep(delayMs) })
+  const r = createResumer(async (a, l) => { sent.push([a, l]); if (delayMs) await Bun.sleep(delayMs) }, undefined, { staggerMs: 0 })
   return { sent, r }
 }
 
@@ -114,7 +114,7 @@ test("not a login shell and no session label send nothing", async () => {
 
 test("a failed send is not retried for the same session", async () => {
   let n = 0
-  const r = createResumer(async () => { n++; throw new Error("nope") })
+  const r = createResumer(async () => { n++; throw new Error("nope") }, undefined, { staggerMs: 0 })
   r.handle(snap(term()))
   await r.settled()
   r.handle(snap(term()))
@@ -156,6 +156,7 @@ test("no core: open() keeps failing, nothing is sent; once up, the snapshot resu
     send: async (a, l) => { sent.push(`${a} ${l}`) },
     log: (l) => logs.push(l),
     backoffMs: [5, 10],
+    pacing: { staggerMs: 0 },
     signal: ac.signal,
   })
   await Promise.race([done, Bun.sleep(3000)])
@@ -284,7 +285,7 @@ test("a live agent (status.app from its own hook) is never typed into, whatever 
 
 test("createResumer passes argvFallback only for a restarted trigger", async () => {
   const flags: (boolean | undefined)[] = []
-  const r = createResumer(async (_a, _l, _s, fb) => { flags.push(fb) })
+  const r = createResumer(async (_a, _l, _s, fb) => { flags.push(fb) }, undefined, { staggerMs: 0 })
   r.handle(restarted(term()))
   await r.settled()
   r.handle(snap(term({ address: "t2" })))
@@ -331,11 +332,79 @@ test("a core that is down: openHc and sendHc never spawn hc", async () => {
 test("a send refused by the core guard does not count as an attempt; skipped and real errors do", async () => {
   for (const [err, retried] of [[new NotConnecting("down"), true], [new Error("skipped: changed"), false], [new Error("boom"), false]] as const) {
     let n = 0
-    const r = createResumer(async () => { n++; throw err })
+    const r = createResumer(async () => { n++; throw err }, undefined, { staggerMs: 0 })
     r.handle(snap(term()))
     await r.settled()
     r.handle(snap(term()))
     await r.settled()
     expect(n).toBe(retried ? 2 : 1)
   }
+})
+
+// --- pacing (issue 1033) ---------------------------------------------------------------------
+
+const many = (n: number) => Array.from({ length: n }, (_, i) => term({ address: `t${i}`, labels: { "jk.claude.session": `${i.toString(16).padStart(8, "0")}-aaaa-4bbb-8ccc-dddddddddddd` } }))
+
+test("at most maxInFlight sends are in flight at once and every kept terminal is still resumed", async () => {
+  let live = 0, peak = 0
+  const sent: string[] = []
+  const r = createResumer(async (a) => { live++; peak = Math.max(peak, live); await Bun.sleep(5); sent.push(a); live-- }, undefined, { maxInFlight: 3, staggerMs: 0 })
+  r.handle(snap(...many(25)))
+  await r.settled()
+  expect(peak).toBe(3)
+  expect(sent.sort()).toEqual(many(25).map((t) => t.address).sort())
+})
+
+test("a start waits for the stagger gap even when a slot is free", async () => {
+  const starts: number[] = []
+  const r = createResumer(async () => { starts.push(Date.now()) }, undefined, { maxInFlight: 5, staggerMs: 40 })
+  r.handle(snap(...many(4)))
+  await r.settled()
+  expect(starts).toHaveLength(4)
+  for (let i = 1; i < starts.length; i++) expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(35)
+})
+
+test("nothing starts before the gate opens; a rejecting gate does not block", async () => {
+  let open!: () => void
+  const sent: string[] = []
+  const r = createResumer(async (a) => { sent.push(a) }, undefined, { staggerMs: 0, gate: () => new Promise<void>((res) => { open = res }) })
+  r.handle(snap(...many(3)))
+  await Bun.sleep(20)
+  expect(sent).toEqual([])
+  open()
+  await r.settled()
+  expect(sent).toHaveLength(3)
+  const bad = createResumer(async (a) => { sent.push(a) }, undefined, { staggerMs: 0, gate: () => Promise.reject(new Error("x")) })
+  bad.handle(snap(term()))
+  await bad.settled()
+  expect(sent).toHaveLength(4)
+})
+
+test("a queued terminal is not queued twice and terminals added while draining are resumed", async () => {
+  const sent: string[] = []
+  const r = createResumer(async (a) => { sent.push(a); await Bun.sleep(5) }, undefined, { maxInFlight: 1, staggerMs: 0 })
+  r.handle(snap(...many(3)))
+  r.handle(snap(...many(3))) // reconnect snapshot while the first is still queued
+  r.handle(snap(...many(5).slice(3)))
+  await r.settled()
+  expect(sent.sort()).toEqual(many(5).map((t) => t.address).sort())
+})
+
+test("pacing env: defaults, overrides, invalid values fall back", () => {
+  expect(pacingFromEnv({})).toEqual({ maxInFlight: DEFAULT_MAX_INFLIGHT, staggerMs: DEFAULT_STAGGER_MS, tailnetWaitMs: 120000 })
+  expect(pacingFromEnv({ HC_RESUME_MAX_INFLIGHT: "5", HC_RESUME_STAGGER_MS: "0", HC_RESUME_TAILNET_WAIT_MS: "0" })).toEqual({ maxInFlight: 5, staggerMs: 0, tailnetWaitMs: 0 })
+  expect(pacingFromEnv({ HC_RESUME_MAX_INFLIGHT: "0", HC_RESUME_STAGGER_MS: "-1", HC_RESUME_TAILNET_WAIT_MS: "abc" })).toEqual({ maxInFlight: DEFAULT_MAX_INFLIGHT, staggerMs: DEFAULT_STAGGER_MS, tailnetWaitMs: 120000 })
+})
+
+test("waitForTailnet: returns when up, on timeout, when disabled, and when the CLI is missing", async () => {
+  let n = 0
+  await waitForTailnet(async () => ++n >= 3, 1000, 5)
+  expect(n).toBe(3)
+  const logs: string[] = []
+  await waitForTailnet(async () => false, 30, 10, (l) => logs.push(l))
+  expect(logs.join()).toContain("resuming anyway")
+  let called = false
+  await waitForTailnet(async () => { called = true; return false }, 0)
+  expect(called).toBe(false)
+  await waitForTailnet(async () => { throw new Error("ENOENT") }, 1000, 5)
 })
