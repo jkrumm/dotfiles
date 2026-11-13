@@ -6,7 +6,7 @@ Disk Access are judged on the *responsible* process. It must be a process whose 
 (upstream's signed bundle, the one the grant is on). A Homebrew Cellar herdr-core, sshd or a launcher as the
 responsible process means the grant does not cover that holder's terminals.
 
-Usage: hc-responsible.py [pid ...]   with pids: check those processes; without: the core (`herdr-core --hc-launchd`)
+Usage: hc-responsible.py [pid ...]   with pids: check those processes; without: the core (`<herdr-core|hc> --hc-launchd`, the name depends on who restarted it)
                                      and every `herdr-core hold`.
 Prints one line per process; exit 0 all responsible processes are the bundle, 1 offenders (listed last), 0 with a note
 when no core runs (core-up.sh owns that verdict). python3 stdlib only; read-only.
@@ -58,7 +58,7 @@ def targets(table: list[tuple[int, str]], pids: list[int]) -> list[tuple[int, st
         return [(p, "pid", known.get(p, "?")) for p in pids]
     found = []
     for pid, cmd in table:
-        if "herdr-core --hc-launchd" in cmd:
+        if " --hc-launchd " in cmd:
             found.append((pid, "core", cmd))
         elif "herdr-core hold" in cmd:
             found.append((pid, "holder", cmd))

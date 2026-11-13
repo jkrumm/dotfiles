@@ -45,6 +45,10 @@ born > "$T/table"
 check; [ "$rc" = 0 ] || fail "healthy core: rc=$rc $msg"
 case "$msg" in "core 0.1.18, up 5s"*) ;; *) fail "healthy message: $msg" ;; esac
 
+# 1b. a core restarted through `hc server restart` is launchd-born but runs under the name `hc` (measured 2026-11-13)
+printf '    0 /sbin/launchd\n    1 /Users/x/.local/bin/hc --hc-launchd /tmp/hc-launchd-1-2-x/ready\n' > "$T/table"
+check; [ "$rc" = 0 ] || fail "hc-named launchd core must be healthy: rc=$rc $msg"
+
 # 2. nothing answers -> FAIL with why + fix, and hc is never called
 born > "$T/table"; SOCK_DOWN=1 check
 [ "$rc" = 1 ] || fail "dead socket must FAIL: rc=$rc"

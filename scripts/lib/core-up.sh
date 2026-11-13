@@ -33,7 +33,7 @@ core_socket_answers() { "${NC_BIN:-nc}" -U -w1 "$(core_socket)" </dev/null >/dev
 # A core launchd started: upstream's detached form, parent pid 1. A client-started core is `herdr-core serve` under
 # `herdr-core connect`.
 core_launchd_born() {
-  "${PS_BIN:-/bin/ps}" -axo ppid=,command= | /usr/bin/awk '$1 == 1 && /herdr-core --hc-launchd/ { f = 1 } END { exit !f }'
+  "${PS_BIN:-/bin/ps}" -axo ppid=,command= | /usr/bin/awk '$1 == 1 && / --hc-launchd / { f = 1 } END { exit !f }'
 }
 
 core_up() {
