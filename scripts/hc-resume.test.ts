@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, pacingFromEnv, waitForTailnet, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, pacingFromEnv, tailnetRunning, waitForTailnet, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -407,4 +407,23 @@ test("waitForTailnet: returns when up, on timeout, when disabled, and when the C
   await waitForTailnet(async () => { called = true; return false }, 0)
   expect(called).toBe(false)
   await waitForTailnet(async () => { throw new Error("ENOENT") }, 1000, 5)
+})
+
+test("tailnetRunning: Running only when the resolved CLI says so; no CLI throws", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "tsrun-"))
+  try {
+    const lib = join(dir, "lib.sh")
+    const bin = join(dir, "ts")
+    writeFileSync(lib, `TAILSCALE_BIN="$(cat ${dir}/bin)"\nts_run() { "$TAILSCALE_BIN" "$@"; }\n`)
+    const use = (state: string | null) => {
+      if (state) { writeFileSync(bin, `#!/bin/sh\necho '{"BackendState":"${state}"}'\n`); chmodSync(bin, 0o755) }
+      writeFileSync(join(dir, "bin"), state ? bin : "")
+    }
+    use("Running")
+    expect(await tailnetRunning(lib)).toBe(true)
+    use("Starting")
+    expect(await tailnetRunning(lib)).toBe(false)
+    use(null)
+    await expect(tailnetRunning(lib)).rejects.toThrow("no tailscale CLI")
+  } finally { rmSync(dir, { recursive: true }) }
 })

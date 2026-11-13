@@ -141,14 +141,22 @@ export async function waitForTailnet(up: () => Promise<boolean>, timeoutMs: numb
   }
 }
 
-/** `tailscale status --json` says BackendState Running; throws when the CLI is missing. */
-export async function tailnetRunning(bin = process.env.TAILSCALE_BIN || "tailscale"): Promise<boolean> {
-  const proc = Bun.spawn([bin, "status", "--json"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
+/**
+ * `tailscale status --json` says BackendState Running, asked of the daemon scripts/lib/tailscale-cli.sh picks (the mini's
+ * brew tailscaled on its explicit socket: a bare `tailscale` can reach the dormant app-bundle daemon and answer wrongly).
+ * Throws when this machine has no tailscale CLI.
+ */
+export async function tailnetRunning(lib = join(import.meta.dir, "lib", "tailscale-cli.sh")): Promise<boolean> {
+  const proc = Bun.spawn(["bash", "-c", 'source "$1"; [ -n "$TAILSCALE_BIN" ] || exit 127; ts_run status --json', "_", lib], { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
   const timer = setTimeout(() => proc.kill(), 5000)
   try {
     const out = await new Response(proc.stdout).text()
+    if ((await proc.exited) === 127) throw new Error("no tailscale CLI")
     return (JSON.parse(out) as Json).BackendState === "Running"
-  } catch { return false } finally { clearTimeout(timer) }
+  } catch (e) {
+    if ((e as Error).message === "no tailscale CLI") throw e
+    return false
+  } finally { clearTimeout(timer) }
 }
 
 export function createResumer(send: Deps["send"], log: (l: string) => void = () => {}, pacing: Partial<Pacing> = {}) {

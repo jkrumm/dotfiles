@@ -239,7 +239,7 @@ unchanged; only when each starts differs.
 |-|-|-|
 | `HC_RESUME_MAX_INFLIGHT` | 3 | Sends in flight at once; the next starts when one settles |
 | `HC_RESUME_STAGGER_MS` | 3000 | Minimum gap between two starts, also when a slot is free |
-| `HC_RESUME_TAILNET_WAIT_MS` | 120000 | The first start waits up to this long for `tailscale status` to say Running (0 = off; no `tailscale` binary = no wait; on timeout it resumes anyway) |
+| `HC_RESUME_TAILNET_WAIT_MS` | 120000 | The first start waits up to this long for `tailscale status` to say Running, asked of the daemon `scripts/lib/tailscale-cli.sh` selects (0 = off; no `tailscale` binary = no wait; on timeout it resumes anyway) |
 
 A missing or invalid value falls back to the default. To change one, add it to `EnvironmentVariables` in
 `scripts/com.jkrumm.hc-resume.plist.template` and run `make hc-resume-setup`. Expected curve for 25 sessions on defaults
