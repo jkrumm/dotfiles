@@ -487,6 +487,11 @@ cmd_drain() {
     return 0
   fi
 
+  # The factory holds the live list now (ask-human.sh posts every request there as an
+  # Errand); this walk only drains what the queue-file fallback holds.
+  echo "  The live list is the factory Console: Needs you, \"Back at desk\"."
+  echo "  This walk covers only requests the factory could not take (the offline fallback)."
+
   local ids
   ids="$(pending_ids)"
   if [[ -z "$ids" ]]; then
@@ -591,6 +596,9 @@ cmd_deny() {
 usage() {
   cat <<'EOF'
 human-queue.sh — MacBook-side drain of the mini's present-human request queue
+
+The factory's Console (Needs you, "Back at desk") is the live list: ask-human.sh posts
+each request there as an Errand. This queue holds only the offline fallback.
 
 Usage:
   human-queue.sh                Walk every pending request and run/deny it in place

@@ -215,7 +215,9 @@ push, a person-only call) is enqueued on the mini with `ask-human ask "…" [--c
 `--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only); `make human-queue` **walks** each one on the MacBook
 (r/already-done/deny/skip; `-run`, `-resolve`, `-deny ID=` one-shot; no TTY → a list). The mini only *proposes* a string;
 `run` needs a typed `yes` on a real TTY, and a push shows the exact string in a native dialog that executes only on a click.
-No poller, no path without a present human. An unreachable MacBook or unanswered dialog leaves it queued (and fires the
+No poller, no path without a present human. `ask` posts each request to the factory as an Errand (`--check <sh>` = exits 0 while
+it is still needed; the factory runs it hourly) and prints its `errand_…` id; the queue file is only the offline fallback, posted
+once the factory answers (`docs/remote-dev.md`). An unreachable MacBook or unanswered dialog leaves it open (and fires the
 ntfy notify). `--key K` replaces older pending requests with that key, a producer's success path calls
 `ask-human clear K`, and items expire (default 3d, `--expires`; `reap`); a lead that enqueued (`FACTORY_SESSION`) is told
 the result via `factory session note`, and the Herdr sidebar's ✓/× resolve a row. Detail: `docs/remote-dev.md`.

@@ -533,9 +533,28 @@ own schedule (`make human-queue`), or the mini **triggers the approval itself**
 as a native dialog there — **the default since 2026-09-15**; the ntfy notify
 hook only fires when that push could not resolve the request.
 
+**The factory holds the live list (since 2026-11-13).** `ask` first posts the request
+as an Errand with no Issue (`factory errand request --source ask-human`, `--where
+macbook` whenever `--cmd` is given) and prints the Errand id (`errand_…`) where it
+printed a queue id. The factory runs the request's `--check` hourly (exit 0 = still
+needed, 1..125 = closed as no longer needed), expires it (7 days with no check and
+no `--expires`), and lets a newer request with the same `--key` replace it. No queue
+file is written for it. The queue file is the **offline fallback**: written when the
+factory does not answer (exit 7 unreachable, any other failure), and posted by the
+next `ask`/`list`/`reap` that finds the factory up (same text, key, check; the file is
+resolved `superseded`, "moved to the factory as <id>"). A lead's request
+(`FACTORY_SESSION`) always stays a queue file: its answer is a `factory session note`.
+The dialog answer closes the Errand (`factory errand done`, `--outcome not_needed` for
+a denial); `list`, `status`, `resolve`, `clear` and `push` accept an Errand id; `clear
+<key>` closes the open request with that key. A session's agent token may not list or
+close Errands (exit 3), so those calls repeat once with `FACTORY_TOKEN` cleared and the
+CLI resolves the owner's. `HUMAN_QUEUE_ERRANDS=0` = queue file only (tests set it);
+`jq` is required for the factory path. The live list for the owner is the factory
+Console (Needs you, "Back at desk"); `make human-queue` drains only the fallback.
+
 | Side | Command | Runs on |
 |-|-|-|
-| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--key <key>] [--expires <dur\|never>] [--wait <seconds>] [--no-push]` | mini |
+| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--key <key>] [--expires <dur\|never>] [--check <sh>] [--wait <seconds>] [--no-push]` | mini |
 | A producer's success path: resolve everything pending under its key | `ask-human.sh clear <key> [--as done\|superseded] [--note <text>]` | mini |
 | Write off expired requests (also run quietly by ask/list/status) | `ask-human.sh reap` | mini |
 | Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |

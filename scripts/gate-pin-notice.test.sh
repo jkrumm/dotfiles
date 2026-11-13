@@ -34,6 +34,7 @@ printf 'op' > "$TMP/config/secrets/backend"
 export XDG_CONFIG_HOME="$TMP/config"
 export XDG_STATE_HOME="$TMP/state"
 export HUMAN_QUEUE_PUSH=0
+export HUMAN_QUEUE_ERRANDS=0
 unset FACTORY_SESSION
 
 REPO="$TMP/dotfiles"
