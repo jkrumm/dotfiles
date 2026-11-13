@@ -177,6 +177,8 @@ blocked, and `hc ls` answered in 0.0 s. One earlier run handed the reader a trun
 Claude 2.1.316's record is `{"app":"claude-code","state":"done"}`, with no session id. `doc.set` is
 compare-and-set: a stale version returns `conflict` ("is at version 1, not 0").
 
+**Known gap: API-error turns (core 0.1.21, Claude Code 2.1.323, upstream herdr-core #267).** A turn that ends on `Please run /login · API Error: 403 … Cloudflare` is reported `blocked` (auth), and one that ends on `API Error: Server error mid-response` is reported `error`, both above an empty `❯` prompt with no dialog. `hc send`/`hc keys` refuse the `blocked` one (exit 9), and only `--force` types. The state is not classified in this repo (the core is upstream's binary), so there is no wrapper fix: `rd say` keeps refusing `blocked`, and a caller that resumes after a transient API error must read the screen and use `--force` only when the error line sits above an empty prompt (the factory does). Drop that workaround when #267 lands.
+
 **8. Keys.** A `keys.json` action is a command (`name` or `name:value`, value = first argument), `send:<text>`,
 `<mod>.<command>` (to that mod's `nextCommand()`), or `terminal`. There is no shell action, and one bad action stops
 the whole file from loading. `terminal.open {argv, folder, place: tab|right|down, name}` and `terminal.peek {terminal}`
