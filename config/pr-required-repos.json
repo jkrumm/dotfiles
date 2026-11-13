@@ -4,7 +4,8 @@
     "basalt-ui",
     "free-planning-poker",
     "rollhook",
-    "rollhook-action"
+    "rollhook-action",
+    "weatherorb"
   ],
   "directToMain": [
     "prometheus-feuer-agent"

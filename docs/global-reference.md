@@ -56,7 +56,7 @@ Per-repo: `dotfiles` → `/iu-endpoint`; `hermes-agent` → `/hermes-validate`,
 direct-to-master by default. PR-required repos are one list in
 `config/pr-required-repos.json` (read by `protect-branches.ts` and
 `github-config.sh` — edit the file): `basalt-ui`, `free-planning-poker`,
-`rollhook`, `rollhook-action`. `make github-config` applies two tiers: those repos
+`rollhook`, `rollhook-action`, `weatherorb`. `make github-config` applies two tiers: those repos
 and any with a collaborator get the full ruleset; other public repos get lite (no
 PR rule). Private repos can't be protected for free.
 
