@@ -120,9 +120,11 @@ and `tailscale` stay the pins.
    inside a terminal may end (upstream herdr-core #133, open). `make herdr-core-update` refuses while any terminal is
    `working`; wait for idle/done, `FORCE=1` only on the owner's word. Never run it from the session being updated.
    `hc-resume` then types `claude --resume <id>` into the surviving login shells.
-3. **Update cores before the app.** The app's hourly self-update also updates linked machines' cores (no off switch): do
-   the mini and the MacBook yourself first, so the app finds nothing. `make herdr-core-update` on the mini, then on the
-   MacBook; it ends with `make tcc-probe`.
+3. **Update cores yourself, in a quiet window.** Upstream says the app's self-update also updates linked cores (unconfirmed
+   here). `make herdr-core-update` on the mini from a Herdr terminal on the mini (`hc run --on mini --no-parent --bg --name
+   core-update --cwd <repo> "make herdr-core-update"`, then `hc read`), never over ssh; then on the MacBook from a plain
+   terminal. The mini's restarted core can come up as a stray (the MacBook link races launchd): the target repairs it once.
+   It ends with `make tcc-probe`.
 4. **Verify, both machines:** `hc --version` equal; `bash scripts/lib/core-up.sh` silent; `python3 scripts/hc-responsible.py`
    (old Cellar holders end with their terminals, nothing new); `make op-tcc-probe` (MacBook); the tail of
    `~/Library/Logs/hc-resume.log` on the mini; `make doctor`.

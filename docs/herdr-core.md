@@ -334,10 +334,16 @@ while any terminal has `status: working` (a turn in flight; `FORCE=1` is the own
 session counts too: run it from a plain terminal, not from the agent being updated. 0.1.19 changes nothing for existing
 terminals ("opened before this update keep the old behavior"), so there is no reason to recreate them.
 
-*The app is the realistic trigger.* The Herdr app checks hourly, has no off switch (herdr-app #207), and on the first
-start after an app update also updates linked machines' cores, mini included: exactly the #133 path, at a time you did not
-pick. Update the cores yourself in the quiet window first; the app then finds nothing to update. A staged app update
-(`~/Applications/Herdr.app.new.noindex`, `.new.json.noindex` holding the version) applies on the next app start.
+*The mini's update meets a race.* `hc update` ends the core; the MacBook core's machine link (`ssh mini herdr-core connect`,
+reconnecting at once over a persistent ssh master) wins against launchd and starts the replacement under sshd: a stray
+(measured 2026-11-13, 0.1.18 to 0.1.21; `core_up` fails, no keychain; terminals kept, hc-resume refuses to act). The target
+repairs it once (`hc server stop`, `launchctl kickstart gui/<uid>/com.jkrumm.herdr-core`); if the link wins again, repeat by
+hand or run the update while the MacBook is asleep. Programs in the mini's terminals were not touched (39 of 39 kept,
+nothing was working). The update's own terminal ends with the core restart, so read the result with `hc read`.
+
+*The app as a trigger.* Upstream says the app (hourly check, no off switch, herdr-app #207) also updates linked cores on its
+first start after an app update. Unconfirmed here: the MacBook app went 0.1.13 to 0.1.15 and neither core moved. Update the
+cores yourself in a quiet window anyway. A staged app update (`~/Applications/Herdr.app.new.noindex`) applies on the next app start.
 
 *Full Disk Access.* The grant is keyed on the bundle path plus the designated requirement
 (`identifier "dev.herdr.core"`, team `2W9652Q7QR`, Developer ID). The path is fixed and the swap is in place, so as long
