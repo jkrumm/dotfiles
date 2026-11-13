@@ -32,7 +32,8 @@
  *
  * Not covered (same hazard class): `hc send <terminal> '<cmd>'` typing a denied
  * command into a terminal, `make setup` reaching `herdr-core-setup`, `osascript`
- * restart, `echo '<cmd>' | bash`, a `>|` clobber redirection (the tokenizer reads the `|` as a pipe), a script that wraps a denied command.
+ * restart, `echo '<cmd>' | bash`, a `>|` clobber redirection (the tokenizer reads the `|` as a pipe), a script that wraps a denied command,
+ * `rm`, `sed -i`, `chmod` or `truncate` on the wrapper paths, and a relative path after `cd ~/.local/bin`.
  */
 
 import { homedir } from "node:os";
@@ -159,13 +160,18 @@ function sshRemote(args: string[]): string {
   return args.slice(i + 1).join(" "); // i is the host
 }
 
-/** The command `hc run` hands to a terminal: after `--` if present, else every suffix after `run` (its flag values are unknown). */
+const shellQuote = (word: string): string => (/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
+
+/**
+ * What `hc run` hands to a terminal: the tokens after `--` if present, else after `run` (its flag values are unknown, so
+ * every suffix). Each suffix is read as one command string (`hc run 'hc update'`) and as an argv (`hc run -- sh -c 'hc update'`,
+ * where the quoting must survive the join).
+ */
 function hcRunCommands(args: string[]): string[] {
   const dashes = args.indexOf("--");
-  if (dashes !== -1) return [args.slice(dashes + 1).join(" ")];
-  const { index } = verbOf(args);
-  const tail = args.slice(index + 1);
-  return tail.map((_, i) => tail.slice(i).join(" "));
+  const tail = dashes !== -1 ? args.slice(dashes + 1) : args.slice(verbOf(args).index + 1);
+  const suffixes = dashes !== -1 ? [tail] : tail.map((_, i) => tail.slice(i));
+  return suffixes.flatMap((words) => [words.join(" "), words.map(shellQuote).join(" ")]);
 }
 
 // ── Policy ───────────────────────────────────────────────────────────────────

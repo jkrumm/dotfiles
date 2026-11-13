@@ -357,7 +357,7 @@ and its `Herdr Core.app` designated requirement against the installed bundle's; 
   binary name and called a healthy core a stray). The target therefore repairs a stray with `hc server restart`. Untested:
   whether that also cures a core that was born as a stray (the test ran from a launchd-born core).
 - Resumed sessions come back idle at their prompt, they do not carry on the turn.
-- Run the mini's update from a core terminal on the mini (`hc run --on mini --no-parent --bg --name core-update --cwd <repo>
+- The owner runs the update (`hooks/herdr-core-guard.ts` denies it to every Claude session). Run the mini's update from a core terminal on the mini (`hc run --on mini --no-parent --bg --name core-update --cwd <repo>
   "make herdr-core-update"`, then `hc read`), never over ssh. The update's own terminal outlives the restart.
 
 **Can a running core be updated with agents live?** Yes. Terminals and programs survive (above); the open risk is upstream

@@ -131,6 +131,10 @@ describe("deny: wrappers around the same words", () => {
     denied("hc run -- hc server restart");
     denied("hc run --timeout 60 'hc update'");
     denied("hc run --machine mini 'make herdr-core-update'");
+    denied("hc run --on mini -- sh -c 'hc server restart'");
+    denied("hc run --on mini --no-parent --bg --name x -- bash -lc 'make herdr-core-update'");
+    denied("hc run --on mini sh -c 'hc update'");
+    denied("hc run -- sudo reboot");
   });
 });
 
@@ -177,6 +181,8 @@ describe("allow", () => {
     allowed("hc ls | jq '.terminals | length'");
     allowed("hc run --timeout 900 'make secrets-seed'");
     allowed("hc run -- echo hi");
+    allowed("hc run --on mini -- sh -c 'echo hc update'");
+    allowed("hc run --on mini -- sh -c 'hc read t1'");
     allowed("hc run --machine mini 'echo \"hc update\"'");
     allowed("hc attach t1");
     allowed("hc events");

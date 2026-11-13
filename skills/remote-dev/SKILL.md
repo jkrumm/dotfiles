@@ -156,7 +156,7 @@ When something is red, in order:
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
 | Agent died when the lid closed | It did not — the lid ends the link only. A *lost* program (not a core kickstart) is replaced by a shell; `hc-resume` brings Claude back, not shells or the in-flight turn |
 | An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through the core (`rd work`) — never `ssh mini 'claude …'` |
-| `rd` says "herdr-core is not running" | `bash scripts/lib/core-up.sh` prints why and the fix (usually `launchctl kickstart gui/$(id -u)/com.jkrumm.herdr-core` on the mini), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core |
+| `rd` says "herdr-core is not running" | `bash scripts/lib/core-up.sh` prints why and the fix (usually `launchctl kickstart gui/$(id -u)/com.jkrumm.herdr-core` on the mini), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core. The `launchctl kickstart` is the owner's: `herdr-core-guard.ts` denies it to an agent |
 | A `claude` in a core terminal has no transcript / `--resume` finds nothing | The core was started from inside a Claude session and passed `CLAUDECODE` to every terminal; launchd's clean env is the fix, so restart through launchd |
 | A program in a terminal hangs at 0 % CPU on `~/Documents`, `~/Desktop`, `~/Downloads` | TCC dialog nobody sees: `Herdr Core.app` has no Full Disk Access (or the terminal's holder predates the bundle). `make tcc-probe`, `docs/tcc.md` |
 | A Claude terminal came back as a bare shell | Its program was lost and `hc-resume` has not typed yet (or the terminal had no `jk.claude.session` label). `hc read <t>`, `make hc-resume-status` |
@@ -169,7 +169,7 @@ When something is red, in order:
 
 ## Rules
 
-- Core updates only through `make herdr-core-update` (official `hc update`) in a quiet window; no unattended job, no wrapper at `~/.local/bin/hc`.
+- Core updates only through `make herdr-core-update` (official `hc update`) in a quiet window; no unattended job, no wrapper at `~/.local/bin/hc`. `hooks/herdr-core-guard.ts` denies the update, `hc server restart|stop|start`, `launchctl` on the core, reboot and kills of herdr-core to every Claude session: they are the owner's, by hand (`docs/incident-2026-11-13-mini-panic.md`).
 - Never run a validation loop or an edit over files a running `@implementer`
   subagent owns — applies across terminals too.
 - Do not add `tailscale serve` bindings for dev servers; use Caddy.

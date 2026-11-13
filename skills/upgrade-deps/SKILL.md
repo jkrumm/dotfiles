@@ -124,7 +124,7 @@ triage rules: `docs/herdr-core.md` §Updates. Done when both machines report the
 3. **Quiet window.** An update is possible with agents live: terminals and programs survive (measured 2026-11-13), the open
    risk is upstream herdr-core #133. `make herdr-core-update` refuses while a terminal is `working`; wait for idle or done,
    `FORCE=1` only on the owner's word. The invoking session counts: never run it from the session being updated.
-4. **Update.** Mini: from a core terminal on the mini, never over ssh: `hc run --on mini --no-parent --bg --name core-update
+4. **Update (the owner's, by hand).** `hooks/herdr-core-guard.ts` denies `make herdr-core-update`, `hc update`, `hc server restart|stop|start` and `launchctl` on the core's label in every Claude session: an agent does steps 1-3 and 5 and hands this step to the owner. Mini: from a core terminal on the mini, never over ssh: `hc run --on mini --no-parent --bg --name core-update
    --cwd <repo> "make herdr-core-update"`, then `hc read mini/<t>`. MacBook: the owner runs it in a plain terminal outside
    Herdr and Claude (the update to 0.1.19 or later takes the updater's environment once); every program in the MacBook's
    terminals ends then, there is no `hc-resume` there (`claude --resume`). The mini's restarted core can come up a stray
