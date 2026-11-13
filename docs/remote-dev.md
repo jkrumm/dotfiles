@@ -619,6 +619,18 @@ tries). The Herdr sidebar's human-queue rows carry ✓ (done) and × (drop), whi
   show) leaves the request pending, unchanged, for `make human-queue`, exit 75;
   an ssh failure or an unparseable response also leaves it pending, exit 69.
   `push` refuses an id that already has a `.res`.
+- **An approved command runs in an `hc` terminal of the MacBook's core**, not in the
+  bare shell behind `ssh iumac` (no TTY, no SSH agent, no Full Disk Access): `gui-run`
+  starts it as `hc run --no-parent --timeout ${HUMAN_QUEUE_RUN_SECONDS:-900} -- <cmd>`,
+  so `ssh -t mini 'sudo -v'`, `git pull` over ssh and `make secrets-seed` behave as in a
+  terminal. A command that already runs `hc run …` (also behind `cd … &&`) is run as it
+  is, never nested. When the wait ends with the command still running (sudo's
+  `Password:`), `hc run` exits 124 and the result is **`pending`** with the `terminal`
+  id, not `failed`: `push` exits **76**, writes no `.res`, leaves an Errand open, and
+  prints the terminal id (`hc read <id>` / `hc wait <id>` on the MacBook); a second
+  push would run the command again. `output_tail` is the first 20 and last 20 lines
+  (each cut at 400 chars, `... (N lines omitted) ...` between). No `hc` on the MacBook
+  is a `failed` result that says so.
 - **No LaunchAgent drains it, deliberately** — a manual drain sits behind the
   per-use biometric 1Password agent, so a poller means an unattended Touch ID
   prompt on a schedule forever, and `--push` needs an actual click, which is the

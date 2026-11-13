@@ -476,7 +476,9 @@ pending_where() {
 # Exit codes: the command's own exit code on done, 1 on denied, 75 on
 # unanswered (dialog timed out, or too long to show — request stays pending,
 # unchanged, for `make human-queue`), 69 on an ssh failure or a response this
-# script cannot make sense of (also leaves the request pending).
+# script cannot make sense of (also leaves the request pending), 76 when the
+# approved command is still running in a MacBook terminal at its wait (pending,
+# the terminal id is on stderr; no result is written).
 #
 # A factory-held request passes its own temp request file and the Errand id: the
 # answer then closes the Errand and no queue file is touched.
@@ -538,6 +540,13 @@ push_request() {
         return "$exit_code"
       fi
       return 0
+      ;;
+    pending)
+      # Approved and started, but still running in a MacBook terminal when the wait
+      # ended (an interactive prompt such as sudo's Password:). Not a failure and no
+      # result yet: the request stays open, and a second push would run it again.
+      note "push $id: still running in MacBook terminal $(json_field "$out" terminal) — finish it there (hc read/wait $(json_field "$out" terminal)); output so far: $(json_field "$out" output_tail)"
+      return 76
       ;;
     unanswered)
       note "push $id: unanswered ($(json_field "$out" output_tail)) — request stays pending, $(pending_where "$errand")"
@@ -972,7 +981,10 @@ Usage:
                               on done, 1 on denied, 75 on unanswered (dialog
                               timed out or the command was too long to show —
                               request stays pending), 69 on an ssh failure or
-                              an unparseable response (also stays pending).
+                              an unparseable response (also stays pending), 76 when the
+                              approved command was still running in a MacBook
+                              terminal (e.g. at sudo's Password:) when the wait
+                              ended: pending with the terminal id, not failed.
   ask-human.sh list [--json]  List pending requests (no result yet). --json: one
                               array on stdout of {id, text, cmd, askedAt,
                               ageSeconds, state}; state is "pending", or

@@ -120,6 +120,7 @@ a native dialog that only executes on a click), or, with `--no-push` /
 it with `make human-queue` (typed `yes` on a real TTY). Still no path that skips
 a present human. `--wait` polls and exits 0/1/2/3 for done/denied/failed/timeout;
 it is ignored when the push resolves synchronously.
+A pushed `--cmd` runs in an `hc` terminal on the MacBook (TTY, `sudo`, SSH agent, Full Disk Access); still running at the wait (a `Password:` prompt) it is **pending**, exit 76, with the terminal id on stderr, never failed 124. Don't wrap it in `hc run` yourself.
 Full model: `dotfiles/docs/remote-dev.md` → *human-queue*.
 
 ## Monitoring and the maintenance round

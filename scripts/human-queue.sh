@@ -222,13 +222,14 @@ cmd_show() {
 # `push`, running ON the mini, which persists it locally with no extra hop).
 # Both callers already validate the id before reaching here.
 build_result_json() {
-  local id="$1" status="$2" exit_code="$3" ran_at="$4" output_tail="$5"
+  local id="$1" status="$2" exit_code="$3" ran_at="$4" output_tail="$5" terminal="${6:-}"
   local exit_json="null"
   [[ -n "$exit_code" ]] && exit_json="$exit_code"
   printf '{'
   printf '"id":%s,' "$(json_escape "$id")"
   printf '"status":%s,' "$(json_escape "$status")"
   printf '"exit":%s,' "$exit_json"
+  [[ -n "$terminal" ]] && printf '"terminal":%s,' "$(json_escape "$terminal")"
   printf '"ran_at":%s,' "$(json_escape "$ran_at")"
   printf '"output_tail":%s' "$(json_escape "$output_tail")"
   printf '}\n'
@@ -436,18 +437,71 @@ $cmd_disp
     return
   fi
 
-  local tmp_out exit_code output_tail
+  local tmp_out tmp_err exit_code output_tail terminal=""
   tmp_out="$(mktemp)"
+  tmp_err="$(mktemp)"
   set +e
-  bash -c "$cmd_value" >"$tmp_out" 2>&1
+  run_in_terminal "$cmd_value" >"$tmp_out" 2>"$tmp_err"
   exit_code=$?
   set -e
-  output_tail="$(tail -c 2000 "$tmp_out")"
-  rm -f "$tmp_out"
+  output_tail="$(head_tail_lines "$tmp_out")"
 
+  # `hc run` leaves a command running past its timeout (exit 124, "still running
+  # as <id>"): an interactive prompt such as sudo's Password: is waiting in that
+  # terminal, which is pending, not failed.
+  if (( exit_code == 124 )) && [[ "$(cat "$tmp_err")" =~ still\ running\ as\ (t[0-9a-z]+) ]]; then
+    terminal="${BASH_REMATCH[1]}"
+  elif (( exit_code == 127 )) && [[ ! -s "$tmp_out" ]]; then
+    output_tail="$(cat "$tmp_err")"
+  fi
+  rm -f "$tmp_out" "$tmp_err"
+
+  if [[ -n "$terminal" ]]; then
+    build_result_json "$id" "pending" "" "$ran_at" "$output_tail" "$terminal"
+    return
+  fi
   local status
   [[ $exit_code -eq 0 ]] && status="done" || status="failed"
   build_result_json "$id" "$status" "$exit_code" "$ran_at" "$output_tail"
+}
+
+# The first 20 and last 20 lines of a file (all of it when it is no longer), each
+# line cut at 400 chars and carriage returns dropped: what the result carries back.
+head_tail_lines() {
+  local file="$1" total
+  total="$(wc -l < "$file" | tr -d ' ')"
+  if (( total <= 40 )); then
+    tr -d '\r' < "$file" | cut -c1-400
+    return
+  fi
+  {
+    head -n 20 "$file"
+    printf '... (%d lines omitted) ...\n' "$(( total - 40 ))"
+    tail -n 20 "$file"
+  } | tr -d '\r' | cut -c1-400
+}
+
+hc_bin() {
+  [[ -n "${HUMAN_QUEUE_HC:-}" ]] && { printf '%s' "$HUMAN_QUEUE_HC"; return; }
+  command -v hc 2>/dev/null || printf '%s' "$HOME/.local/bin/hc"
+}
+
+# An approved command runs in an `hc` terminal of the MacBook's core, like
+# `hc run --timeout 900 'make secrets-seed'`: a login shell with a TTY (sudo,
+# `ssh -t`), the SSH agent and the launcher's Full Disk Access, none of which the
+# bare shell behind `ssh iumac` has. A command that already starts `hc run` is
+# run as it is, never nested. Output on stdout, hc's own notes on stderr; the
+# exit code is the command's, or 124 when it is still running at the timeout.
+HC_RUN_RE='(^|[;&|(])[[:space:]]*hc[[:space:]]+run([[:space:]]|$)'
+run_in_terminal() {
+  local cmd="$1" hc
+  hc="$(hc_bin)"
+  if [[ "$cmd" =~ $HC_RUN_RE ]]; then
+    PATH="$(dirname "$hc"):$PATH" bash -c "$cmd"
+    return
+  fi
+  [[ -x "$hc" ]] || { echo "hc not found on the MacBook ($hc) — cannot open a terminal" >&2; return 127; }
+  "$hc" run --no-parent --timeout "${HUMAN_QUEUE_RUN_SECONDS:-900}" -- "$cmd"
 }
 
 cmd_gui_run() {

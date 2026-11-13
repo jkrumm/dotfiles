@@ -85,6 +85,37 @@ STUB
 chmod +x "$OSASCRIPT_STUB"
 export HUMAN_QUEUE_OSASCRIPT="$OSASCRIPT_STUB"
 
+# --- hc stub ------------------------------------------------------------------
+# What gui-run runs an approved command through (`hc run --no-parent --timeout N -- <cmd>`).
+# It runs <cmd> with bash, like the terminal's shell; a command containing PENDING-PROMPT
+# prints a prompt and then behaves like a terminal still waiting at the timeout: hc's
+# exit 124 and its "still running as <id>" note on stderr. $HUMAN_QUEUE_HC_ARGV, when
+# set, records the argv hc was given (one element per line).
+mkdir -p "$TMP/hcbin"
+HC_STUB="$TMP/hcbin/hc"
+cat > "$HC_STUB" <<'STUB'
+#!/usr/bin/env bash
+if [[ -n "${HUMAN_QUEUE_HC_ARGV:-}" ]]; then printf '%s\n' "$@" > "$HUMAN_QUEUE_HC_ARGV"; fi
+[[ "$1" == run ]] || exit 64
+shift
+while [[ "${1:-}" == --* && "$1" != -- ]]; do
+  case "$1" in --timeout) shift 2 ;; *) shift ;; esac
+done
+[[ "${1:-}" == -- ]] && shift
+cmd="$1"
+if [[ "$cmd" == *PENDING-PROMPT* ]]; then
+  printf 'work 1\nPassword:'
+  echo "[hc] still running as t9zz: hc wait t9zz, hc read t9zz" >&2
+  exit 124
+fi
+bash -c "$cmd"
+rc=$?
+echo "[hc] t9yy exited (exit $rc)" >&2
+exit "$rc"
+STUB
+chmod +x "$HC_STUB"
+export HUMAN_QUEUE_HC="$HC_STUB"
+
 # build_req <id> <text> <cmd-or-empty>
 build_req() {
   local id="$1" text="$2" cmd="$3" cmd_json="null"
@@ -129,6 +160,63 @@ assert_eq "Give-up: status unanswered" "unanswered" "$(json_field "$out" status)
 req="$(build_req "20260914T000005-1" "reseal the cache" "echo should-not-run")"
 out="$(HUMAN_QUEUE_TEST_BUTTON=FAIL gui_run "$req")"
 assert_eq "osascript failure: status unanswered" "unanswered" "$(json_field "$out" status)"
+
+echo ""
+echo "gui-run — commands run in an hc terminal"
+
+# The proposed string reaches `hc run` whole, as one argument after `--`: that terminal is
+# what gives `ssh -t … 'sudo -v'` its TTY, `git pull` over ssh its agent.
+argv="$TMP/hc-argv"
+req="$(build_req "20260914T000020-1" "sudo on the mini" "ssh -t mini 'sudo -v'")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run HUMAN_QUEUE_HC_ARGV="$argv" gui_run "$req")"
+assert_eq "hc terminal: argv is run --no-parent --timeout 900 -- <cmd>" "run
+--no-parent
+--timeout
+900
+--
+ssh -t mini 'sudo -v'" "$(cat "$argv")"
+
+# Already `hc run …` (also behind cd/&&): run as it is, never nested.
+rm -f "$argv"
+req="$(build_req "20260914T000021-1" "seed" "hc run --timeout 5 'echo seeded'")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run HUMAN_QUEUE_HC_ARGV="$argv" gui_run "$req")"
+assert_eq "hc run command: hc is invoked once, by the command itself (run --timeout 5 echo seeded)" "run
+--timeout
+5
+echo seeded" "$(cat "$argv")"
+assert_eq "hc run command: status done" "done" "$(json_field "$out" status)"
+rm -f "$argv"
+req="$(build_req "20260914T000022-1" "seed" "cd /tmp && hc run 'echo seeded'")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run HUMAN_QUEUE_HC_ARGV="$argv" gui_run "$req")"
+assert_eq "cd && hc run command: not nested" "run
+echo seeded" "$(cat "$argv")"
+
+# Still running at the wait (a Password: prompt): pending with the terminal id, not failed 124.
+req="$(build_req "20260914T000023-1" "sudo" "sudo make PENDING-PROMPT")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run gui_run "$req")"
+assert_eq "still running: status pending" "pending" "$(json_field "$out" status)"
+assert_eq "still running: terminal id" "t9zz" "$(json_field "$out" terminal)"
+assert_eq "still running: no exit code" "null" "$(printf '%s' "$out" | grep -o '"exit":[^,]*' | cut -d: -f2)"
+assert_contains "still running: output so far" "Password:" "$(json_field "$out" output_tail)"
+
+# hc missing: a failed result that says so, never a silent run in the bare shell.
+req="$(build_req "20260914T000024-1" "no hc" "echo should-not-run")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run HUMAN_QUEUE_HC="$TMP/no-such-hc" gui_run "$req")"
+assert_eq "hc missing: status failed" "failed" "$(json_field "$out" status)"
+assert_contains "hc missing: says so" "hc not found" "$(json_field "$out" output_tail)"
+
+# 20 + 20 lines of output come back; a short output comes back whole.
+req="$(build_req "20260914T000025-1" "chatty" "seq 1 100")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run gui_run "$req")"
+tail_text="$(json_field "$out" output_tail)"
+assert_eq "long output: 41 lines (20 + omitted marker + 20)" "41" "$(printf '%s\n' "$tail_text" | wc -l | tr -d ' ')"
+assert_contains "long output: first line" "1" "$(printf '%s\n' "$tail_text" | sed -n 1p)"
+assert_eq "long output: line 20 is the last of the head" "20" "$(printf '%s\n' "$tail_text" | sed -n 20p)"
+assert_contains "long output: omitted marker" "60 lines omitted" "$tail_text"
+assert_eq "long output: last line" "100" "$(printf '%s\n' "$tail_text" | tail -n 1)"
+req="$(build_req "20260914T000026-1" "short" "seq 1 40")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run gui_run "$req")"
+assert_eq "40 lines: whole output, no marker" "40" "$(json_field "$out" output_tail | wc -l | tr -d ' ')"
 
 echo ""
 echo "gui-run — informational requests (no cmd)"
@@ -263,6 +351,11 @@ assert_eq "local push: ssh never called" "no" "$([[ -e "$ssh_probe" ]] && echo y
 assert_contains "local push: result persisted as done" '"status":"done"' "$(cat "$STATE/human-queue/$id.res")"
 out="$(PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Deny bash "$AH" ask "local approval" --cmd "echo nope" 2>/dev/null)"; rc=$?
 assert_eq "local push, Deny: rc 1" "1" "$rc"
+out="$(PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Run bash "$AH" ask "local pending" --cmd "sudo make PENDING-PROMPT" 2>"$TMP/pending.err")"; rc=$?
+id="$(printf '%s\n' "$out" | head -1)"
+assert_eq "local push, still running: rc 76 (pending, not failed 124)" "76" "$rc"
+assert_contains "local push, still running: stderr names the terminal" "t9zz" "$(cat "$TMP/pending.err")"
+assert_eq "local push, still running: no result written, the request stays open" "no" "$([[ -e "$STATE/human-queue/$id.res" ]] && echo yes || echo no)"
 export HUMAN_QUEUE_PUSH=0
 
 # The keys/expiry section is independent of the others (its own queue dir), so it runs in the background
