@@ -18,13 +18,15 @@ cleanup() {
   rm -rf "$TMP"
 }
 trap cleanup EXIT
-mkdir -p "$TMP/bin" "$TMP/state"
+mkdir -p "$TMP/bin" "$TMP/state" "$TMP/diag" "$TMP/vm"
+printf '#!/bin/sh\necho stub-token\n' > "$TMP/secrets-run-default"; chmod +x "$TMP/secrets-run-default"
 
 # curl stub: records the full arg list of every call; STUB_CURL_FAIL=1 fails like a refused push.
 cat > "$TMP/bin/curl" <<STUB
 #!/bin/sh
 echo "\$*" >> "$TMP/curl.log"
 case "\$*" in *api/push/composite*) date +%s >> "$TMP/liveness.ts" ;; esac
+[ "\${STUB_NTFY_FAIL:-0}" = 1 ] && case "\$*" in *ntfy.invalid*) exit 22 ;; esac
 case "\$*" in *api/push/*) ;; *7793*)
   # STUB_FACTORY_DOWN=1: refused every time; =N>1: refused the first N-1 calls, then answers (a restart gap).
   if [ "\${STUB_FACTORY_DOWN:-0}" != 0 ]; then
@@ -73,6 +75,8 @@ run_script() {
     SECRETS_FRESHNESS_PUSH_URL_FILE="$TMP/none-secrets-url" \
     CURL_BIN="$TMP/bin/curl" JQ_BIN=/usr/bin/jq \
     DEVHOST_DRIFT_CHECK_BIN="$TMP/none-drift.sh" \
+    DEVHOST_DIAGNOSTIC_REPORTS_DIR="$TMP/diag" DEVHOST_SNAPSHOT_LOG="$TMP/snapshots.jsonl" DEVHOST_SWAP_DIR="$TMP/vm" \
+    NTFY_URL="http://ntfy.invalid" NTFY_CONFIG="$TMP/none-ntfy.yml" SECRETS_RUN_BIN="$TMP/secrets-run-default" \
     OBSIDIAN_BIN="$TMP/obsidian" TAILSCALE_BIN=/usr/bin/false \
     DEVHOST_TRANSIENT_FAILS=1 DEVHOST_BOOT_GRACE_SECONDS=0 \
     "$@" /bin/bash "$HERE/devhost-health-check.sh" >"$TMP/out.log" 2>&1
@@ -295,6 +299,90 @@ echo "liveness: the real tailnet / sshd / core checks grade without blocking"
 run_script DEVHOST_LIVENESS="liveness_tailnet" DEVHOST_COMPONENTS="check_agents_md_flag"
 assert_contains "tailscale stub /usr/bin/false: dead tailnet pushes down" "status=down" "$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)"
 assert_contains "...and says why" "tailscaled not Running" "$(/usr/bin/grep 'api/push/' "$TMP/curl.log" | /usr/bin/head -1)"
+
+echo "snapshot: one compact JSON line per run, appended, with the fields a hang needs"
+rm -f "$TMP/snapshots.jsonl" "$TMP/vm"/*; : > "$TMP/vm/swapfile0"; : > "$TMP/vm/swapfile1"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=7200
+assert_eq "one line after one run" 1 "$(wc -l < "$TMP/snapshots.jsonl" | tr -d ' ')"
+snap=$(/usr/bin/head -1 "$TMP/snapshots.jsonl")
+shape=$(/usr/bin/jq -c '{ts: (.ts|test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$")), up_s, load: (.load|length), pressure: (.pressure|type), swap: (.swap_used_mb|type),
+  swapfiles, free: (.free_pages|type), disk: (.disk_free_gb|type), procs: (.procs > 0), claude: (.claude|type), node: (.node|type), virt: (.virtualization|type),
+  rss: (.top_rss|length), cpu: (.top_cpu|length), rss0: (.top_rss[0]|keys), cpu0: (.top_cpu[0]|keys)}' <<<"$snap")
+assert_eq "line shape" '{"ts":true,"up_s":7200,"load":3,"pressure":"number","swap":"number","swapfiles":2,"free":"number","disk":"number","procs":true,"claude":"number","node":"number","virt":"number","rss":8,"cpu":8,"rss0":["cmd","pid","rss_mb"],"cpu0":["cmd","cpu","pid"]}' "$shape"
+assert_eq "valid single-line JSON" 1 "$(printf '%s\n' "$snap" | /usr/bin/jq -c . | wc -l | tr -d ' ')"
+run_script DEVHOST_COMPONENTS="check_obsidian"
+assert_eq "second run appends" 2 "$(wc -l < "$TMP/snapshots.jsonl" | tr -d ' ')"
+# Stub ps: counts by command name, ranking by rss and by cpu, a path with a space, a hung ps costs only its own fields.
+cat > "$TMP/ps" <<'STUB'
+#!/bin/sh
+if [ "${STUB_PS_HANG:-0}" = 1 ]; then sleep 30; fi
+cat <<'EOT'
+  101  900000  1.5 /Users/x/.local/share/claude/versions/2.1.0/claude
+  102  800000  9.5 /Users/x/.local/share/claude/versions/2.1.0/claude
+  103  100000 80.0 /opt/homebrew/bin/node
+  104  700000  0.0 /opt/homebrew/Cellar/colima/com.apple.Virtualization.VirtualMachine
+  105  300000  3.0 /Applications/Some App.app/Contents/MacOS/Some App
+  106  200000 40.0 /usr/sbin/fseventsd
+EOT
+STUB
+chmod +x "$TMP/ps"
+rm -f "$TMP/snapshots.jsonl"
+run_script DEVHOST_COMPONENTS="check_obsidian" PS_BIN="$TMP/ps"
+snap=$(/usr/bin/head -1 "$TMP/snapshots.jsonl")
+assert_eq "counts by command" '{"procs":6,"claude":2,"node":1,"virt":1}' "$(/usr/bin/jq -c '{procs, claude, node, virt: .virtualization}' <<<"$snap")"
+assert_eq "top by rss, command names only" '["claude","claude","com.apple.Virtualization.VirtualMachine","Some App"]' "$(/usr/bin/jq -c '[.top_rss[:4][] | .cmd]' <<<"$snap")"
+assert_eq "top by cpu leads with node" "node" "$(/usr/bin/jq -r '.top_cpu[0].cmd' <<<"$snap")"
+rm -f "$TMP/snapshots.jsonl"
+run_script DEVHOST_COMPONENTS="check_obsidian" PS_BIN="$TMP/ps" STUB_PS_HANG=1 DEVHOST_SNAPSHOT_TOOL_TIMEOUT=1
+assert_eq "a hung ps still yields a line, no process data" '{"procs":0,"rss":0}' "$(/usr/bin/jq -c '{procs, rss: (.top_rss|length)}' "$TMP/snapshots.jsonl")"
+assert_eq "...and the heartbeat still exits 0" 0 "$RC"
+
+echo "snapshot log is bounded by log-rotate (the declared EXTRA entry)"
+assert_contains "log-rotate names the file" "devhost-snapshots.jsonl" "$(/usr/bin/grep -c 'devhost-snapshots.jsonl' "$HERE/log-rotate.sh") $(/usr/bin/grep 'devhost-snapshots.jsonl' "$HERE/log-rotate.sh")"
+
+echo "panic: the heartbeat message carries the headline, the reboot push goes out once per panic"
+rm -f "$TMP/state/panic-notified"; rm -f "$TMP/diag"/*
+printf '{"panicString":"decoy"}\n' > "$TMP/diag/.contents.panic"
+panic="$TMP/diag/panic-base+socd-2026-11-13-190826.000.panic"
+printf '%s\n%s\n' '{"bug_type":"210","os_version":"macOS"}' \
+  '{"panicString":"panic(cpu 3 caller 0xfffffe0011223344): watchdog timeout: no checkins from watchdogd in 94 seconds (104645 total checkins)\nDebugger message: panic\nmore","build":"x"}' > "$panic"
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120
+detail=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
+assert_contains "heartbeat: headline, not a count" "watchdog timeout: no checkins from watchdogd in 94 seconds (104645 total checkins)" "$detail"
+assert_eq "heartbeat: no prefix noise, no second line" 0 "$(printf '%s' "$detail" | /usr/bin/grep -c 'caller 0x\|Debugger message')"
+assert_contains "heartbeat: still a WARN, push is up" "status=up" "$detail"
+ntfy=$(cat "$TMP/curl.log")
+assert_eq "one ntfy push on the first run" 1 "$(printf '%s\n' "$ntfy" | /usr/bin/grep -c 'ntfy.invalid/alerts')"
+assert_contains "push is high priority" "Priority: high" "$ntfy"
+assert_contains "push names the panic" "Title: Mini panicked and rebooted" "$ntfy"
+assert_contains "push carries the headline" "watchdog timeout: no checkins from watchdogd in 94 seconds" "$ntfy"
+assert_contains "push carries the time to ready" "ready 120s after boot" "$ntfy"
+assert_contains "push carries the boot time" "boot 20" "$ntfy"
+assert_contains "state records the report" "${panic##*/}" "$(cat "$TMP/state/panic-notified")"
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=420
+assert_eq "second run, same panic: no push" 0 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
+cp "$panic" "$TMP/diag/panic-full-2026-11-13-190500.0003.panic"
+touch -t "$(date -v+10S '+%Y%m%d%H%M.%S')" "$TMP/diag/panic-full-2026-11-13-190500.0003.panic"
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=420
+assert_eq "a NEW report pushes again" 1 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
+echo "panic: a failed push is retried, a report past the age window is never pushed"
+rm -f "$TMP/state/panic-notified"
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120 STUB_NTFY_FAIL=1
+assert_eq "failed push: nothing stored" 0 "$([[ -f "$TMP/state/panic-notified" ]] && echo 1 || echo 0)"
+assert_eq "failed push: heartbeat still exits 0" 0 "$RC"
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120
+assert_eq "next run retries and succeeds" 1 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
+rm -f "$TMP/state/panic-notified"
+touch -t "$(date -v-4d '+%Y%m%d%H%M.%S')" "$TMP/diag"/*
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120
+assert_eq "outside the age window: no push" 0 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
+touch "$TMP/diag"/*
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120 SECRETS_RUN_BIN="$TMP/none-secrets-run"
+assert_eq "no ntfy token: no push, heartbeat unharmed" 0 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
+rm -f "$TMP/diag"/* "$TMP/diag"/.contents.panic "$TMP/state/panic-notified"
+run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120
+assert_eq "no report: no push" 0 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
+assert_contains "no report: says so" "no kernel panic on record" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')

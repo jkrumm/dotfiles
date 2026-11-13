@@ -39,7 +39,7 @@ plist com.jkrumm.devnull /dev/null /dev/null
 plist com.vendor.gamma "$LOGS/vendor.log" "$LOGS/vendor.log"
 big "$LOGS/alpha.log"; big "$LOGS/alpha.err"; big "$LOGS/beta.log"; big "$LOGS/log-rotate.log"
 ln -s "$LOGS/PhotosSearch.aapbz" "$LOGS/linked.log"; plist com.jkrumm.linked "$LOGS/linked.log" "$LOGS/linked.log"
-big "$LOGS/vendor.log"; big "$LOGS/PhotosSearch.aapbz"; big "$LOGS/hermes-ops.log"
+big "$LOGS/vendor.log"; big "$LOGS/PhotosSearch.aapbz"; big "$LOGS/hermes-ops.log"; big "$LOGS/devhost-snapshots.jsonl"
 
 out=$(LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" 2>&1); rc=$?
 check "exits 0" test "$rc" -eq 0
@@ -47,6 +47,7 @@ check "com.jkrumm log rotated (stdout)" rotated alpha.log
 check "com.jkrumm log rotated (stderr)" rotated alpha.err
 check "com.iu log rotated" rotated beta.log
 check "declared extra rotated" rotated hermes-ops.log
+check "the devhost snapshot log is rotated" rotated devhost-snapshots.jsonl
 check "foreign label untouched" untouched vendor.log
 check "unrelated log untouched" untouched PhotosSearch.aapbz
 check "own log untouched" untouched log-rotate.log

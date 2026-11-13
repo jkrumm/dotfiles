@@ -100,7 +100,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.brain-sync` | 300s | vault reconcile via GitHub |
 | `com.jkrumm.brain-backup` | 03:30 daily | vault backup |
 | `com.jkrumm.brain-web-refresh` | 300s | brain-web rebuild |
-| `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma, under `jobrun --timeout 270` (bounded); also pushes the collie, factory and secrets monitors and runs the daily drift sweep as a side job |
+| `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma, under `jobrun --timeout 270` (bounded); also pushes the collie, factory and secrets monitors, runs the daily drift sweep as a side job, appends the rolling pre-hang snapshot (`~/Library/Logs/devhost-snapshots.jsonl`, rotated by `log-rotate`), and pushes one ntfy message per new kernel-panic report (`docs/devhost-health.md` §Forensics: the rolling snapshot and the panic push) |
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 900s | copytruncate, 16 MB cap; list derived from our plists; Chrome clone sweep bounded on one clock from script start (background priority, lsof 90 s, removal budget 300 s, `--timeout 840`) after rc=124 under load (issue 870) |

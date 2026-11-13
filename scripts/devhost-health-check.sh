@@ -281,6 +281,8 @@ REBOOT_NOTE_SECONDS="${DEVHOST_REBOOT_NOTE_SECONDS:-600}"
 # direction, because it looks like a healthy long-running host.
 host_uptime_seconds() {
   local boot now up
+  # Test hook (scripts/devhost-heartbeat.test.sh): a fixed uptime, so the reboot paths run without a reboot.
+  case "${DEVHOST_TEST_UPTIME_S:-}" in ''|*[!0-9]*) ;; *) echo "$DEVHOST_TEST_UPTIME_S"; return 0 ;; esac
   boot=$(/usr/sbin/sysctl -n kern.boottime 2>/dev/null | sed -n 's/^{ *sec *= *\([0-9][0-9]*\).*/\1/p')
   case "${boot:-}" in ''|*[!0-9]*) echo 999999; return 0 ;; esac
   if (( boot < 1600000000 )); then echo 999999; return 0; fi
@@ -309,6 +311,12 @@ push_url=$(kuma_resolve_push_url "${DEVHOST_PUSH_URL:-}" "$PUSH_URL_FILE") || ex
 push() { kuma_push "$push_url" "$1" "$2"; }
 
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+# Rolling snapshot, panic headline, one push per panic. Only started while SECONDS is under this (the liveness phase
+# is ~15 s); jobrun's 270 s deadline and HEARTBEAT_BUDGET below still bound the whole run.
+SNAPSHOT_START_LIMIT="${DEVHOST_SNAPSHOT_START_LIMIT:-100}"
+# shellcheck source=lib/devhost-forensics.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/devhost-forensics.sh"
 
 # run_bounded <secs> <cmd...> — run a command (a function of this script is fine)
 # with its stdout captured and a deadline. The command gets its OWN process group
@@ -857,6 +865,8 @@ check_kernel_panics() {
   # already covered, and re-raising one days later under a component named for
   # panics would read as an event that just happened.
   #
+  # (The globs live in panic_newest_report, lib/devhost-forensics.sh; `panic-*` since the 2026-11-13 panic was
+  # `panic-base+socd-*.panic`, which `panic-full-*` missed.)
   # EVERY spelling macOS has used for a panic report, because this check must
   # not depend on the OS version's naming. `panic-full-*` is the modern name and
   # is what this host wrote for the 2026-09-21 panic (macOS 26, `.panic`
@@ -867,21 +877,15 @@ check_kernel_panics() {
   # zero matches falls through to "no kernel panic on record" and pushes the
   # composite UP. A pattern that matches nothing expands to itself and is
   # dropped by the `-f` test below, so carrying all four costs nothing.
-  local dir="$DIAGNOSTIC_REPORTS_DIR" newest="" newest_mtime=0 f mtime
+  local dir="$DIAGNOSTIC_REPORTS_DIR" found newest newest_mtime
   [[ -d "$dir" ]] || { echo "kernel panics n/a (no $dir)"; return 0; }
   # An unreadable dir globs to nothing and would read as "no panic" — the one
   # silent failure this check must not have.
   [[ -r "$dir" && -x "$dir" ]] || { echo "kernel panics unreadable ($dir not listable)"; return 2; }
-  # A pattern that matches nothing expands to itself, which `-f` rejects — so no
-  # nullglob (bash 3.2 has it off and this script must not need it).
-  for f in "$dir"/panic-full-*.panic "$dir"/panic-full-*.ips \
-           "$dir"/Kernel-*.panic "$dir"/Kernel_*.panic; do
-    [[ -f "$f" ]] || continue
-    mtime=$("$STAT_BIN" -f %m "$f" 2>/dev/null) || continue
-    [[ -n "$mtime" ]] || continue
-    if (( mtime > newest_mtime )); then newest_mtime=$mtime; newest="$f"; fi
-  done
-  [[ -n "$newest" ]] || { echo "no kernel panic on record"; return 0; }
+  found=$(panic_newest_report)
+  newest=${found#*$'\t'}
+  newest_mtime=${found%%$'\t'*}
+  [[ -n "$found" ]] || { echo "no kernel panic on record"; return 0; }
 
   # Compared in seconds, not floored days (3d23h is outside a 3-day window), and
   # clamped at 0 so a report stamped in the future (clock step) never reads "-1d".
@@ -892,24 +896,13 @@ check_kernel_panics() {
   (( age_s < PANIC_MAX_AGE_DAYS * 86400 )) \
     || { echo "no kernel panic in ${PANIC_MAX_AGE_DAYS}d (last ${age_days}d ago)"; return 0; }
 
-  # The panic's own one-line signature, taken from `panicString` — the file's
-  # first line is a small JSON object and the report itself the next, so jq is
-  # fed the stream and picks the value that has one. `panic(cpu N caller 0x…)`
-  # is 40 characters of identifier noise, so strip that prefix and keep the
-  # quoted message that follows; if the shape is not what is expected, fall back
-  # to the raw string rather than reporting nothing.
-  #
-  # Flattened first, because panicString is a multi-line block and this value
-  # becomes one msg in the heartbeat: a newline would split the summary into two
-  # lines in the Kuma UI and in every downstream Slack notification. The lib
-  # comment about hand-rolled URLs records the same class of bug, caught there.
-  local raw sig
-  raw=$("$JQ_BIN" -r '[select(.panicString) | .panicString] | first // ""' "$newest" 2>/dev/null) || raw=""
-  raw=${raw//$'\n'/ }
-  sig=$("$SED_BIN" -e 's/^[[:space:]]*//' -e 's/^panic([^)]*):[[:space:]]*"//' -e 's/".*$//' <<<"$raw")
-  [[ -n "$sig" ]] || sig="$raw"
-  [[ -n "$sig" ]] || sig="signature unreadable"
-  echo "kernel panic ${age_days}d ago (${sig:0:80}) — autorestart recovered, report ${newest##*/}"
+  # The panic's own one-line headline (the string before the first newline of
+  # `panicString`, lib/devhost-forensics.sh): it becomes one msg in the heartbeat
+  # and in the reboot push, so it never contains a newline, which would split the
+  # summary into two lines in the Kuma UI and every downstream Slack notification.
+  local headline
+  headline=$(panic_headline "$newest")
+  echo "kernel panic ${age_days}d ago: ${headline:0:160} (autorestart recovered, report ${newest##*/})"
   return 2
 }
 
@@ -1502,6 +1495,15 @@ else
   echo "✓ liveness: ${liveness_notes:-no liveness checks}"
 fi
 echo "liveness pushed after ${SECONDS}s" >&2
+
+# After the liveness push, so neither can delay it: the rolling pre-hang record, then the one push for a new panic
+# report (lib/devhost-forensics.sh). Both are bounded and never fail the run.
+if (( SECONDS < SNAPSHOT_START_LIMIT )); then
+  devhost_snapshot || true
+else
+  echo "snapshot skipped: liveness phase already used ${SECONDS}s (limit ${SNAPSHOT_START_LIMIT}s)" >&2
+fi
+run_bounded "$SIDE_MONITOR_TIMEOUT" devhost_panic_notify "$uptime_s" "$liveness_down" >/dev/null || true
 
 # The slow phase may need the real snapshot (check_tailscale, check_dev_vhosts): retake it with the full bound.
 if [[ -z "$_TS_SELF" ]]; then
