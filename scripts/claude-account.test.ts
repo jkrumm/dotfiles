@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { HOME_BIN, PEER_SCRIPT, boundedSpawnSync } from "./claude-account.ts"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, rank, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, rank, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, markVerified, readVerified, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -707,12 +707,13 @@ describe("runRefresh", () => {
   const http200: HttpGet = async () => ({ status: 200, json: OAUTH_BODY })
   const loggedIn = (v: boolean): SpawnResult => ({ status: 0, stdout: JSON.stringify({ loggedIn: v }), stderr: "" })
 
-  async function harness(t: Setup, o: { ids?: string[]; preAuthFailed?: string[]; seed?: Sample; registry?: Registry } = {}) {
+  async function harness(t: Setup, o: { ids?: string[]; preAuthFailed?: string[]; seed?: Sample; registry?: Registry; verifiedAgoMs?: number } = {}) {
     const dir = tmp()
     const ids = o.ids ?? ["iu"]
     claimRefresh(reg(), ids, NOW, cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), dir) // pre-claimed by the caller
     for (const id of o.preAuthFailed ?? []) setAuthFailed(id, true, NOW - 3600_000, dir)
     if (o.seed) for (const id of ids) saveSample(id, o.seed, dir)
+    if (o.verifiedAgoMs !== undefined) for (const id of ids) markVerified(id, NOW - o.verifiedAgoMs, dir)
     const calls: { cmd: string; args: string[]; configDir: string | undefined }[] = []
     const urls: { url: string; headers: Record<string, string>; timeoutMs: number }[] = []
     const logs: string[] = []
@@ -731,8 +732,9 @@ describe("runRefresh", () => {
     const claimHeld = !claimRefresh(reg(), ["iu"], NOW + 1000, cacheOf(sample(1, 1, { age: 11 * 60_000 })), dir).length
     const cache = loadCache(dir)
     const files = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("\n")
+    const verified = readVerified("iu", dir)
     rmSync(dir, { recursive: true })
-    return { results, cache, calls, urls, logs, claimHeld, files }
+    return { results, cache, calls, urls, logs, claimHeld, files, verified }
   }
 
   test("endpoint sample: saved, fresh, claim kept as the budget, claude never spawned", async () => {
@@ -840,6 +842,21 @@ describe("runRefresh", () => {
     expect(h.results).toEqual({ iu: "unresolved" })
     expect(h.claimHeld).toBe(true)
     expect(h.cache.auth_failed.iu).toBeUndefined()
+  })
+  test("no verdict while the login was proven < 6 h ago is deferred (exit 0), at 6 h or never it is unresolved", async () => {
+    const hang: SpawnResult = { status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }
+    const setup = { http: async () => ({ status: 503, json: null }), claudeStart: hang }
+    const recent = await harness(setup, { verifiedAgoMs: 2 * H * 1000 })
+    expect(recent.results).toEqual({ iu: "deferred" })
+    expect(recent.logs.join("\n")).toContain("login last proven 120 min ago")
+    expect(recent.claimHeld).toBe(true)
+    expect((await harness(setup, { verifiedAgoMs: 6 * H * 1000 })).results).toEqual({ iu: "unresolved" })
+    expect((await harness(setup)).results).toEqual({ iu: "unresolved" })
+  })
+  test("a sample or loggedIn=true stamps the login as proven; a failed verdict does not", async () => {
+    expect((await harness({})).verified).toBe(NOW)
+    expect((await harness({ http: async () => ({ status: 404, json: null }), auth: loggedIn(true) })).verified).toBe(NOW)
+    expect((await harness({ http: async () => ({ status: 404, json: null }), auth: loggedIn(false) })).verified).toBeNull()
   })
   test("each account is classified on its own", async () => {
     const dir = tmp()
