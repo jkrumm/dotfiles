@@ -56,11 +56,12 @@ const OWNER =
 /** `--admin` or `--admin=true`; `--admin=false` is a no-op. */
 const isAdminFlag = (a: string): boolean => a === "--admin" || (a.startsWith("--admin=") && a.slice(8) !== "false");
 
-/** The owner allowed these and no others (2026-11-06; import dashboard added 2026-11-10); all three already merge past review from his account. */
+/** The owner allowed these and no others (2026-11-06; import dashboard added 2026-11-10, knowledge 2026-11-13); all merge past review from his account. */
 const ADMIN_MERGE_REPOS = new Set([
   "IU-Group-Engineering/epos-ai-teamchat-athena",
   "IU-Group-Engineering/epos-tool-athena",
   "IU-Group-Engineering/epos-import-dashboard-athena",
+  "IU-Group-Engineering/epos-knowledge-athena",
 ]);
 
 const PR_URL = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+\/?$/;
