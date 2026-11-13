@@ -104,6 +104,20 @@ the closed, merged ones. Keep a closed one whose branch has no merged PR and unm
 Other cheap cuts if it recurs: `~/.local/state/athena-poc` 22 GB (Oct 30 - Nov 2 PoC runs),
 `~/.cache/cloud-wave` 10 GB, `~/.colima/_lima/_disks/colima-athena-poc` 30 GB sparse (owner calls).
 
+## `/private/tmp` stock (Beszel "disk above 90%", 94%, no `.building-*`, worktrees small)
+
+Issue 1026 (2026-11-13, 94% flat for 95+ min, 58 GiB free) was neither a round build (two
+rounds in `weatherorb_blend`) nor worktrees (basalt-ui 13 GiB, the rest under 5). `/private/tmp`
+held 32 GiB in ~21.8k entries (12 GiB on 2026-10-20) and nothing swept it. The mini kernel-panicked
+that evening (watchdogd starved, ~19:00 CET) and the reboot emptied it: 85%, 138 GiB free, 12
+entries. The swap headroom at 94% was thin (swap 9-14 GB over 12 swapfiles in `/private/var/vm`
+before the panic; none after the reboot), so a full volume is part of panic prevention. Next
+time: `du -xk -d1 /private/tmp` once (a `du` per entry forks out at 20k entries), clean what is
+older than 3 days that nothing holds open. Still on disk, owner calls: `~/.local/state/athena-poc`
+22 GiB (`investigate/` 20 GiB, untouched since Nov 2), `~/.cache/cloud-wave` 10 GiB,
+`colima-athena-poc` 4.7 GiB. A sweep step for `/private/tmp` is not added: the root cause
+(which writer leaked 20 GiB there) was not caught before the reboot.
+
 ## What lives on the HomeLab
 
 The 2026-10 sweep moved `~/Movies/{Squid Game,YT Saver}`, `~/Downloads/mindsera_memos` and `~/SY`
