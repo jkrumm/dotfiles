@@ -286,7 +286,28 @@ else
 fi
 notify "1Password secrets cache" "Starting — approve the Touch ID prompts."
 
-if "$SEED_SCRIPT"; then
+# A changed refs list alone (the cache is not yet MAX_AGE_DAYS old) is an INCREMENTAL
+# reseal: the seed reads only the refs the cache lacks and keeps every other value, so
+# one new ref costs one `op` read instead of the whole list. An aged cache still gets the
+# full pass that refreshes every value.
+seed_args=()
+if [ "$refs_due" -eq 1 ] && [ "$cache_age" -lt $(( MAX_AGE_DAYS * 86400 )) ]; then
+  seed_args=(--new-only)
+fi
+
+seed_rc=0
+"$SEED_SCRIPT" ${seed_args[@]+"${seed_args[@]}"} || seed_rc=$?
+
+# Exit 3 = delivered, but an account was unreachable (its old values kept, some refs may
+# have no value). NOT a success: the refs stamp stays untouched so the refs stay due, and
+# the retry backoff paces the next attempt. The cache itself was updated.
+if [ "$seed_rc" -eq 3 ]; then
+  log "PARTIAL — cache updated, but an account was unreachable (see the seed output); refs stay due, retry after ${RETRY_HOURS}h"
+  notify "1Password secrets cache" "Partly resealed — a 1Password account was unreachable; sign in to it."
+  exit 1
+fi
+
+if [ "$seed_rc" -eq 0 ]; then
   # Only after a SUCCESSFUL seal, and only when the fetch actually produced an
   # identity: an empty refs_id (offline, or no upstream) must leave the previous
   # stamp alone rather than record "nothing" as the sealed state.

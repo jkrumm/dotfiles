@@ -367,10 +367,31 @@ resolves every ref through 1Password in one biometric pass, and reseals.
   are refused by the seed (argo's `op://vps/argo/*` is an owner-classified
   exception). Work refs *are* cached: the gate is tkrumm's `Private` vault, not
   work-vs-personal.
-- **A dead ref blocks EVERY reseal.** The seed fails closed, so one deleted
-  upstream item means no cache update at all; the loop collects the complete list
-  before aborting. Fixing it is a refs-file edit, never a `secrets-run` problem —
-  and no monitor tells you which.
+- **A new ref is an incremental reseal, not a full one.** `make secrets-seed-new`
+  (`secrets-seed.sh --new-only`) reads only the refs the sealed cache lacks and keeps
+  every other value (the current cache is decrypted in memory — on the mini, over
+  ssh when sealing from the MacBook): one new ref = one `op` read. It keeps the old
+  `_seeded_at` and file mtime, so the 5-day / 8-day / 14-day age gates still measure
+  the last COMPLETE reseal; the plain `make secrets-seed` stays the full pass. The
+  hourly opbackup reseal runs `--new-only` when only the refs list moved.
+- **Agents ask for a reseal through `make secrets-reseal-request` (mini), never by
+  hand.** It lists the refs in `headless.refs`/`headless.iu.refs` that the cache has
+  no key for (keys are plaintext in SOPS-JSON: no decrypt, no `op`), raises ONE
+  request per missing-ref set (key `secrets-reseal-<hash of the set>`, so asking
+  again is a no-op and a changed set replaces the old request), names the exact refs
+  and the accounts to sign in, and carries a `--check` (`needed`) that closes the
+  request once the cache has them. `make secrets-reseal-status` lists the set.
+- **One unreachable account does not stop the other.** If an account cannot sign in,
+  or none of its vaults exist on the machine sealing (2026-11-13: careerpartner on
+  the MacBook), the seed seals the reachable account's refs plus the unreachable
+  account's existing values, names that account once, and exits **3** (partial; the
+  cache IS delivered; opbackup does not stamp the refs as sealed). tkrumm is the
+  trust anchor (recipient pin, Private-vault guard) and must be reachable.
+  `secrets-rotate` runs `--require-complete`: it never delivers a partial cache.
+- **A dead ref blocks EVERY reseal of a reachable account.** The seed fails closed,
+  so one deleted upstream item means no cache update at all; the loop collects the
+  complete list before aborting. Fixing it is a refs-file edit, never a
+  `secrets-run` problem — and no monitor tells you which.
 - **`op whoami` is not an unlock probe, it is a permanent lock-out** — under
   desktop-app integration there is no CLI session token, so it returns rc=1 on a
   fully unlocked app while `op read` works in the same second. Use

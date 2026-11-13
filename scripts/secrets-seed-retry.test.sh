@@ -67,9 +67,18 @@ set -euo pipefail
 die() { echo "DIE: $*" >&2; exit 1; }
 indent() { sed 's/^/      /'; }
 refs=("$@")
-accts=(); for _ in "${refs[@]}"; do accts+=(tkrumm); done
+accts=(); need=(); kept=(); for _ in "${refs[@]}"; do accts+=(tkrumm); need+=(1); kept+=(-1); done
+# The state the real script has built by the time it reaches the resolve section: one
+# reachable account, every ref needed, no current cache (so nothing is kept).
+OP_ACCOUNT=tkrumm; REQUIRE_COMPLETE=0
+ACCT_LIST=(tkrumm); ACCT_OK=(1); ACCT_WHY=(""); ACCT_NEED=("${#refs[@]}"); ACCT_ATT=(0); ACCT_VGONE=(0)
+EXIST_KEYS=(); EXIST_VALS=(); EXIST_OK=0; EX_IX=-1
+load_existing() { :; }
+existing_ix() { EX_IX=-1; return 1; }
+cache_key() { printf '%s' "$2"; }
 EOF
-sed -n '/^OP_READ_TIMEOUT=/,/^echo "    ✓ resolved/p' "$SCRIPT" >>"$DRIVER"
+sed -n '/^acct_ix() {/,/^}/p' "$SCRIPT" >>"$DRIVER"
+sed -n '/^OP_READ_TIMEOUT=/,/^echo "    ✓ [$]{fresh} resolved/p' "$SCRIPT" >>"$DRIVER"
 
 # Guard the extraction itself. A silently-empty range would make every assertion
 # below vacuous, which is the one way a test like this rots without going red.

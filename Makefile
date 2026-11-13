@@ -775,9 +775,9 @@ _setup-git-headless:
 	chmod +x "$(DOTFILES_DIR)/scripts/git-credential-secrets-cache"; \
 	if ! printf 'protocol=https\nhost=github.com\n\n' | "$$HELPER" get 2>/dev/null | grep -q '^password=.'; then \
 		echo "    ✗ helper cannot resolve op://mini/github/token from the cache."; \
-		echo "      fix: ask-human.sh ask 'reseal the secrets cache' --cmd 'make secrets-seed' --wait"; \
-		echo "      (async, survives this session), or run 'make secrets-seed' directly if the"; \
-		echo "      MacBook is at hand right now (biometric). Then retry."; \
+		echo "      fix: make secrets-reseal-request   (one request for the refs the cache lacks; async, survives this"; \
+		echo "      session), or run 'make secrets-seed-new' directly if the MacBook is at hand right now"; \
+		echo "      (biometric). Then retry."; \
 		exit 1; \
 	fi; \
 	echo "    ✓ credential helper resolves a GitHub token from the cache"; \
@@ -793,9 +793,8 @@ _setup-git-headless:
 		echo "    ! helper cannot resolve $$GITLAB_REF — GitLab stanza NOT written."; \
 		echo "      GitHub still works. To fix: ensure the 1P item exists, that"; \
 		echo "      $$GITLAB_REF is listed in dotfiles-private/headless.refs, then"; \
-		echo "      ask-human.sh ask 'reseal the secrets cache' --cmd 'make secrets-seed' --wait"; \
-		echo "      (async), or run 'make secrets-seed' from the MacBook directly if present"; \
-		echo "      (biometric), and retry."; \
+		echo "      make secrets-reseal-request   (async), or run 'make secrets-seed-new' from the MacBook"; \
+		echo "      directly if present (biometric), and retry."; \
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
@@ -803,7 +802,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2248,6 +2247,22 @@ secrets-seed:
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh
 	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/secrets-seed.sh
 
+# Incremental: read ONLY the refs the sealed cache lacks (one new ref = one `op` read) and keep
+# every other value. An unreachable 1Password account keeps its old values and is named once
+# (exit 3). This is what a "reseal" request for a new ref runs.
+.PHONY: secrets-seed-new
+secrets-seed-new:
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/secrets-seed.sh --new-only
+
+# Mini side: raise the ONE reseal request for the refs the cache lacks (nothing when none are
+# missing; once per missing-ref set). `status` lists them, `needed` is the Errand's own check.
+.PHONY: secrets-reseal-request secrets-reseal-status
+secrets-reseal-request:
+	@bash $(DOTFILES_DIR)/scripts/secrets-reseal-request.sh request
+secrets-reseal-status:
+	@bash $(DOTFILES_DIR)/scripts/secrets-reseal-request.sh status
+
 # Rotate the mini age key + re-seal the cache under a fresh recipient (use if the
 # private key may be exposed). Never prints the key; reseeds atomically. MINI-only.
 .PHONY: secrets-rotate
@@ -2322,6 +2337,19 @@ secrets-test: secrets-lint
 	@$(DOTFILES_DIR)/scripts/secrets-run.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
+
+# Seed harness (stubbed op, throwaway age key + repo): incremental seal, per-account
+# degradation, dead refs, the ssh read-back. Hermetic — it brings its own backend marker.
+.PHONY: secrets-seed-test secrets-reseal-request-test
+secrets-seed-test:
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
+
+# The requester's harness (stubbed ask-human, JSON cache): one request per missing-ref set.
+secrets-reseal-request-test:
+	@shellcheck $(DOTFILES_DIR)/scripts/secrets-reseal-request.sh $(DOTFILES_DIR)/scripts/secrets-reseal-request.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-reseal-request.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-reseal-request.test.sh
 
 # Guard regression suite for the hourly secrets-cache reseed. Fully hermetic —
 # stubs ssh/op/pgrep/ioreg and drives a local bare repo as `origin`, so it runs
@@ -3487,6 +3515,8 @@ help:
 	@echo "  make brain-web-refresh-teardown   Unload + remove the brain-web-refresh LaunchAgent"
 	@echo ""
 	@echo "  make secrets-seed           Seed the SOPS+age cache from 1Password (reads dotfiles-private/headless.refs)"
+	@echo "  make secrets-seed-new       Incremental seal: read only the refs the cache lacks, keep every other value"
+	@echo "  make secrets-reseal-request Mini: raise the ONE reseal request for the refs the cache lacks (once per set; secrets-reseal-status lists them)"
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-rotate         Rotate a cached secret end to end (biometric; refuses on a detached mini)"
 	@echo "  make secrets-freshness-check    Push the secrets-cache staleness monitor once (the 300 s heartbeat does it otherwise)"
