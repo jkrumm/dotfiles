@@ -428,6 +428,8 @@ cmd_ask() {
     # and take the marker off again when the request stays pending.
     [[ -n "$session" ]] && : > "$QUEUE_DIR/$id.notified"
     push_request "$id" || rc=$?
+    # 76 (running in a MacBook terminal) keeps the marker on purpose: the owner just
+    # clicked Run and the caller has the exit code and the terminal id, so no hook.
     # 75 unanswered / 69 unreachable: still pending, so fall back to the hook.
     if (( rc == 75 || rc == 69 )); then
       rm -f "$QUEUE_DIR/$id.notified"
