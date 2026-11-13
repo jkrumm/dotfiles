@@ -199,6 +199,13 @@ assert_eq "still running: terminal id" "t9zz" "$(json_field "$out" terminal)"
 assert_eq "still running: no exit code" "null" "$(printf '%s' "$out" | grep -o '"exit":[^,]*' | cut -d: -f2)"
 assert_contains "still running: output so far" "Password:" "$(json_field "$out" output_tail)"
 
+# stderr of a failed command (nested path, hc itself) reaches output_tail, hc's own notes do not.
+req="$(build_req "20260914T000027-1" "stderr" "hc run --timeout 5 'echo oops >&2; exit 3'")"
+out="$(HUMAN_QUEUE_TEST_BUTTON=Run gui_run "$req")"
+assert_eq "stderr: status failed" "failed" "$(json_field "$out" status)"
+assert_contains "stderr: kept in output_tail" "oops" "$(json_field "$out" output_tail)"
+case "$(json_field "$out" output_tail)" in *"[hc]"*) bad "stderr: hc notes are dropped" "got [$(json_field "$out" output_tail)]" ;; *) ok "stderr: hc notes are dropped" ;; esac
+
 # hc missing: a failed result that says so, never a silent run in the bare shell.
 req="$(build_req "20260914T000024-1" "no hc" "echo should-not-run")"
 out="$(HUMAN_QUEUE_TEST_BUTTON=Run HUMAN_QUEUE_HC="$TMP/no-such-hc" gui_run "$req")"

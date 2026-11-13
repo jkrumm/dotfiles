@@ -444,16 +444,17 @@ $cmd_disp
   run_in_terminal "$cmd_value" >"$tmp_out" 2>"$tmp_err"
   exit_code=$?
   set -e
-  output_tail="$(head_tail_lines "$tmp_out")"
 
   # `hc run` leaves a command running past its timeout (exit 124, "still running
   # as <id>"): an interactive prompt such as sudo's Password: is waiting in that
   # terminal, which is pending, not failed.
   if (( exit_code == 124 )) && [[ "$(cat "$tmp_err")" =~ still\ running\ as\ (t[0-9a-z]+) ]]; then
     terminal="${BASH_REMATCH[1]}"
-  elif (( exit_code == 127 )) && [[ ! -s "$tmp_out" ]]; then
-    output_tail="$(cat "$tmp_err")"
   fi
+  # What hc or a nested command wrote to stderr (core down, a refused terminal)
+  # belongs to the output too, minus hc's own "[hc] …" notes.
+  grep -v '^\[hc\] ' "$tmp_err" >> "$tmp_out" || true
+  output_tail="$(head_tail_lines "$tmp_out")"
   rm -f "$tmp_out" "$tmp_err"
 
   if [[ -n "$terminal" ]]; then
