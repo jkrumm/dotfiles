@@ -266,6 +266,16 @@ export function markExhausted(id: string, untilS: number, dir = cacheDir()): voi
   writeAtomic(path, JSON.stringify({ until: Math.max(untilS, cur) }))
 }
 
+/** When this machine last proved the account's login (a sample from its own token, or `loggedIn: true`); null = never. */
+export function readVerified(id: string, dir = cacheDir()): number | null {
+  const ts = (readJson(file(dir, id, "verified.json")) as { ts?: unknown } | null)?.ts
+  return isNum(ts) ? ts : null
+}
+
+export function markVerified(id: string, nowMs: number, dir = cacheDir()): void {
+  writeAtomic(file(dir, id, "verified.json"), JSON.stringify({ ts: nowMs }))
+}
+
 /** Records the auth verdict; a no-op when it already says the same. */
 export function setAuthFailed(id: string, failed: boolean, nowMs: number, dir = cacheDir()): void {
   const path = file(dir, id, "auth.json")
@@ -940,7 +950,19 @@ async function oauthSample(d: RefreshDeps, id: string, status: () => LoginVerdic
  * (logged in, but the endpoint gave no sample and the stored one is older than STALE_OK_MS: the feed is silently
  * dying, so the keepalive must go red) or `unresolved`.
  */
-export type RefreshResult = "fresh" | "auth-ok" | "stale" | "auth-failed" | "unresolved"
+export type RefreshResult = "fresh" | "auth-ok" | "stale" | "auth-failed" | "unresolved" | "deferred"
+
+/**
+ * No sample and no verdict this run (the API or `claude auth status` hung: 2026-11-13 five red runs of ~95 s from a
+ * transient 503/401 outage that cleared by the next hour). Not red while this machine proved the login within STALE_OK_MS:
+ * `deferred` (exit 0, logged). Past that, or never proven, it stays `unresolved` (exit 1).
+ */
+function unverified(d: RefreshDeps, id: string): RefreshResult {
+  const at = readVerified(id, d.dir)
+  if (at === null || d.now() - at >= STALE_OK_MS) return "unresolved"
+  d.log?.(`refresh ${id}: no verdict this run, login last proven ${Math.round((d.now() - at) / 60_000)} min ago (deferred)`)
+  return "deferred"
+}
 
 /**
  * Quota is per account, not per machine, so the peer machine's samples are as good as ours: an idle login whose
@@ -1000,14 +1022,16 @@ export async function runRefresh(d: RefreshDeps): Promise<Record<string, Refresh
         d.log?.(`refresh ${id}: cannot start claude (${v.startFailed})`)
         releaseClaim(id, d.dir)
       } else if (v.loggedIn !== null) setAuthFailed(id, !v.loggedIn, d.now(), d.dir)
-      // a peer sample proves nothing about this machine's login: without a verdict the run stays unresolved (keepalive exit 1)
-      results[id] = v.loggedIn === true ? "fresh" : v.loggedIn === false ? "auth-failed" : "unresolved"
+      if (v.loggedIn === true) markVerified(id, d.now(), d.dir)
+      // a peer sample proves nothing about this machine's login: without a verdict the run is unverified (keepalive exit 1 once the last proof is 6 h old)
+      results[id] = v.loggedIn === true ? "fresh" : v.loggedIn === false ? "auth-failed" : v.startFailed ? "unresolved" : unverified(d, id)
       continue
     }
     const sample = await oauthSample(d, id, status)
     if (sample) {
       saveSample(id, sample, d.dir, hasSessionLimit(d.reg.accounts[id]))
       setAuthFailed(id, false, d.now(), d.dir)
+      markVerified(id, d.now(), d.dir)
       results[id] = "fresh"
       continue
     }
@@ -1019,9 +1043,11 @@ export async function runRefresh(d: RefreshDeps): Promise<Record<string, Refresh
     }
     if (v.loggedIn === null) {
       d.log?.(`refresh ${id}: no sample and no auth verdict`)
+      results[id] = unverified(d, id)
       continue
     }
     setAuthFailed(id, !v.loggedIn, d.now(), d.dir)
+    if (v.loggedIn) markVerified(id, d.now(), d.dir)
     if (!v.loggedIn) {
       results[id] = "auth-failed"
       continue
