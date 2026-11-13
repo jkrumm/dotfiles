@@ -38,7 +38,7 @@ else
     {hooks: {
       SessionStart: [one("session-start")], UserPromptSubmit: [one("user-prompt-submit")],
       Stop: [e(null; ($stop | gsub("\\\\\""; "\"")))],
-      StopFailure: [e("rate_limit"; ($g | gsub("\\\\\""; "\"")) + " && factory hook stop-failure; exit 0")],
+      StopFailure: [e(null;($g | gsub("\\\\\""; "\"")) + " && factory hook stop-failure; exit 0")],
       Notification: [e("permission_prompt|idle_prompt|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled"; ($g | gsub("\\\\\""; "\"")) + " && factory hook notification; exit 0")],
       SessionEnd: [one("session-end")]}}' >"$FACTORY_DIR/integrations/claude-code/hooks.json"
   echo "factory hooks: fixture in $FACTORY_DIR (no checkout found)"
@@ -64,7 +64,7 @@ for d in fresh stale; do
   expect_hook "$f" SessionStart - "" session-start
   expect_hook "$f" UserPromptSubmit - "" user-prompt-submit
   expect_hook "$f" Stop - "" stop
-  expect_hook "$f" StopFailure rate_limit rate_limit stop-failure
+  expect_hook "$f" StopFailure - "" stop-failure
   expect_hook "$f" SessionEnd - "" session-end
   for m in permission_prompt idle_prompt quota_auto_resume_fired quota_auto_resume_stale quota_auto_resume_disabled; do
     is "$d: Notification matcher covers $m" \

@@ -41,7 +41,7 @@ live from `dotfiles/hooks/`, so an edit takes effect on the next tool call (a *n
 ### Software-factory hooks
 
 Six events call the `factory` CLI (software-factory repo) for sessions `rd` spawned: `SessionStart`,
-`UserPromptSubmit`, `Stop`, `StopFailure` (matcher `rate_limit`), `Notification` (matchers `permission_prompt`,
+`UserPromptSubmit`, `Stop`, `StopFailure` (no matcher: every error type; the server tells a rate limit from the rest), `Notification` (matchers `permission_prompt`,
 `idle_prompt`, `quota_auto_resume_fired|stale|disabled`) and `SessionEnd`. Each runs
 
 ```sh
