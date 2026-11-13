@@ -51,6 +51,9 @@ mkdir -p "$STATE"
 export XDG_STATE_HOME="$STATE"
 # ask pushes by default (ssh iumac) — never from a test.
 export HUMAN_QUEUE_PUSH=0
+# The factory path (an Errand per ask) has its own section below; every other suite
+# exercises the queue file alone, and must never reach a real factory.
+export HUMAN_QUEUE_ERRANDS=0
 # A factory session running this suite must not leak into ask-human's notify sweep.
 unset FACTORY_SESSION
 
@@ -582,6 +585,165 @@ else
     assert_contains "waiting ask prints the result line ($as)" "\"resolvedAs\":\"$as\"" "$(cat "$outf")"
   done
   assert_eq "waiting callers: command never ran" "no" "$([[ -e "$marker" ]] && echo yes || echo no)"
+fi
+
+echo ""
+echo "ask-human.sh — requests go to the factory as Errands, the queue file is the offline fallback"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "  (jq missing — skipping errand assertions)"
+else
+  FXDIR="$TMP/fx"; mkdir -p "$FXDIR"; : > "$FXDIR/open.jsonl"; : > "$FXDIR/calls"
+  FX="$TMP/factory-fake.sh"
+  # A fake factory with state: `errand request` opens a row, `done` closes it, `list` prints the open ones.
+  # FX_DOWN=1 exits 7 (unreachable); FX_AUTH=1 refuses a non-empty FACTORY_TOKEN with 3 (the agent token).
+  cat > "$FX" <<'STUB'
+#!/usr/bin/env bash
+printf '%s | token=%s\n' "$*" "${FACTORY_TOKEN:-}" >> "$FX_DIR/calls"
+[[ -n "${FX_DOWN:-}" ]] && exit 7
+if [[ -n "${FX_AUTH:-}" && -n "${FACTORY_TOKEN:-}" && "$2" != request ]]; then exit 3; fi
+[[ "$1" == errand ]] || exit 0
+sub="$2"; shift 2
+case "$sub" in
+  request)
+    text="" cmd="" key="" check="" expires="" where=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --text) text="$2"; shift 2 ;; --command) cmd="$2"; shift 2 ;; --key) key="$2"; shift 2 ;;
+        --check) check="$2"; shift 2 ;; --expires) expires="$2"; shift 2 ;; --where) where="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    n=$(( $(wc -l < "$FX_DIR/open.jsonl") + $(cat "$FX_DIR/seq" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FX_DIR/seq"
+    id="errand_fake-$n"; sup='[]'
+    if [[ -n "$key" ]]; then
+      sup="$(jq -sc --arg k "$key" '[.[] | select(.requestKey == $k) | .id]' "$FX_DIR/open.jsonl")"
+      jq -c --arg k "$key" 'select(.requestKey != $k)' "$FX_DIR/open.jsonl" > "$FX_DIR/o.tmp"; mv "$FX_DIR/o.tmp" "$FX_DIR/open.jsonl"
+    fi
+    jq -nc --arg id "$id" --arg text "$text" --arg cmd "$cmd" --arg key "$key" --arg check "$check" --arg expires "$expires" --arg where "$where" \
+      '{id:$id, summary:$text, command:(if $cmd=="" then null else $cmd end), requestKey:(if $key=="" then null else $key end),
+        check:(if $check=="" then null else $check end), expiresAt:(if $expires=="" then null else $expires end), host:(if $where=="" then "any" else $where end),
+        source:"ask-human", raisedAt:"2026-11-13T09:00:00.000Z", doneAt:null, checkNote:null}' >> "$FX_DIR/open.jsonl"
+    jq -nc --arg id "$id" --argjson sup "$sup" '{result:"applied", errand:{id:$id}, superseded:$sup}' ;;
+  list) jq -sc '{errands: .}' "$FX_DIR/open.jsonl" ;;
+  done)
+    id="$1"; jq -c --arg id "$id" 'select(.id != $id)' "$FX_DIR/open.jsonl" > "$FX_DIR/o.tmp"; mv "$FX_DIR/o.tmp" "$FX_DIR/open.jsonl"
+    echo '{"result":"applied"}' ;;
+esac
+STUB
+  chmod +x "$FX"
+  (
+    unset FACTORY_TOKEN FACTORY_SESSION
+    export FX_DIR="$FXDIR" HUMAN_QUEUE_FACTORY="$FX" HUMAN_QUEUE_ERRANDS=1 HUMAN_QUEUE_PUSH=0
+    export XDG_STATE_HOME="$TMP/state-errands"; EQ="$XDG_STATE_HOME/human-queue"
+    open_count() { wc -l < "$FXDIR/open.jsonl" | tr -d ' '; }
+    queued_count() { local n=0 f; for f in "$EQ"/*.req; do [[ -e "$f" && ! -e "${f%.req}.res" ]] && n=$((n+1)); done; echo "$n"; }
+
+    # 1. Post: the Errand id is printed, flags map 1:1, no queue file is written.
+    eid="$(bash "$AH" ask "install the sudoers rule" --cmd "make sudoers" --key sudoers --check "test ! -f /etc/x" --expires 36h 2>/dev/null)"
+    assert_eq "post: prints the errand id" "errand_fake-1" "$eid"
+    call="$(grep 'errand request' "$FXDIR/calls" | head -1)"
+    assert_contains "post: source ask-human" "--source ask-human" "$call"
+    assert_contains "post: --command" "--command make sudoers" "$call"
+    assert_contains "post: --where macbook with a cmd" "--where macbook" "$call"
+    assert_contains "post: --key" "--key sudoers" "$call"
+    assert_contains "post: --check" "--check test ! -f /etc/x" "$call"
+    assert_contains "post: --expires as an ISO time" "--expires 20" "$call"
+    assert_contains "post: --format json" "--format json" "$call"
+    assert_eq "post: no queue file" "0" "$(queued_count)"
+    eid2="$(bash "$AH" ask "plain question" 2>/dev/null)"
+    call="$(grep 'errand request' "$FXDIR/calls" | tail -1)"
+    assert_not_contains "post: no --where without a cmd" "--where" "$call"
+    assert_not_contains "post: no --expires by default (the factory decides)" "--expires" "$call"
+    bash "$AH" ask "never expires" --expires never >/dev/null 2>&1
+    assert_contains "post: --expires never passes through" "--expires never" "$(grep 'errand request' "$FXDIR/calls" | tail -1)"
+    bash "$AH" ask "bad" --expires soon >/dev/null 2>&1; assert_eq "post: a bad --expires is refused before anything is posted" "1" "$?"
+
+    # 2. A newer request with the same key replaces (the factory does it; the same words are one call).
+    eid3="$(bash "$AH" ask "install the sudoers rule again" --key sudoers 2>/dev/null)"
+    assert_eq "key: only the newer request is open" "1" "$(jq -s --arg k sudoers '[.[] | select(.requestKey == $k)] | length' "$FXDIR/open.jsonl")"
+
+    # 3. List and status read the factory and the queue file.
+    out="$(bash "$AH" list --json)"
+    assert_eq "list --json: factory rows carry the errand id" "yes" "$(jq -r --arg id "$eid3" 'map(.id) | index($id) != null | if . then "yes" else "no" end' <<<"$out")"
+    assert_eq "list --json: factory row has host + where" "factory" "$(jq -r --arg id "$eid2" '.[] | select(.id == $id) | .where' <<<"$out")"
+    assert_contains "list: plain output shows the errand id" "$eid2" "$(bash "$AH" list)"
+    assert_contains "status: an errand id reads the factory" '"source":"ask-human"' "$(bash "$AH" status "$eid2")"
+
+    # 4. Answer: a dialog click closes the Errand; a denial closes it not_needed.
+    : > "$FXDIR/calls"
+    PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Run bash "$AH" ask "run me" --cmd "echo dialog-ran" >"$TMP/ans.out" 2>/dev/null; rc=$?
+    aid="$(head -1 "$TMP/ans.out")"
+    assert_eq "answer: Run exits 0" "0" "$rc"
+    assert_contains "answer: errand done with the result note" "errand done $aid --note answered on the MacBook (exit 0): dialog-ran" "$(cat "$FXDIR/calls")"
+    assert_eq "answer: no queue file written" "0" "$(queued_count)"
+    : > "$FXDIR/calls"
+    PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Deny bash "$AH" ask "deny me" --cmd "echo nope" >"$TMP/ans.out" 2>/dev/null; rc=$?
+    assert_eq "answer: Deny exits 1" "1" "$rc"
+    assert_contains "answer: denied closes not_needed" "--outcome not_needed" "$(grep 'errand done' "$FXDIR/calls")"
+    : > "$FXDIR/calls"
+    PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=TIMEOUT bash "$AH" ask "unanswered" --cmd "echo nope" >/dev/null 2>&1; rc=$?
+    assert_eq "answer: an unanswered dialog exits 75" "75" "$rc"
+    assert_eq "answer: and leaves the errand open" "0" "$(grep -c 'errand done' "$FXDIR/calls")"
+    # resolve takes an errand id.
+    bash "$AH" resolve "$eid2" --as "done" --note "by hand" >/dev/null 2>&1; rc=$?
+    assert_eq "resolve errand: rc 0" "0" "$rc"
+    assert_contains "resolve errand: errand done with the note" "errand done $eid2 --note by hand" "$(cat "$FXDIR/calls")"
+    bash "$AH" resolve "$eid3" --as superseded >/dev/null 2>&1
+    assert_contains "resolve errand superseded: not_needed" "errand done $eid3 --note resolved as superseded by ask-human resolve --format json --outcome not_needed" "$(cat "$FXDIR/calls")"
+
+    # 5. Clear closes the open request with that key, not_needed, and says how many.
+    bash "$AH" ask "drift is red" --key drift-1 >/dev/null 2>&1
+    : > "$FXDIR/calls"
+    out="$(bash "$AH" clear drift-1)"
+    assert_eq "clear: counts the factory request" "cleared 1" "$out"
+    assert_contains "clear: errand done not_needed, cleared by its producer" "--note cleared by its producer --format json --outcome not_needed" "$(grep 'errand done' "$FXDIR/calls")"
+    assert_eq "clear: nothing left under the key" "0" "$(jq -s '[.[] | select(.requestKey == "drift-1")] | length' "$FXDIR/open.jsonl")"
+    assert_eq "clear: idempotent" "cleared 0" "$(bash "$AH" clear drift-1)"
+
+    # 6. The agent token cannot list or close: the call is repeated with the token cleared.
+    : > "$FXDIR/calls"
+    FX_AUTH=1 FACTORY_TOKEN=agent-tok bash "$AH" list --json >/dev/null 2>&1
+    assert_contains "auth: a refused agent token is retried with the token cleared" "token= " "$(grep 'errand list' "$FXDIR/calls" | tail -1 | sed 's/$/ /')"
+    assert_eq "auth: the first try used the agent token" "1" "$(grep -c 'errand list.*token=agent-tok' "$FXDIR/calls")"
+
+    # 7. Fallback: the factory is down (exit 7) -> the queue file, with the check kept.
+    : > "$FXDIR/calls"
+    lid="$(FX_DOWN=1 bash "$AH" ask "while the factory is down" --cmd "echo later" --key fb --check "true" --expires 2d 2>/dev/null)"
+    [[ "$lid" =~ ^[0-9]{8}T[0-9]{6}-[0-9]+$ ]] && ok "fallback: prints a queue id" || bad "fallback: prints a queue id" "got [$lid]"
+    assert_eq "fallback: queue file written" "1" "$(queued_count)"
+    assert_eq "fallback: the check is kept in the file" "true" "$(jq -r .check "$EQ/$lid.req")"
+    assert_contains "fallback: list still shows it (factory down)" "$lid" "$(FX_DOWN=1 bash "$AH" list --json)"
+
+    # 8. Replay: the factory answers again -> posted with the same key and text, the file resolved superseded.
+    before="$(open_count)"
+    bash "$AH" reap >/dev/null 2>&1
+    assert_eq "replay: the queue file is resolved superseded" "superseded" "$(jq -r .resolvedAs "$EQ/$lid.res")"
+    assert_contains "replay: note names the new errand" "moved to the factory as errand_fake-" "$(jq -r .resolvedNote "$EQ/$lid.res")"
+    assert_eq "replay: one more open request" "$((before + 1))" "$(open_count)"
+    rcall="$(grep 'errand request' "$FXDIR/calls" | tail -1)"
+    assert_contains "replay: same text" "--text while the factory is down" "$rcall"
+    assert_contains "replay: same cmd and key" "--key fb" "$rcall"
+    assert_contains "replay: same check" "--check true" "$rcall"
+    assert_eq "replay: nothing pending locally" "0" "$(queued_count)"
+    before="$(open_count)"; bash "$AH" reap >/dev/null 2>&1
+    assert_eq "replay: idempotent" "$before" "$(open_count)"
+
+    # A lead's request stays a queue file (its answer comes as a session note), even with the factory up.
+    sid="$(FACTORY_SESSION=lead-y bash "$AH" ask "lead asks" 2>/dev/null)"
+    [[ "$sid" =~ ^[0-9]{8}T ]] && ok "lead request: stays a queue file" || bad "lead request: stays a queue file" "got [$sid]"
+    bash "$AH" reap >/dev/null 2>&1
+    assert_eq "lead request: not replayed" "no" "$([[ -e "$EQ/$sid.res" ]] && echo yes || echo no)"
+
+    # Errands off: the queue file only, the factory never called.
+    : > "$FXDIR/calls"
+    oid="$(HUMAN_QUEUE_ERRANDS=0 bash "$AH" ask "off switch" 2>/dev/null)"
+    [[ "$oid" =~ ^[0-9]{8}T ]] && ok "HUMAN_QUEUE_ERRANDS=0: queue file" || bad "HUMAN_QUEUE_ERRANDS=0: queue file" "got [$oid]"
+    assert_eq "HUMAN_QUEUE_ERRANDS=0: factory never called" "0" "$(grep -c . "$FXDIR/calls")"
+  ) 2>&1 | sed 's/^/  /' > "$TMP/errands.out"
+  # The subshell's ok/bad counters are lost, so fold its printed lines back in.
+  cat "$TMP/errands.out"
+  pass=$((pass + $(grep -c '\[32mok' "$TMP/errands.out")))
+  fail=$((fail + $(grep -c 'FAIL' "$TMP/errands.out")))
 fi
 
 wait "$keys_pid"
