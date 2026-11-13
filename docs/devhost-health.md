@@ -18,7 +18,7 @@ a second push:
 | core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh`): `scripts/lib/core-up.sh` (the default socket answers AND a launchd-born core exists, `herdr-core --hc-launchd` with parent pid 1), then `hc server status` — **FAIL** when `core_up` is false (message = why + fix; a core that answers without being launchd-born is a stray, attributed to sshd with no keychain) or `hc` does not answer, **WARN** when `scripts/hc-responsible.py` finds the core or a holder not attributed to `Herdr Core.app` (old Cellar holders stay until their terminals end) or the other machine's core version differs (`hc machine ls`, else `ssh <peer-host> hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: `core_up` (bare socket connect + `ps`) comes first, because any `hc` call auto-starts a stray core; `make herdr-core-test` |
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
-| memory | pressure level + swap as a share of RAM: **WARN** above `DEVHOST_MEM_SWAP_PCT_MAX` (25 %), **FAIL** above `DEVHOST_MEM_SWAP_PCT_FAIL` (75 %) or at pressure critical. Swap does not drain when its cause is gone (2026-11-07: 28 % stayed parked for hours after the leak was killed, DOWN with 0 swapouts), so the share alone pages only at leak size; the rate is `swapouts`. Also names `fseventsd` (`top` MEM, compressed pages included, no root; `ps` RSS shows 4.7G for 61G) above `DEVHOST_FSEVENTSD_MAX_MB` (10 GiB) as a WARN |
+| memory | pressure level + swap as a share of RAM: **WARN** above `DEVHOST_MEM_SWAP_PCT_MAX` (25 %, justified in [Memory budget](#memory-budget-issue-1035)), **FAIL** above `DEVHOST_MEM_SWAP_PCT_FAIL` (75 %) or at pressure critical. Swap does not drain when its cause is gone (2026-11-07: 28 % stayed parked for hours after the leak was killed, DOWN with 0 swapouts), so the share alone pages only at leak size; the rate is `swapouts`. Also names `fseventsd` (`top` MEM, compressed pages included, no root; `ps` RSS shows 4.7G for 61G) above `DEVHOST_FSEVENTSD_MAX_MB` (10 GiB) as a WARN |
 | swapouts | cumulative `vm.compressor.swapper.swapouts_total` → MiB/300s delta — **FAIL** past `DEVHOST_SWAPOUT_MB_PER_300S_MAX` (2 GiB); a state write that fails **FAILs** too, never a silent re-seed |
 | kernel panics | newest `panic-*.panic` / `panic-*.ips` (`panic-full-…` and the watchdog form `panic-base+socd-…`) / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL. The message carries the panic headline (the `panicString` before its first newline, without the `panic(cpu N caller 0x…):` prefix), e.g. `kernel panic 0d ago: watchdog timeout: no checkins from watchdogd in 94 seconds (…) (autorestart recovered, report panic-full-….panic)`. The reboot push below is the alert |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
@@ -326,6 +326,65 @@ call to GitHub, because at 300 s with `maxretries 1` a provider outage would pag
 as "dev host down". The stronger `git push --dry-run` lives in `make doctor`.
 That split earned itself: the credential resolved fine on the mini while the
 deployed helper still pointed at a read-only token, and only the dry-run saw it.
+
+## Memory budget (issue 1035)
+
+Why the mini sat at 8.7–14.1 GB swap (27–44 % of 32 GB) all day on 2026-11-13, with `swapouts ok` (parked pages, not
+thrashing). Measured read-only (`top -o mem`, `vm_stat`, `memory_pressure`, `ps`, `colima ssh -- free`) at 23:20 CET, 4 h 19 min
+after the post-panic reboot: swap 0, compressor 11 GB, `PhysMem 30G used`, pressure normal. Swap fills over uptime; this is the
+working set that fills it.
+
+| Class | Procs | top MEM | Budget (after) | Note |
+|-|-|-|-|-|
+| VM guests (Virtualization.framework) | 2 | 8.1 GB | **6.1 GB** | Colima 6.1 GB resident, teamchat VM 2.0 GB; compressor holds ~11.6 GB of their pages |
+| weatherorb python | 14 | 5.6 GB | 3.6 GB | steady ~0.9 GB; the `round` worker's two pool processes burst to 2–2.8 GB each for minutes |
+| host postgres@18 | 47 | 5.1 GB | 5.1 GB | `shared_buffers = 4GB` (weatherorb, deliberate), counted on the io worker and checkpointer |
+| claude sessions | 18 | 4.1 GB | 7 GB | ~0.23 GB each (idle resumed ones 0.19, working leads 0.4); 30 terminals = 7 GB |
+| node / bun / opencode | 57 | 3.6 GB | 3.6 GB | dev servers, MCP servers, opencode |
+| system daemons + launchd | 263 | 2.3 GB | 2.3 GB | plus 2.3 GB wired |
+| unclassified | 352 | 2.9 GB | 2.9 GB | |
+| Obsidian, Chrome, 1Password | 15 | 0.5 GB | 1 GB | Chrome is small here |
+| lima / network / core | 27 | 0.5 GB | 0.5 GB | |
+| **Total** | | **32.6 GB** | **≤ 28 GB** | RAM is 32 GB; the compressor absorbed the excess, swap takes what it cannot |
+
+`top`'s per-process compressed figure double counts across the VMs; the kernel's own number is the 11 GB compressor above.
+
+**Top two drivers of swap**
+
+1. **The two VMs, 8.1 GB, and the host cannot take it back.** Virtualization.framework does not balloon: pages the guest
+   touched stay resident on the host. The Colima guest uses 1.5 GB (nine containers, 1.2 GB) yet holds 4.4 GB of page cache, so
+   the host carries 6.1 GB of which 4.4 GB is idle cache that compresses to nothing useful and ages into swap. The teamchat
+   VM is the same shape (0.7 GB used of 4 GiB).
+2. **Postgres `shared_buffers = 4GB`, 5.1 GB.** Hot, always resident. It was bought on purpose: weatherorb's nearest-spot p95
+   missed (81–104 ms) at the stock 128 MB and passes (31–38 ms) at 4 GB (`weatherorb/docs/history`). Kept.
+
+Not top two but the spikes that tip it over: weatherorb's two round pool processes (up to 5 GB for minutes, hourly), and the
+claude fleet growing through the day (about 25 resumed terminals after a boot, working lead sessions at 0.4 GB).
+
+**The budget**
+
+- **Applied (config):** `COLIMA_MEMORY` on the mini 6 → **4** (`Makefile`; AGENTS.md and `docs/remote-dev.md` follow). It
+  lands on the next planned `make colima-restart`; nothing was restarted. Guest peak is unknown (steady 1.5 GB, the heaviest
+  container limit is 3 GiB); revert signal is a guest OOM kill (`colima ssh -- dmesg | rg -i oom`) or `available` under
+  1 GB: go to 5 GB, not back to 6. Saves ~2 GB host-resident and ~2 GB less to compress.
+- **Ceiling on agent terminals: not set.** 30 terminals ≈ 7 GB fits the budget; capping needs a choice of *which* terminals
+  hc-resume skips, which the owner's constraint forbids (pacing and order only). Past ~30 live `claude` processes expect
+  swap above the warn line.
+- **Swap warn threshold stays at 25 % (8 GB).** After the budget the logical set is ≈ 27 GB + 2.3 GB wired = 29 GB, under 32:
+  steady swap should be 0–2 GB, so 8 GB means two classes over budget, not a normal day. Today's 8.7–14 GB corresponds to a
+  ~36–40 GB set, and that is what the WARN should name. Lowering it would only add noise before the window; raising it
+  would hide exactly this. FAIL at 75 % and the 2 GiB/300 s swapout-rate FAIL stay: the rate, not the level, is the thrash
+  signal. Check after the restart: `jq '.swap_used_mb' ~/Library/Logs/devhost-snapshots.jsonl` at day two of uptime,
+  expected under 4096.
+
+**Findings for the owner (defaults, not applied)**
+
+| Finding | Default | Why not applied |
+|-|-|-|
+| teamchat VM 4 GiB → 2 GiB (0.7 GB used) | 2 GiB | profile lives in the IuRoot teamchat repo; its restart is already owner-timed (after MR !296) |
+| weatherorb `round` pool: cap concurrent processes at one | one | another repo; filed as a signal there |
+| postgres `shared_buffers` 4 GB → 2 GB | keep 4 GB | trades 31–38 ms p95 for ~2 GB; a measured product choice |
+| Chrome / Obsidian | no limit | 0.5 GB, not a driver |
 
 ## Upstream drift
 
