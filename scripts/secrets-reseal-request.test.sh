@@ -34,6 +34,7 @@ case "$sub" in
     for ((i = 0; i < ${#args[@]}; i++)); do [[ "${args[$i]}" == --key ]] && key="${args[$((i+1))]}"; done
     printf 'ask\t%s\n' "$(printf '%s' "$*" | tr '\n' '|')" >> "$T/calls.log"
     printf '%s\n' "$key" >> "$T/open.keys"
+    for ((i = 0; i < ${#args[@]}; i++)); do [[ "${args[$i]}" == --cmd ]] && printf '%s' "${args[$((i+1))]}" > "$T/last-cmd"; done
     echo errand_stub ;;
   list)
     printf '['; sep=""
@@ -133,6 +134,37 @@ printf '%s\n' "op://mini/a/one" > "$T/repo/headless.refs"; rm -f "$T/repo/headle
 printf 'not json' > "$T/repo/cache/secrets.enc.json"
 req needed
 assert_eq "9. an unreadable cache: every ref is missing, still needed (0)" "0" "$RC"
+
+# --- 10. the MacBook command itself: pull over the 1Password agent, assert the refs ---
+# Run the generated --cmd under a fake $HOME with stub git/hc: a checkout that lacks a
+# missing ref must stop before sealing (nothing may be read and reported as success); one
+# that has it (even with spaces in the ref) must reach `make secrets-seed-new`.
+reset
+refs "op://mini/a/one" "op://Athena Internal/x y/z"
+rm -f "$T/repo/headless.iu.refs"; cache_with "op://mini/a/one"
+req
+mac="$T/mac"; mkdir -p "$mac/SourceRoot/dotfiles-private" "$mac/SourceRoot/dotfiles" "$mac/bin"
+cat > "$mac/bin/git" <<'GITSTUB'
+#!/usr/bin/env bash
+printf 'sock=%s\n' "${SSH_AUTH_SOCK:-}" >> "$HOME/git.log"; exit 1
+GITSTUB
+cat > "$mac/bin/hc" <<'HCSTUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$HOME/hc.log"
+HCSTUB
+chmod +x "$mac/bin/git" "$mac/bin/hc"
+macrun() { HOME="$mac" PATH="$mac/bin:$PATH" bash -c "$(cat "$T/last-cmd")" 2>&1; }
+printf 'op://mini/a/one\n' > "$mac/SourceRoot/dotfiles-private/headless.refs"
+out="$(macrun)"; rc=$?
+assert_eq "10. checkout lacking the ref: the command stops (nonzero)" "1" "$rc"
+assert_contains "10. and says why" "is not in this Mac's dotfiles-private checkout" "$out"
+assert_eq "10. nothing was sealed" "" "$(cat "$mac/hc.log" 2>/dev/null)"
+assert_contains "10. the pull used the 1Password ssh agent socket" "sock=$mac/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" "$(cat "$mac/git.log")"
+printf 'op://mini/a/one\n  op://Athena Internal/x y/z \r\n' > "$mac/SourceRoot/dotfiles-private/headless.refs"
+out="$(macrun)"; rc=$?
+assert_eq "10. checkout holding the ref (despite a failed pull): runs" "0" "$rc"
+assert_contains "10. a failed pull is announced, not fatal" "pull failed" "$out"
+assert_contains "10. and runs the incremental seal" "make secrets-seed-new" "$(cat "$mac/hc.log")"
 
 echo; echo "  $pass passed, $fail failed"
 [[ $fail -eq 0 ]]
