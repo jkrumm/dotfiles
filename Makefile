@@ -2730,8 +2730,10 @@ herdr-core-update: ## Update this machine's core (official hc update) after the 
 	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || echo "  · see the lines above: old holders end with their terminals, an inherited environment needs make herdr-core-clean-restart"; \
 	req1=$$(codesign -dr - "$(CORE_APP)" 2>&1 | grep '^designated'); \
 	[ "$$req0" = "$$req1" ] || { echo "  ✗ signing requirement changed during the update: re-grant Full Disk Access on $(CORE_APP) at the machine's screen"; exit 1; }; \
-	$(MAKE) --no-print-directory tcc-probe || { echo "  ✗ tcc-probe failed after the update (docs/tcc.md)"; exit 1; }; \
-	echo "  ✓ core up, terminals kept, signing requirement unchanged, Full Disk Access holds. Next: ~/Library/Logs/hc-resume.log (programs the update ended are resumed); MacBook: make op-tcc-probe"
+	echo "  · signing requirement unchanged; probing Full Disk Access"
+# Its own recipe line on purpose: `make -n` executes any line containing $(MAKE), which would run the update above.
+	@$(MAKE) --no-print-directory tcc-probe || { echo "  ✗ tcc-probe failed after the update (docs/tcc.md)"; exit 1; }
+	@echo "  ✓ core up, terminals kept, Full Disk Access holds. Next: ~/Library/Logs/hc-resume.log (programs the update ended are resumed); MacBook: make op-tcc-probe"
 
 .PHONY: tcc-check tcc-check-test tcc-probe op-tcc-probe
 tcc-check: ## Read-only: flag a LaunchAgent program (ad-hoc signed / versioned path) that has no durable file-access grant (docs/tcc.md)
