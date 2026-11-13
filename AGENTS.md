@@ -35,6 +35,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
 | `config/herdr-app/groups.json` | `~/.config/factory/spaces.json` — **rendered** by `scripts/factory-spaces.py` (`make setup`) | software-factory's space list, same order; members resolve under `~/SourceRoot`, else `~/IuRoot` (the member `IuRoot` is the work root); missing repos and `noFactorySpace` skipped |
 | `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json` (sidebar folders, one line per repo); link per item, never the dir (it holds the app's shipped mods) |
+| `config/herdr-core/config.toml` | `~/.config/herdr-core/config.toml` | Core settings (`restore_screen`); linked by `make herdr-core-setup`, read at the next core start |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Source of truth for PR-required repos — read by `protect-branches.ts` **and** `scripts/github-config.sh` |

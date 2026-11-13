@@ -2652,6 +2652,10 @@ herdr-core-launcher:
 	@LAUNCHER_BIN="$(LAUNCHER_BIN)" DOTFILES_DIR="$(DOTFILES_DIR)" bash "$(DOTFILES_DIR)/scripts/herdr-core-launcher-build.sh"
 herdr-core-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/bin"; \
+	CFG="$(HOME)/.config/herdr-core/config.toml"; mkdir -p "$$(dirname "$$CFG")"; \
+	if [ -L "$$CFG" ] && [ "$$(readlink "$$CFG")" = "$(DOTFILES_DIR)/config/herdr-core/config.toml" ]; then echo "    · core config linked"; \
+	elif [ -e "$$CFG" ] || [ -L "$$CFG" ]; then echo "    ! $$CFG exists and is not ours: left alone, tracked settings not applied"; \
+	else ln -s "$(DOTFILES_DIR)/config/herdr-core/config.toml" "$$CFG" && echo "    ✓ core config linked (applies at the next core restart)"; fi; \
 	BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	for b in herdr-core hc; do \
 		L="$(HOME)/.local/bin/$$b"; T=$$(readlink "$$L" 2>/dev/null); \

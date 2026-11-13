@@ -370,9 +370,9 @@ in `~/Applications/Herdr.app.new.noindex` and applies on the next app start; the
    core gets 15 s to start; 0.1.21: a failing ssh login backs off (2, 5, then every 10 minutes) instead of hammering the
    mini, `hc machine login` reconnects at once; app 0.1.14: mods no longer all break after a while ("This view could not be
    re-rendered"), `herdr-app check` no longer adds a second Dock icon whose quit ends every terminal.
-3. **Worth adopting.** Config, not code: core `config.toml` `restore_screen = true` (0.1.21: a kept terminal shows its last
-   screen after a reboot, which helps reading a session `hc-resume` is about to resume; off by default, not set here yet),
-   `draft_wait` (0.1.20: an agent message waits for an unfinished human draft, default at most a minute; `rd say` and
+3. **Worth adopting.** Config, not code: core `config.toml` `restore_screen = true` (adopted 2026-11-13 in `config/herdr-core/config.toml`; 0.1.21: a kept terminal shows its last
+   screen after a reboot, which helps reading a session `hc-resume` is about to resume; off by default),
+   `draft_wait` (0.1.20: an agent message waits for an unfinished human draft, default at most a minute, left at the default; `rd say` and
    `hc send` into a terminal someone is typing in), `hc wait --children`, `hc wait` exit codes; app 0.1.15 drag a screenshot
    or file into a terminal (reaches Claude Code), a layout can name its toast mod, rows as tall as Ghostty.
 Record the result in the update's commit message or a doc line; anything adopted is a tracked change, never a hand edit.

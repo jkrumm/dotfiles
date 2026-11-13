@@ -1,0 +1,6 @@
+# herdr-core settings, linked to ~/.config/herdr-core/config.toml by `make herdr-core-setup` (docs/herdr-core.md §Updates).
+# Read at core start: a change applies at the next core restart (`hc server restart` keeps programs running) or update.
+
+# A kept terminal shows its program's last screen above the new shell after a reboot, so a session can be read before
+# hc-resume resumes it (core 0.1.21). hc-resume and hc-reap do not parse screens.
+restore_screen = true
