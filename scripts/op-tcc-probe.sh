@@ -59,7 +59,7 @@ check() {
   logout=$(/usr/bin/log show --start "$t0" --predicate 'process == "tccd" AND eventMessage CONTAINS "AUTHREQ_PROMPTING"' --style compact 2>&1) || lrc=$?
   case "$logout" in
     *"Operation not permitted"*|*"Could not open"*)
-      echo "  ✗ [$label] cannot read the unified log from here (no Full Disk Access for this terminal): Herdr Core.app has no grant, unless this terminal's holder predates the bundle (docs/tcc.md)"; rm -f "$errf"; return 1 ;;
+      echo "  ✗ [$label] cannot read the unified log from here, so the probe is INCONCLUSIVE, not a failed grant: this terminal's holder predates the bundle or carries an inherited environment, or the account lacks log access. Measured 2026-11-13: the same probe passes from a terminal of a clean holder (0 AppData prompts, one Touch ID). Run it from a plain Terminal tab (docs/tcc.md)"; rm -f "$errf"; return 1 ;;
   esac
   if [ "$lrc" -ne 0 ] || ! printf '%s\n' "$logout" | grep -q '^Timestamp'; then
     echo "  ✗ [$label] the log query did not run cleanly (rc=$lrc): $(printf '%s' "$logout" | head -c 200)"; rm -f "$errf"; return 1
