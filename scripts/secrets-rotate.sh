@@ -169,7 +169,7 @@ echo "    ✓ 1Password backup refreshed (key via stdin — never argv, never ec
 # --- 5. reseed: re-encrypt the cache to the new recipient ---------------------
 # Recipient-pinning now enforces .sops.yaml (new) == the 1Password public-key field (new).
 echo "    reseeding the cache to the new recipient..."
-SECRETS_PRIVATE_REPO="$PRIVATE_REPO" "$DOTFILES_DIR/scripts/secrets-seed.sh" \
+SECRETS_PRIVATE_REPO="$PRIVATE_REPO" "$DOTFILES_DIR/scripts/secrets-seed.sh" --require-complete \
   || die_post_swap "reseed failed"
 
 # --- 6. verify the new cache decrypts with the new key (in memory, suppressed) --

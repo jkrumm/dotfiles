@@ -78,11 +78,14 @@ EOF
 chmod +x "$fake_timeout"
 
 fake_seed="$TMP/seed"
-cat >"$fake_seed" <<'EOF'
+cat >"$fake_seed" <<'EOS'
 #!/usr/bin/env bash
 set -euo pipefail
-: >"${SEED_MARKER:?}"
-EOF
+# The marker records the seed's argv (empty = a full reseal). `<marker>.rc`, when present,
+# is the exit status the seed reports (3 = delivered but an account was unreachable).
+printf '%s' "$*" >"${SEED_MARKER:?}"
+if [ -f "${SEED_MARKER}.rc" ]; then exit "$(cat "${SEED_MARKER}.rc")"; fi
+EOS
 chmod +x "$fake_seed"
 
 # Every case must pin PRIVATE_DIR. Left unset it defaults to the real
@@ -375,5 +378,27 @@ test "$(cat "$TMP/state-refs-c/seed-last-refs")" = "$old_refs_id"
 # The attempt stamp MUST be written, or an un-fast-forwardable checkout means an
 # hourly macOS notification about work that is never going to run.
 test -f "$TMP/state-refs-c/seed-last-attempt"
+
+# --- incremental vs full, and a PARTIAL seal --------------------------------------
+# An aged cache gets the full pass that refreshes every value; a refs-only change on a
+# young cache is an INCREMENTAL seal (one new ref = one op read).
+test "$(cat "$TMP/due.marker")" = "" || { echo "an aged cache must run a FULL reseal, got args: $(cat "$TMP/due.marker")" >&2; exit 1; }
+test "$(cat "$TMP/refs-new.marker")" = "--new-only" || { echo "a refs-only change must run --new-only, got: $(cat "$TMP/refs-new.marker")" >&2; exit 1; }
+
+# Exit 3 from the seed = delivered, but an account was unreachable. It must NOT be recorded
+# as "refs sealed": the stamp stays, so the refs stay due and the next tick retries.
+git -C "$priv" checkout -q -- headless.refs     # clean again, still behind origin
+mkdir -p "$TMP/state-refs-d"
+printf '%s\n' "$old_refs_id" >"$TMP/state-refs-d/seed-last-refs"
+rm -f "$TMP/refs-partial.marker"
+printf '3' >"$TMP/refs-partial.marker.rc"
+partial_rc=0
+out=$(SEED_PRIVATE_DIR="$priv" SEED_STATE_DIR="$TMP/state-refs-d" \
+  run_seed 700000 690000 "$TMP/refs-partial.marker" 2>&1) || partial_rc=$?
+test -f "$TMP/refs-partial.marker" || { echo "the seed did not run: $out" >&2; exit 1; }
+test "$partial_rc" -ne 0 || { echo "a partial seal must not exit 0: $out" >&2; exit 1; }
+case "$out" in *"PARTIAL"*) ;; *) echo "expected a PARTIAL log line, got: $out" >&2; exit 1 ;; esac
+test "$(cat "$TMP/state-refs-d/seed-last-refs")" = "$old_refs_id" \
+  || { echo "a partial seal must leave the refs stamp untouched" >&2; exit 1; }
 
 printf '%s\n' 'opbackup-seed-auto: all tests passed'

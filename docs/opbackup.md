@@ -57,6 +57,16 @@ the secret that triggered it. Observed 2026-09-07: `secrets-seed` reported *161
 secrets sealed* while `op://vps/argo/HYPERDX_API_KEY_PROD` was still
 unresolvable on the mini, because the MacBook's checkout was one commit behind.
 
+Since 2026-11-13 a refs-only change is also a **cheap** reseal: the guard runs
+`secrets-seed.sh --new-only` (when the cache is younger than `MAX_AGE_DAYS`), which
+reads only the refs the cache lacks and keeps every other value; only an aged cache
+gets the full pass. Both the incremental and a per-account-degraded seal keep the
+previous `_seeded_at` and file mtime, so this guard's age gate keeps measuring the
+last COMPLETE reseal. A seal that exits **3** (an account unreachable: old values
+kept, delivered) is logged `PARTIAL`, exits non-zero and does NOT stamp the refs as
+sealed, so they stay due. Agents on the mini ask for a reseal with
+`make secrets-reseal-request` (one request per missing-ref set), not by hand.
+
 The fix treats **the refs list changing as the cache going stale**, which it is:
 
 1. `git fetch` dotfiles-private, bounded by `timeout` and `GIT_TERMINAL_PROMPT=0`

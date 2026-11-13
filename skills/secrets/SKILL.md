@@ -51,6 +51,11 @@ secrets-run export [--env-file=<tpl>]...                # emit `export K=V` line
 the tiering boundary: only **T0/T1** refs belong there; the seed **refuses `op://Private/*`** (name
 + UUID) and T2/prod. To add a consumer: append its tpl's `op://` refs → `make secrets-seed`.
 
+- **A new ref the cache lacks → `make secrets-reseal-request`** (mini). It lists the missing refs, raises
+  ONE request per missing-ref set (nothing when none are missing), names the refs and accounts, and
+  runs `make secrets-seed-new` — the incremental seal: one `op` read per new ref, every other value
+  kept, an unreachable account kept at its old values and named (exit 3). `make secrets-reseal-status`
+  lists the set. Do not hand-write an `ask-human` for a reseal.
 - **`make secrets-seed`** resolves every ref via biometric `op read` (present-human) and seals one
   age-encrypted cache. **It is interactive** — it can't be driven from a non-interactive tool call, it
   will hang. Preferred route from the mini: `ask-human.sh ask "reseal the secrets cache" --cmd 'make
