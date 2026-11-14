@@ -283,7 +283,10 @@ brain.test {
 	reverse_proxy localhost:7733
 }
 
-http://127.0.0.1:7733 {
+# Host-less on purpose: the proxies above forward `Host: brain.test` (and the
+# tailnet door its own name), which a host-named site would not match, and
+# Caddy answers an unmatched host with an empty 200.
+:7733 {
 	bind 127.0.0.1
 	root * /Users/jkrumm/SourceRoot/basalt-ui-obsidian/apps/demo/dist
 
