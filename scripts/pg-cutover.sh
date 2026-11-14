@@ -150,7 +150,6 @@ fi
 # --------------------------------------------------------------- cutover and rollback-drill
 STOPPED=()
 ATHENA_STOPPED=0
-ATHENA_READONLY=0
 DOCKER_STOPPED=0
 SWITCHED=0
 COPIED=()
@@ -209,11 +208,11 @@ rollback() {
     for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' postgres)" = healthy ] && break; sleep 2; done
     DOCKER_STOPPED=0
   fi
-  if [ "$ATHENA_READONLY" = 1 ]; then
-    # the read-only instance started for the copy holds the data dir; launchd's would crash-loop beside it
-    log "stop Athena's read-only copy instance"
-    "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w stop >/dev/null
-    ATHENA_READONLY=0
+  if [ "$ATHENA_STOPPED" = 1 ] && "$PGBIN/pg_ctl" -D "$ATHENA_DATA" status >/dev/null 2>&1; then
+    # the read-only copy instance, or one still in a smart shutdown, holds the data dir;
+    # launchd's would crash-loop beside it
+    log "stop the Athena postmaster still holding its data dir"
+    "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w -t 60 stop >/dev/null
   fi
   if [ "$ATHENA_STOPPED" = 1 ]; then
     log "start Athena's cluster again"
@@ -272,6 +271,12 @@ log "stop Athena's cluster (disabled so a login does not start it beside the one
 ATHENA_STOPPED=1
 launchctl disable "$UID_GUI/$ATHENA_LABEL"
 launchctl bootout "$UID_GUI/$ATHENA_LABEL"
+# bootout's SIGTERM is a smart shutdown that waits for teamchat's sessions, and the lock file in
+# the socket dir the one server takes over stays until it ends (third drill). Make it fast.
+if "$PGBIN/pg_ctl" -D "$ATHENA_DATA" status >/dev/null 2>&1; then
+  "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w -t 60 stop >/dev/null
+fi
+[ ! -e "$ATHENA_DATA/postmaster.pid" ] || { log "Athena's server did not stop"; false; }
 
 if [ "$VERB" = cutover ]; then
   # A client outside the stopped jobs (an agw CLI call) would write after the copy's snapshot.
@@ -298,12 +303,10 @@ if [ "$VERB" = cutover ]; then
     "${PGC[@]}" copy --port "$OLD_PORT" --db "$db" --from-host 127.0.0.1 --from-port "$NEW_PORT" --from-user "$DU" --from-password-ref "$DOCKER_PW_REF" --keep-dir "$RUN/dumps" | tee "$RUN/copy-$db.json"
   done
   log "start Athena's cluster read-only for its copy"
-  ATHENA_READONLY=1
   "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -l "$RUN/athena-copy.log" -w -o "-c default_transaction_read_only=on" start >/dev/null
   COPIED+=(athena)
   "${PGC[@]}" copy --port "$OLD_PORT" --db athena --from-host "$ATHENA_SOCK" --from-port 5432 --from-user postgres --keep-dir "$RUN/dumps" | tee "$RUN/copy-athena.json"
   "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w stop >/dev/null
-  ATHENA_READONLY=0
   log "full apply: schemas and default privileges must already hold"
   "${PGC[@]}" plan --port "$OLD_PORT" | tee "$RUN/plan-after-restore.txt"
   grep -q '^plan: in sync' "$RUN/plan-after-restore.txt" || { log "the restored databases differ from the declaration"; false; }
