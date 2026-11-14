@@ -378,7 +378,7 @@ section_tcc() {
   bad "tcc" "unclassified LaunchAgent program(s) above (docs/tcc.md)"
 }
 
-# External volume (docs/external-ssd.md): silent while config/external-volume.json says attached=false; with it true,
+# External volume (docs/external-ssd.md), the mini's only (BACKEND=cache): silent while config/external-volume.json says attached=false; with it true,
 # OK when present, a yellow WARN (never a failure) when absent, locked or unreadable.
 section_external_volume() {
   local out rc=0
@@ -393,13 +393,13 @@ section_external_volume() {
 section_launchagents
 section_core
 section_tcc
-section_external_volume
 section_architecture
 section_jobs
 section_brew
 section_worktrees
 
 if [ "$BACKEND" = "cache" ]; then
+  section_external_volume   # the mini's drive: never on the MacBook
   section_drift
   section_claude_accounts
   section_devhost_heartbeat

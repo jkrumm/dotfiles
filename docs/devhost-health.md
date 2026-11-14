@@ -8,7 +8,7 @@ one-line gotchas live in `AGENTS.md`.
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent, wrapped in `jobrun` (below), and pushes **three** Uptime Kuma
 monitors. `MacMini Dev Host - Push` is the **liveness** monitor: it says the mini is reachable and its core is alive,
-never "healthy" and never "slow" (next section). The **eighteen** components below (sshd moved to the liveness phase) grade the host's health and ride
+never "healthy" and never "slow" (next section). The **nineteen** components below (sshd moved to the liveness phase) grade the host's health and ride
 a second push:
 
 | Component | Checks |
@@ -28,6 +28,7 @@ a second push:
 | claude version | `claude --version` matches the last version `make claude-accounts-verify` verified — **WARN** when unverified |
 | AGENTS.md flag | the cached GrowthBook flag `tengu_agents_md_mod` in `~/.claude.json` is true (else Claude Code may not load AGENTS.md) — **WARN** |
 | obsidian | CLI answers (i.e. the app is running) |
+| external volume | `scripts/external-volume-check.sh`: no output while `config/external-volume.json` says `attached: false`; once attached, WARN (never a FAIL) when the volume is absent, locked or its sentinel unreadable. `docs/external-ssd.md` |
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
 | jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL. A job not ok for 2 consecutive grades is filed as a **signal on its owner repo** through the factory (`jobs-grade --report`, below), not posted to ntfy; a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |

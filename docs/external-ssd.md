@@ -42,7 +42,7 @@ or not attached: silent exit. Locked: `secrets-run read <passphraseRef>` piped i
 
 ## Check
 
-`scripts/external-volume-check.sh`, shown by `make doctor` and `make external-volume-check` and carried by the heartbeat as a component:
+`scripts/external-volume-check.sh`, shown by `make doctor` and `make external-volume-check` (the mini only: the drive is its own) and carried by the heartbeat as a component:
 **no output** while `attached: false`; present = OK; absent, locked or unreadable = **WARN, never a failure and never a page**. It is not
 in the liveness push. `make doctor` shows it as a yellow dot.
 
