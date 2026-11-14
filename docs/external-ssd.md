@@ -19,7 +19,7 @@ Read-only first, measured on the mini (`diskutil info`, `diskutil apfs list`, `d
 | Size | 931 GiB container; 526 GiB used, 406 GiB free (57 %) at 20:20 CET |
 | Top level (GiB) | `Bilder` 168.7, `weatherorb` 166.5 (weatherorb's, with its own marker `.weatherorb-data-root`), `Videos` 110.4, `usb-rescue` 11.2, `Steuer` 7.4, `mirror` 3.4 (the `ext-mirror` row has started it), `Dokumente` ~0, Spotlight and system dirs ~0.5 |
 | Not ours | `Bilder`, `Videos`, `Steuer`, `Dokumente`, `usb-rescue` are the owner's folders; they move to the HomeLab or become `mirror/fuji` in other rows. The end state is `weatherorb/` and `mirror/` only |
-| What unlocks it | The **login keychain**: it holds an "Encrypted Volume Password" item for the volume (created 2023-05), which macOS uses at login. There is no 1Password item for it that the secrets cache knows, so `passphraseRef` stays `null` and the unlock job is a no-op when the volume is locked (`skipped: passphrase ref not set`) |
+| What unlocks it | The **login keychain**: it holds an "Encrypted Volume Password" item for the volume (created 2023-05), which macOS uses at login. Since issue 1274 a second copy is `op://mini/ext-ssd/PASSPHRASE` (the owner created the item; `dotfiles-private/headless.refs` lists it; `passphraseRef` names it), so the unlock job can re-unlock a lock the keychain does not cover |
 
 Changes made on the drive: the sentinel `.volume-gate`, and Spotlight turned off (`mdutil -i off`, which updates `.Spotlight-V100`). The
 Time Machine exclusion was already set (`tmutil isexcluded` says `[Excluded]`; no Time Machine destination exists). Nothing was moved,
@@ -37,8 +37,10 @@ with `security find-generic-password -w` from an agent blocks on an ACL dialog n
 | `diskutil mount EXT` | refused, still `locked` | WARN, rc 2 |
 | unlocked by the owner | `present` | OK, rc 0 |
 
-Open: the passphrase ref. Until a 1Password item holds it and `headless.refs` lists it (then `make secrets-reseal-request`), a lock or a
-reboot that the login keychain does not cover needs the owner. Do not repeat the unmount proof until then.
+The passphrase ref (issue 1274): `op://mini/ext-ssd/PASSPHRASE`, in `headless.refs` and `passphraseRef`. Until the secrets cache holds it
+(`make secrets-reseal-status` lists it as missing; `make secrets-reseal-request` raises the seal), the unlock job fails closed with one
+log line and a 15 min back-off. The live unmount-and-unlock proof was not run: the stub-`diskutil` suite (`make volume-gate-test`)
+proves the unlock path, and the real drive stays mounted; do not unmount it to prove it.
 
 ## Rules
 

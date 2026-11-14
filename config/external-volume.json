@@ -3,5 +3,5 @@
   "name": "EXT",
   "sentinel": ".volume-gate",
   "attached": true,
-  "passphraseRef": null
+  "passphraseRef": "op://mini/ext-ssd/PASSPHRASE"
 }
