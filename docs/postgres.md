@@ -113,6 +113,21 @@ install has a `simple_detail` type an upgraded one lacks).
    default socket (weatherorb) works before and after the switch. `/tmp` is cleared at boot: after a
    reboot before the cutover, run it again.
 
+### Status (issue 1119, 2026-11-14)
+
+Done: `fresh-build` passed (all 8 databases, zero differences, declaration in sync after the
+restore); `rollback-drill` passed on the fourth run (switch to 5432 in 2 s, rollback with verified
+clients in 55 s); the first three runs failed on real defects (smart shutdown under `kickstart -k`,
+`unix_socket_directories` written as one element, Athena's smart shutdown holding its socket lock)
+and each rolled back for real with the clients verified. The roles exist on the bare server; the
+`/tmp/.s.PGSQL.5432` alias is in place; 122 leaked weatherorb test databases are dropped.
+
+Open, in order: weatherorb issue 1131 moves its DSNs to the socket (the cutover refuses while a TCP
+client holds 5433); vps issue 1132 points the nightly backup at whichever server is live; then
+`make pg-cutover`; then the default Colima VM shrinks to 4 GiB with narrowed mounts; the teamchat
+VM and Athena's script cleanup need Issues in the work repo epos-ai-teamchat-athena, which only
+the owner can file (drafts: `~/.local/state/pg-cutover/work-repo-drafts/`).
+
 Kept after the cutover, untouched: the Docker volume `vps_postgres-dev-data` and Athena's data
 directory `~/.local/state/athena/pg18` (its launchd job disabled, not removed). They are removed in a
 follow-up only after 7 days AND a restore from the HomeLab copy of the nightly dump is proven
