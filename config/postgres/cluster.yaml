@@ -33,9 +33,10 @@ server:
     # pools fits under 100 with the reserved superuser slots.
     max_connections: "100"
     superuser_reserved_connections: "3"
-    # 32 GiB host shared with every agent: 2 GB of buffers, the rest is the
-    # OS page cache (effective_cache_size only informs the planner).
-    shared_buffers: 2GB
+    # 32 GiB host shared with every agent: 512 MB of buffers while weatherorb's
+    # jobs are disabled (2 GB when its nearest-spot p95 needed them), the rest is
+    # the OS page cache (effective_cache_size only informs the planner).
+    shared_buffers: 512MB
     effective_cache_size: 8GB
     work_mem: 16MB
     maintenance_work_mem: 512MB

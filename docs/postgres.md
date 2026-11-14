@@ -152,12 +152,29 @@ the bare server since the cutover are not in the old copies.
 ## Settings
 
 Sized for a 32 GiB host shared with every agent, about 60 clients: `max_connections` 100,
-`shared_buffers` 2 GB (weatherorb alone had 4 GB; the rest is the OS page cache),
+`shared_buffers` 512 MB (the rest is the OS page cache; see *Revert signal* below),
 `effective_cache_size` 8 GB, `work_mem` 16 MB, `maintenance_work_mem` 512 MB,
 `max_locks_per_transaction` 1024 (the nightly dump holds one transaction over every table of a
 database, and agent_workflows has one schema per tenant), `max_wal_size` 4 GB. The server's time
 zone stays Europe/Berlin (weatherorb's and Athena's); the databases that came from the Docker
 container keep the UTC they had there as a database setting.
+
+### Revert signal for `shared_buffers`
+
+512 MB holds what is left on the server: the databases `shared` (1.1 GB), `agent_workflows` (1.4 GB)
+and `athena` (115 MB) with about 20 connections; the OS page cache carries the rest. It was 2 GB
+(4 GB before that) for weatherorb's nearest-spot p95 (31–38 ms at 4 GB, 81–104 ms at the stock 128 MB),
+and its nine launchd jobs are disabled while V2 is built. Two signals move it back:
+
+- **weatherorb V2 serves again:** it states its own need (a measured p95 against buffers) in its own
+  plan; do not assume 2 GB or 4 GB.
+- **The factory API's latency rises** (`factory health get`, or the p95 of its routes in HyperDX):
+  go back to **1 GB** first, not straight to 2 GB.
+
+Either way: edit `shared_buffers` in `config/postgres/cluster.yaml`, `make pg-apply` (reports it
+pending), then one detached restart on the pattern of `scripts/pg-cutover.sh`: drain the factory's queue
+(`factory queue set drain`), stop its clients (`CLIENT_LABELS`), `pg_ctl -m fast stop`, kickstart the brew
+label, start the clients, `factory queue set run`. Never `launchctl kickstart -k` (a smart shutdown).
 
 ## Data placement
 
