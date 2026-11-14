@@ -4,12 +4,11 @@
 <dict>
   <key>Label</key><string>com.jkrumm.brain-web-refresh</string>
   <!-- Content refresh for the brain vault reader (basalt-ui-obsidian's
-       `brain-web` container). Polls the vault's git HEAD every 5 minutes and
+       `brain-web`, served by Caddy). Polls the vault's git HEAD every 5 minutes and
        rebuilds the reader's static site (`make refresh`) only when it moved
        — downstream of brain-sync (com.jkrumm.brain-sync), which is what
-       actually moves that HEAD. Never touches the container: nginx bind-
-       mounts dist/ read-only, so a fresh build is live on its next request
-       with no restart. See brain-web-refresh.sh. -->
+       actually moves that HEAD. Nothing to restart: Caddy's file_server
+       reads dist/ per request, so a fresh build is live on its next request. See brain-web-refresh.sh. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/.local/bin/jobrun</string>
