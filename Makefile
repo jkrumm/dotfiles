@@ -2652,31 +2652,31 @@ fseventsd-watch-test:
 
 # kern.maxvnodes trial (issue 1059): the vnode table sat at its ceiling (263168 of 263168) on the dev host, so every new
 # file open recycled a vnode and the kernel burned CPU in class `system`. A root LaunchDaemon sets MAXVNODES (2x the
-# default) at every boot. Root-only: the owner installs it once through ask-human (the mini's sudo password is
-# MacBook-only): `ask-human.sh ask 'raise kern.maxvnodes' --cmd 'cd ~/SourceRoot/dotfiles && make maxvnodes-install'`.
-# NOT in `make setup`, so a converge never needs sudo for a trial. Rollback: `make maxvnodes-teardown` (same route);
-# it restores MAXVNODES_DEFAULT live and removes the daemon, so the next boot is stock again. Docs: docs/architecture.md.
+# default) at every boot. Root-only, and the mini's sudo password is MacBook-only: the owner installs it once through
+# ask-human, the MacBook piping the password into ONE root invocation (SUDO='sudo -S' reads a single stdin line):
+#   ask-human ask 'raise kern.maxvnodes (issue 1059 trial)' --cmd 'op read "op://Private/mac-mini-server/password" --account tkrumm | ssh mini "cd ~/SourceRoot/dotfiles && SUDO=\"sudo -S\" make maxvnodes-install"'
+# NOT in `make setup`, so a converge never needs sudo for a trial. Rollback: `make maxvnodes-teardown` (same route); it
+# restores MAXVNODES_DEFAULT live and removes the daemon, so the next boot is stock again. Docs: docs/architecture.md.
 MAXVNODES ?= 526336
 MAXVNODES_DEFAULT ?= 263168
 MAXVNODES_DAEMON := /Library/LaunchDaemons/com.jkrumm.maxvnodes.plist
+SUDO ?= sudo
 .PHONY: maxvnodes-install maxvnodes-teardown maxvnodes-status
 maxvnodes-install: ## Raise kern.maxvnodes now and at every boot (needs sudo: run through ask-human)
-	@TMP=$$(mktemp); trap 'rm -f "$$TMP"' EXIT; \
+	@TMP=$$(mktemp); trap 'rm -f "$$TMP"' EXIT; chmod 0644 "$$TMP"; \
 	sed "s|__MAXVNODES__|$(MAXVNODES)|g" "$(DOTFILES_DIR)/launchd/com.jkrumm.maxvnodes.plist.template" > "$$TMP"; \
 	plutil -lint "$$TMP" >/dev/null || { echo "  ✗ plist lint failed — nothing installed"; exit 1; }; \
-	sudo install -m 0644 -o root -g wheel "$$TMP" "$(MAXVNODES_DAEMON)" || exit 1; \
-	sudo launchctl bootout system "$(MAXVNODES_DAEMON)" 2>/dev/null; \
-	sudo launchctl bootstrap system "$(MAXVNODES_DAEMON)" 2>/dev/null; \
-	sudo sysctl -w kern.maxvnodes=$(MAXVNODES) >/dev/null; \
+	$(SUDO) /bin/sh -c 'install -m 0644 -o root -g wheel "$$1" "$$2" || exit 1; \
+		launchctl bootout system "$$2" 2>/dev/null; launchctl bootstrap system "$$2" 2>/dev/null; \
+		sysctl -w kern.maxvnodes=$(MAXVNODES) >/dev/null' sh "$$TMP" "$(MAXVNODES_DAEMON)" || { echo "  ✗ root step failed"; exit 1; }; \
 	NOW=$$(sysctl -n kern.maxvnodes); \
 	[ "$$NOW" = "$(MAXVNODES)" ] || { echo "  ✗ kern.maxvnodes is $$NOW, not $(MAXVNODES) — the trial would measure a no-op"; exit 1; }; \
 	launchctl print system/com.jkrumm.maxvnodes >/dev/null 2>&1 \
 		|| { echo "  ✗ daemon not loaded — the ceiling is raised now but would not survive a reboot"; exit 1; }; \
 	$(MAKE) --no-print-directory maxvnodes-status
 maxvnodes-teardown: ## Roll back the trial: restore the stock ceiling and remove the daemon (needs sudo: run through ask-human)
-	@sudo launchctl bootout system "$(MAXVNODES_DAEMON)" 2>/dev/null; \
-	sudo rm -f "$(MAXVNODES_DAEMON)"; \
-	sudo sysctl -w kern.maxvnodes=$(MAXVNODES_DEFAULT) >/dev/null || true; \
+	@$(SUDO) /bin/sh -c 'launchctl bootout system "$$1" 2>/dev/null; rm -f "$$1"; sysctl -w kern.maxvnodes=$(MAXVNODES_DEFAULT) >/dev/null' sh "$(MAXVNODES_DAEMON)" \
+		|| { echo "  ✗ root step failed"; exit 1; }; \
 	echo "  ✓ maxvnodes daemon removed, ceiling back to $(MAXVNODES_DEFAULT) (the kernel never shrinks live vnodes, only the cap)"; \
 	$(MAKE) --no-print-directory maxvnodes-status
 maxvnodes-status: ## kern.num_vnodes vs kern.maxvnodes and whether the boot daemon is installed (read-only)
