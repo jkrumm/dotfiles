@@ -17,6 +17,7 @@ import {
   effectiveCwd,
   inspectDockerCommand,
   longRunningInWorktree,
+  realWorktreeProbe,
   recipeOf,
   startsLongRunning,
   targetStartsLongRunning,
@@ -475,6 +476,7 @@ describe("long-running containers from a worktree", () => {
     expect(startsLongRunning("docker compose up --exit-code-from tests")).toBe(false);
     expect(startsLongRunning("docker run --rm img go test")).toBe(false);
     expect(startsLongRunning("docker compose down")).toBe(false);
+    expect(startsLongRunning("@factory slot run -- sh -c 'docker compose up -d && bun test'")).toBe(false);
   });
 
   test("a target is long-running through its recipe, its dependencies and a $(MAKE) call", () => {
@@ -500,6 +502,12 @@ describe("long-running containers from a worktree", () => {
     expect(judge("make test-integration")).toBeNull();
     expect(judge("factory slot run -- make up")).toBeNull();
     expect(judge("make up", { makefile: null })).toBeNull();
+  });
+
+  test("a directory that does not exist is not probed, so the hook does not crash", () => {
+    expect(longRunningInWorktree("make -C /no/such/dir up && ls", "/no/such/cwd", true)).toBeNull();
+    expect(realWorktreeProbe.readMakefile("/no/such/dir")).toBeNull();
+    expect(realWorktreeProbe.isWorktree("/no/such/dir")).toBe(false);
   });
 
   test("a raw up or detached run is denied from a worktree, a run-and-exit one is not", () => {
