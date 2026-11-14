@@ -859,6 +859,43 @@ printf '%s\n' "$PW" | ssh mini 'read -r pw
   stale GUI session (a modal vetoes the restart) is the usual cause. Plain reboot
   first, then the installer, then leave it alone.
 
+## WindowServer, the video encoder and the display's refresh rate
+
+The mini has no monitor in use; its display is 1920 x 1080 at 120 Hz and never sleeps
+(`pmset displaysleep 0`). Measured 2026-11-14 (`top -l 7 -s 5` samples of WindowServer, mean of six):
+
+| State | WindowServer |
+|-|-|
+| idle, 120 Hz | 6.2 % |
+| basalt-ui layout suite running (Playwright Chrome, `--headless`), 120 Hz | 6 to 7 % |
+| one headed Chrome animating at 60 fps, 120 Hz | 12.6 % |
+| the same, display at 60 Hz | 7.6 to 8.8 % |
+
+- **A headless Chrome costs WindowServer nothing.** Every launcher in `~/SourceRoot` (the
+  Playwright `channel: 'chrome'` suites, the `--headless` scripts of jkrumm.com and
+  weatherorb, shutterflow's e2e) is headless; the headed Chromes are the research Chrome
+  (headed on purpose) and the owner's own. A headed Chrome adds about 6 points at 120 Hz and
+  about 1 at 60 Hz: real, but not 40 %.
+- **The 40 % reading was a Screen Sharing session.** `pmset -g log` shows a remote session
+  (`screensharingd` "Remote user is connected") from 21:27:58 to 21:53:51 on 2026-11-14, which
+  covers the 21:50 reading. `replayd` (the capture side), `VTEncoderXPCService` (the H.264/HEVC
+  encoder) and `avconferenced` are the Screen Sharing stack: they start with the first remote
+  session, stay resident afterwards at 0 % and do their work only while a viewer is connected.
+  Nothing else on the mini starts them. WindowServer then composites and hands every frame to
+  the encoder, so the cost scales with the refresh rate and with what moves on the screen.
+- **The cheap lever is the display mode, not display sleep.** 1920 x 1080 offers 120, 60, 50
+  and 30 Hz (`CGDisplayCopyAllDisplayModes`); 60 Hz halves the frames a viewer is sent and a
+  headed Chrome renders. Display sleep stays off: the idle cost is 6 %, and a sleeping display
+  makes the next Screen Sharing connection start from a black frame. Switching works from
+  System Settings > Displays, or `CGConfigureDisplayWithDisplayMode` in a session; from a
+  background shell the first call took effect for the session, every later call (and the
+  `.permanently` option) failed with CGError 1014 and nothing is stored in the window-server
+  preferences, so a reboot likely returns the display to 120 Hz. The Screen Sharing cost at 60 Hz is the one reading not taken: it needs a
+  viewer connected.
+- Reading it again: `top -l 7 -s 5 -stats pid,command,cpu | rg 'WindowServer|avconferenced|VTEncoder|replayd'`
+  during a session, and `pmset -g log | rg 'screensharingd\) (Created|Released) PreventSystemSleep'`
+  for when one ran.
+
 ## Verification
 
 | Command | Covers |
