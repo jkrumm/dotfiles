@@ -53,7 +53,7 @@ fake osascript 'echo "$*" >> "$FIX/osascript.args"; [ -e "$FIX/mountfail" ] && e
   url=$(printf "%s" "$*" | sed -n "s/.*\"smb:\/\/\([^\"]*\)\".*/\1/p"); share="${url##*/}"
   echo "//${url} on /Volumes/$share (smbfs, nodev, nosuid, mounted by test)" >> "$FIX/table"'
 fake diskutil 'echo "unmount $*" >> "$FIX/diskutil.log"; [ -e "$FIX/unmountfail" ] && exit 1
-  grep -v " on $2 " "$FIX/table" > "$FIX/table.new"; mv "$FIX/table.new" "$FIX/table"'
+  grep -vF " on ${@: -1} " "$FIX/table" > "$FIX/table.new"; mv "$FIX/table.new" "$FIX/table"'
 fake umount 'exit 1'
 
 CONF="$TMP/shares.conf"
@@ -219,6 +219,40 @@ unset KIND
 check "exits 0" test "$rc" -eq 0
 check "says it cannot probe" has "cannot be probed"
 check "nothing unmounted" test ! -s "$FIX/diskutil.log"
+
+echo "# volatile row (the server's volume can be absent): a failed mount is skipped, not a failure; recovers by itself"
+CONF_SAVED="$CONF"; CONF="$TMP/volatile.conf"
+cat > "$CONF" <<'CONF'
+srv.example.test fixture-user EXT yes macbook volatile
+srv.example.test fixture-user HOME yes macbook
+CONF
+: > "$FIX/table"
+touch "$FIX/mountfail"
+KIND=macbook run
+check "the volatile row is reported unavailable" has "EXT: unavailable"
+check "the plain row's failure still fails the run" test "$rc" -eq 1
+rm "$FIX/mountfail"
+echo "srv.example.test fixture-user EXT yes macbook volatile" > "$CONF"
+: > "$FIX/table"; touch "$FIX/mountfail"
+KIND=macbook run
+check "only the volatile row, failing: exits 0" test "$rc" -eq 0
+check "says unavailable" has "EXT: unavailable"
+rm "$FIX/mountfail"
+KIND=macbook run
+check "volume back: mounted by the next run" grep -q "/Volumes/EXT (smbfs" "$FIX/table"
+check "exits 0" test "$rc" -eq 0
+echo "# volatile mount stale (volume vanished): force-unmounted, remount fails quietly, then recovers"
+: > "$FIX/diskutil.log"; touch "$FIX/statfail" "$FIX/mountfail"
+KIND=macbook run
+rm "$FIX/statfail"
+check "force-unmounted" grep -q "unmount force" "$FIX/diskutil.log"
+check "exits 0" test "$rc" -eq 0
+check "not mounted now" sh -c '! grep -q "/Volumes/EXT" "$1"' _ "$FIX/table"
+rm "$FIX/mountfail"
+KIND=macbook run
+check "remounted when the volume is back" grep -q "/Volumes/EXT (smbfs" "$FIX/table"
+unset KIND
+CONF="$CONF_SAVED"
 
 echo "# missing declaration: exit 1"
 out=$(PATH="$FAKE:$PATH" SMB_HOST_KIND=mini SMB_SHARES_CONF="$TMP/none" bash "$HERE/smb-keepalive.sh" 2>&1); rc=$?

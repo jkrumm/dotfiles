@@ -209,12 +209,24 @@ force_unmount() {
 
 checked=0
 failed=0
-# Row: <server> <user> <share> <automount yes|no> [macbook|mini] — the optional last field
+# A failed mount of a volatile row is the volume being away on the server, not a fault of the job.
+mount_failed() {
+  if [ "$flag" = volatile ]; then
+    log "$share: unavailable (volatile share, its volume is probably absent on the server) — skipped, retried next run"
+  else
+    failed=$((failed + 1))
+  fi
+}
+# Row: <server> <user> <share> <automount yes|no> [macbook|mini [volatile]] — the optional scope
 # restricts the row to one host (a share may automount on the mini and stay opt-in on the MacBook).
-while read -r server user share automount scope _rest; do
+# `volatile` (after a scope) marks a share whose backing volume can be absent on the server (the mini's
+# external SSD): its failed mount is logged and not counted, so the absent volume does not turn the job
+# red every minute. The next run mounts it once the volume is back.
+while read -r server user share automount scope flag _rest; do
   case "${server:-}" in ''|\#*) continue ;; esac
   [ -n "${share:-}" ] || { log "malformed row: '$server $user'"; continue; }
   case "${scope:-}" in \#*) scope="" ;; esac
+  case "${flag:-}" in volatile) ;; *) flag="" ;; esac
   case "${scope:-$host_kind}" in "$host_kind") ;; macbook|mini) continue ;; *) log "$share: bad scope '$scope'"; continue ;; esac
   checked=$((checked + 1))
 
@@ -227,7 +239,7 @@ while read -r server user share automount scope _rest; do
   mp=$(mount_point "$server" "$share")
   if [ -z "$mp" ]; then
     if [ "${automount:-no}" = yes ]; then
-      smb_mount "$server" "$user" "$share" || failed=$((failed + 1))
+      smb_mount "$server" "$user" "$share" || mount_failed
     else
       release_mount_point "$share"
       log "$share: reachable, not mounted (automount off)"
@@ -247,7 +259,11 @@ while read -r server user share automount scope _rest; do
   esac
 
   log "$share: mount at $mp is stale (probe $([ "$rc" -eq 124 ] && echo "hung > ${PROBE_SECONDS}s" || echo failed twice)) — remounting"
-  { force_unmount "$mp" "$share" && smb_mount "$server" "$user" "$share"; } || failed=$((failed + 1))
+  if force_unmount "$mp" "$share"; then
+    smb_mount "$server" "$user" "$share" || mount_failed
+  else
+    failed=$((failed + 1))
+  fi
 done < "$CONF"
 
 [ "$checked" -gt 0 ] || { log "no shares declared for the $host_kind in $CONF"; exit 1; }

@@ -2763,8 +2763,9 @@ external-volume-unlock-teardown:
 external-volume-check: ## Read-only: the external volume's state (silent while config/external-volume.json says attached=false)
 	@bash $(DOTFILES_DIR)/scripts/external-volume-check.sh; rc=$$?; [ $$rc -le 2 ] || exit $$rc
 volume-gate-test: ## Hermetic test for the volume gate, the unlock job and the check (a stub diskutil, a temp dir as the volume)
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/volume-gate.sh $(DOTFILES_DIR)/scripts/external-volume-unlock.sh $(DOTFILES_DIR)/scripts/external-volume-check.sh $(DOTFILES_DIR)/scripts/volume-gate.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/volume-gate.sh $(DOTFILES_DIR)/scripts/external-volume-unlock.sh $(DOTFILES_DIR)/scripts/external-volume-check.sh $(DOTFILES_DIR)/scripts/volume-gate.test.sh $(DOTFILES_DIR)/scripts/external-volume-share.sh $(DOTFILES_DIR)/scripts/external-volume-share.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/volume-gate.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/external-volume-share.test.sh
 
 # One storage page: shares, mounts, free space, the keepalive's grade, the external volume, the mirror and the restic age
 # (docs/storage.md §Status). Read-only and bounded. `ARGS=--json` is the contract the Tinycast command reads.

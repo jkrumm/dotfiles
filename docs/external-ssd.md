@@ -95,6 +95,31 @@ so no grant could be probed for them; the first run after a revival raises the p
 after this change merges (its log, `~/Library/Logs/devhost-health.log`, shows `external volume present` or `unreadable`). The mirror job
 joins when `ext-mirror` puts it behind the gate; weatherorb was asked by signal to put its jobs behind it.
 
+## Share
+
+The volume is served from the mini over SMB as `EXT` (macOS `smbd` on :445, the same door as the home share; the tailnet ACL
+`tag:mac → tag:mac` already covers it), so the MacBook mounts it at `/Volumes/EXT`, the path the drive had when it was plugged in
+there. Plan row `smb-ssd-share`.
+
+- **The share point is the volume's mount point itself.** Absent or locked, there is no directory behind the name: the share lists
+  nothing and the internal disk is never exposed or written (a mount point is not created by anything here).
+- **One script owns it:** `scripts/external-volume-share.sh add|remove|status`. `add` refuses unless the gate says `present` (mounted,
+  unlocked, sentinel readable), reads the mount point from the gate (never a typed path), is idempotent, creates an SMB-only share with
+  guest access off, and adds the invoking admin to the new share's access group. `remove` drops the share point and leaves the data
+  alone (the rollback). `status` needs no root.
+- **It needs root and there is no root-free route** (checked 2026-11-14: `sharing -a` answers `must run as root`, `dscl` on the share
+  point records `eDSPermissionError`, `sudo -n` asks for a password). So it is one owner step, from a Herdr terminal on the mini (that
+  terminal holds the Full Disk Access the gate's sentinel read needs): `sudo ~/SourceRoot/dotfiles/scripts/external-volume-share.sh add`.
+  The share point survives reboots and unlocks; it does not need repeating.
+- **Users and permissions as the home share has them:** the Mac's SMB-enabled users, no guest; the volume is mounted `noowners`, so
+  file permissions add nothing.
+- **The MacBook side** is two rows in `dotfiles-private/smb-shares.conf` (EXT and the home share), mounted by the keepalive
+  (`docs/macbook.md` §HomeLab Samba). The EXT row is `volatile`: a mount that fails because the volume is away on the mini is logged
+  as `unavailable` and is not a failure of the job, and the next 60 s run mounts it once the volume is back, with no reboot or cable
+  pull. An unlock still comes first (§As attached: an unmount leaves this drive locked until the unlock job or the owner unlocks it).
+- **A row cannot mount without the login Keychain entry Finder saves**, so each server's first mount is by hand in Finder with
+  *Remember*, before `automount` is `yes`.
+
 ## Keep off the volume
 
 Swap and the Colima VM disk, `~/.colima`, herdr-core state and logs, `~/Library/Logs`, the secrets cache, LaunchAgent programs, Postgres's
