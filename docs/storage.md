@@ -26,24 +26,25 @@ with one exception: the Shutterflow library, which syncs its finals to B2 itself
 | Photos: finals, phone archives, old libraries, Immich uploads and its database dumps | `SSD/Bilder` | EXT mirror | restic |
 | Books, dev archive, small personal videos, public files | `SSD/{Bücher,Dev,Videos,Public}` | EXT mirror | restic |
 | Fuji RAWs | `HDD/fuji/RAWs` | EXT mirror | restic |
-| Fuji videos | `HDD/fuji/Videos` | EXT mirror | none |
+| Fuji videos | `HDD/fuji/Videos` | EXT mirror | none (owner, 2026-11-14) |
+| Other big personal videos (drone, projects) | `HDD/Videos` | EXT mirror | none |
 | Films, series, audiobooks, downloads | `HDD` | none | none (replaceable) |
 | Machine and service backups (Hermes, Postgres dumps, account dumps) | `HDD/backups` | none | restic |
 | weatherorb working data | `EXT/weatherorb` | none | its own archive bucket on the HDD (weatherorb ADR 0009) |
 
-Fuji videos have two copies in one flat and none outside it. That is the one class where a fire
-or a break-in loses data; adding the folder to restic costs about 110 GB of B2 storage.
+Big videos have two copies in one flat and none outside it: the owner's call of 2026-11-14,
+they are not worth B2 storage. A fire or a break-in loses them.
 
 ## Layout
 
 ```
 SSD/                      HDD/                       EXT/
   Bilder/                   fuji/RAWs  fuji/Videos     weatherorb/   weatherorb's data root
-  Dokumente/                Filme/                     mirror/       pulled copies, read-only by convention
-  Bücher/                   Hörbücher/                   ssd/        <- the SSD share
-  Dev/                      backups/                     fuji/       <- HDD/fuji
-  Videos/                   inbox/
-  Public/                   <service>/
+  Dokumente/                Videos/                    mirror/       pulled copies, read-only by convention
+  Bücher/                   Filme/                       ssd/        <- the SSD share
+  Dev/                      Hörbücher/                   fuji/       <- HDD/fuji
+  Videos/                   backups/                     videos/     <- HDD/Videos
+  Public/                   inbox/  <service>/
 ```
 
 - **New files go to the home, through the share.** Never to EXT, never to a Mac's disk "for now".
@@ -56,7 +57,7 @@ SSD/                      HDD/                       EXT/
 | Job | From → to | When | Proof it ran |
 |-|-|-|-|
 | restic (`homelab` repo, `docs/backups.md`) | SSD share, `HDD/fuji/RAWs`, `HDD/backups`, service state → B2 | daily 03:30 | Uptime Kuma push monitor, 25 h |
-| EXT mirror (plan row `ext-mirror`, not built yet) | SSD share and `HDD/fuji` → `EXT/mirror` | nightly, pulled by the mini over S3 (`hl`) | `jobrun` grade and a status file on EXT |
+| EXT mirror (plan row `ext-mirror`, not built yet) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror` | nightly, pulled by the mini over S3 (`hl`) | `jobrun` grade and a status file on EXT |
 | Shutterflow sync (its own app) | finals on the MacBook → B2 | on demand | the app's pipeline view |
 
 The mirror pulls over S3 because the mini's S3 key cannot delete on the HomeLab, and because a
@@ -64,8 +65,12 @@ pull does not depend on an SMB mount being healthy. A file deleted at home moves
 `EXT/mirror/.deleted/<date>/` for 30 days before it goes.
 
 Restic as measured: last run 2026-11-14 03:30, 162,685 files, 382 GiB, 26 snapshots back to
-2026-05, retention 14 daily / 8 weekly / 12 monthly / 5 yearly. Open gaps: no scheduled
-`restic check` and no restore drill since 2026-05-04.
+2026-05, retention 14 daily / 8 weekly / 12 monthly / 5 yearly. The snapshot was compared with
+the live sources file by file the same day: 5,657 live files (1.4 GiB) are not in it, all by an
+exclude rule (build output, caches, macOS metadata), among them one 1.3 GiB phone video whose
+name ends in `.tmp`. Open gaps (homelab row `restic-verify`): no scheduled `restic check`, no
+restore drill since 2026-05-04, and the 1Password vault export (`~/backups/1password` on the
+HomeLab, age-encrypted, the recovery root for everything else) is not a source.
 
 ## Mounts
 
@@ -89,13 +94,16 @@ Not built yet: `make storage-status` (plan row `storage-status`) prints shares, 
 space and the age of the mirror and the backup, and `--json` feeds a Tinycast command on the
 MacBook. Until then: `make smb-keepalive-status` for the mounts, the Kuma push monitor for restic.
 
-## Open, by the owner
+## Decided by the owner, 2026-11-14
 
-| Decision | Default until answered |
+| Question | Decision |
 |-|-|
-| Where Shutterflow's RAW root lives now that EXT sits on the mini | `HDD/fuji/RAWs` through the share; EXT only mirrors. The alternative keeps the old path `/Volumes/EXT/Bilder/RAWs` through the mini's share and makes the HDD the copy |
-| Fuji videos offsite | not in restic |
-| Deleting the 2.0 TiB film copy on the HDD's second partition (every title also sits in `HDD/Filme`, same physical disk) | kept until approved |
+| Shutterflow's RAW root, now that EXT sits on the mini | `HDD/fuji/RAWs` through the share; EXT only mirrors. He repoints Shutterflow himself |
+| Big videos offsite | no |
+| The 2.0 TiB film copy on the HDD's second partition | delete, after file-by-file proof against `HDD/Filme` (homelab row `storage-consolidate`). Jellyfin's library is the copy that stays |
+| Personal folders on EXT | documents to `SSD/Dokumente`, drone and project videos to `HDD/Videos`, the rescued USB stick dropped once its unique files are moved |
+
+Still open: the mini's 19 GiB Photos library (`~/Pictures`) has no declared home or copy.
 
 ## Found on 2026-11-14
 
@@ -103,8 +111,8 @@ Content hashes over the SSD share, `HDD/fuji` and the personal folders on EXT.
 
 | Finding | Size | State |
 |-|-|-|
-| Fuji RAWs and videos on EXT and on the HDD are identical (6,320 and 418 files, name and size) | 280 GiB | wanted: it becomes `EXT/mirror/fuji` by a rename |
-| Personal folders on EXT (tax, a rescued USB stick, drone and project videos) exist nowhere else | 22 GiB | **single copy, in no backup**: moves to the SSD share |
+| Fuji RAWs and videos on EXT and on the HDD are identical (6,320 and 418 files, name and size) | 280 GiB | wanted: it becomes `EXT/mirror/fuji` by a rename. An owner session that morning made them equal: 4 RAWs and 23 videos copied to the HDD, 1,549 culled RAWs (43 GiB) deleted there; those stay in restic for the retention time |
+| Personal folders on EXT (documents, a rescued USB stick, drone and project videos) exist nowhere else | 22 GiB | **single copy, in no backup**: moves to the HomeLab |
 | Second film copy on the HDD's other partition, frozen since 2025-01 | 2.0 TiB | stale: delete after approval |
 | Old Shutterflow staging folder overlaps the finals folder | 13 GiB of 27 | stale: the library on the MacBook superseded both |
 | Byte-identical duplicates elsewhere in the SSD share | under 3 GiB | not worth a pass |
