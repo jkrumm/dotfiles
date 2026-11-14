@@ -18,6 +18,7 @@ rows:
         With the basalt playground stopped, a plain request to its door starts it and the page loads within a minute; with the idle window shortened for the test it stops again. A request to a manual service's door does not start it. A request for an unknown name, or a verb the registry does not hold, is refused (a test). The ship has screenshots of the page at 1600x1100 and at 390 wide. make check passes and /review is clean.
 
   - key: linewatch-native
+    prio: 50
     repo: linewatch
     title: Run the linewatch app under launchd on the mini instead of in the Colima VM
     after: [mini-registry]
@@ -35,6 +36,7 @@ rows:
     issue: 1184
 
   - key: kiri-trial
+    prio: 50
     kind: chore
     title: Runtime trial beside Colima - kiri and Apple's container on personal containers, memory returned, sleep and wake, our compose files
     after: [mini-registry]
@@ -51,6 +53,8 @@ rows:
         No company container, image, volume or bind mount of ~/IuRoot runs under kiri in this row: with the fixed shares the VM sees all of /Users, and whether company code and the VPN may live under that is the owner's call after the Report. No sudo, no certificate trust, no automatic update.
 
   - key: mini-docker-idle
+    lane: host
+    prio: 50
     title: Docker off by default on the mini - brain-web from Caddy, dev databases as a profile, one 2 GiB VM that runs only while a service needs it
     after: [linewatch-native, rb-native]
     after_needs: shipped
@@ -65,6 +69,8 @@ rows:
         With no registered service that needs the VM up, no com.apple.Virtualization.VirtualMachine process of the default profile exists for 30 minutes and make doctor is green. The brain door answers from Caddy with the same page as before (status and a content hash of the index, and the iPhone path of docs/brain-access.md). make mini-up of one compose service brings the VM and the service up; the ship states the seconds it took. launchctl shows the Colima job does not start the VM at load. With the VM stopped, one target from the list of point 6 is run and passes, the ship naming it and the seconds the ensure step took. The ship lists every target of point 6 with how it was settled. make check passes and /review is clean.
 
   - key: mini-work-profile
+    lane: host
+    prio: 50
     title: The company's work services on the mini as one profile - down by default, one verb up and down
     after: [mini-docker-idle]
     facts:
@@ -78,6 +84,7 @@ rows:
         After UP=0 no process or container of the profile is left and, with nothing else needing it, the VM stops within its idle window. After UP=1 the dashboard door answers 200 given a valid session, and a stale session produces the Errand. launchctl print-disabled lists the profile's jobs while it is down. No monitor paged during a down period of an hour. make check passes and /review is clean.
 
   - key: teamchat-on-demand
+    prio: 50
     repo: epos-ai-teamchat-athena
     title: The sandbox runs in the mini's one VM and only while a run needs it
     after: [mini-docker-idle]
@@ -107,6 +114,7 @@ rows:
         factory read throughput reports the new start of its counting, and the next daily pass files no finding whose before was read across the epoch. make check-fast is green.
 
   - key: browser-shared
+    prio: 50
     title: One shared headless Chrome for UI checks - started on demand, one context per agent, stopped when idle
     after: [mini-registry]
     facts:
@@ -120,6 +128,8 @@ rows:
         Two browser agents in parallel use one Chrome tree (ps), a cookie set by one is absent in the other, and both screenshots are 1600x1100. Twenty minutes after the last use no Chrome of that profile runs. The ship states the tool-schema tokens of the browse path before and after. make check passes and /review is clean.
 
   - key: pg-buffers
+    lane: host
+    prio: 50
     kind: chore
     title: Postgres shared_buffers 2 GB to 512 MB while weatherorb's jobs are disabled
     after: [mini-registry]
