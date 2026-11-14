@@ -105,23 +105,39 @@ mount then blocks the first Finder/`stat` that touches it.
 `jobs-grade`) every 60 s and on every
 network change (`WatchPaths` on `/Library/Preferences/SystemConfiguration`): per
 share in `dotfiles-private/smb-shares.conf` (it names the server, so not here),
-`:445` unreachable → log "skipped", exit 0; mounted and a bounded `stat`+`ls`
-hangs or fails → `diskutil unmount force` + remount; absent and `automount yes` →
+`:445` unreachable → log "skipped", exit 0; mounted and the bounded probe
+hangs or fails (twice, for a fast failure) → `diskutil unmount force` + remount; absent and `automount yes` →
 mount. Every call is bounded and a hung one is abandoned, never waited on. A row's
 optional fifth field (`macbook`|`mini`) scopes it to one host. `make smb-keepalive-setup`
 also links `smb/nsmb.conf` → `~/Library/Preferences/nsmb.conf` (`soft=yes`, SMB3-only,
 no NetBIOS, no multichannel — each key checked against nsmb.conf(5)); `make setup`
 runs it on both Macs. `make smb-keepalive-status` shows the launchd state and the log tail,
-`make smb-keepalive-test` the hermetic suite (fake mount table, a hanging `stat` fixture).
+`make smb-keepalive-test` the hermetic suite (fake mount table; hanging-`stat`, silent-server, dropped-session and EPERM fixtures).
+
+**The probe differs per host, because macOS lets a launchd job only stat an SMB mount.** Reading one
+(`ls`, `cat`) needs the Network Volumes grant (`kTCCServiceSystemPolicyNetworkVolumes`) for the job's
+program, which under `jobrun` is `bun` at a versioned Cellar path: the grant drops with every bun
+upgrade, and without it the read answers `Operation not permitted` or hangs on a prompt nobody sees
+(the first mini deploy force-unmounted a healthy share every minute that way, 2026-11-14). So:
+
+| Host | Probe | Why |
+|-|-|-|
+| mini | `stat` + `df -k` + `smbutil statshares -m <mount>`, no read | none needs the grant. Measured through a local forwarder in front of the share: a **silent** server (packets dropped) leaves `stat` answering from cache but hangs `df` and `statshares`; a **dropped session** (connection reset) makes `statshares` exit 64 |
+| MacBook | `stat` + `ls -a` | runs in the GUI session, where the read works |
+
+An `Operation not permitted` from any probe is "cannot probe" (logged, mount left alone), never "stale".
 
 | Host | Mount | Password | Mount point |
 |-|-|-|-|
 | MacBook | `osascript mount volume` | login Keychain entry Finder saved — mount each share once in Finder with *Remember* first | `/Volumes/<share>` |
-| mini (cache backend) | `mount_smbfs` | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
+| mini (cache backend) | `mount_smbfs` through `expect` | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
 
-The mini's password sits in a 0600 temp file for the length of the secret read and in
-`mount_smbfs`' argv for the length of the call (same-user processes only); never in a
-tracked file, the plist, the log or the environment. The mount point is removed again
+The mini's password sits in a 0600 temp file for the length of the secret read, then reaches
+`mount_smbfs` through a pty (`smb/smb-mount.exp`: `mount_smbfs` asks on its terminal, `expect` answers
+from a pipe), so it is in no argv — `ps`/`pgrep -fl` show only the user, server, share and mount
+point. Never in a tracked file, the plist, the log or the environment. (Keychain was the other
+candidate: `security add-internet-password -w` takes the secret in argv or on a pty prompt itself, and
+a login-keychain item would sit at rest, which the age-encrypted cache avoids.) The mount point is removed again
 whenever the share is not mounted (an empty directory would swallow a copy while the
 HomeLab is down). That account can
 delete on the HomeLab shares, unlike the `hl` S3 key — the ref's comment in

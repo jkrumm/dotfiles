@@ -1,0 +1,23 @@
+# Mount one SMB share with the password fed through a pty, so it never sits in an argv.
+#   expect -f smb-mount.exp -- <user> <server> <share> <mountpoint>      password: one line on stdin
+# mount_smbfs asks "Password for <server>:" on its controlling terminal when the URL has none; expect
+# answers it from stdin. One answer only: a second prompt means the password was refused.
+# Exit: mount_smbfs' own status; 77 password refused; 124 no answer from the server in time.
+set timeout 120
+log_user 0
+lassign $argv user server share mp
+set pw [gets stdin]
+set sent 0
+spawn mount_smbfs -o nobrowse "//$user@$server/$share" $mp
+expect {
+  -re {[Pp]assword[^\r\n]*:} {
+    if {$sent} { exit 77 }
+    set sent 1
+    send -- "$pw\r"
+    exp_continue
+  }
+  eof {}
+  timeout { exit 124 }
+}
+catch wait result
+exit [lindex $result 3]

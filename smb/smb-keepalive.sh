@@ -23,11 +23,19 @@
 #                             mount is `mount_smbfs` at ~/HomeLab/<share>. The
 #                             mount point exists only while a share sits on it
 #                             (an empty directory would swallow a copy to a
-#                             HomeLab that is down). The password is in a 0600
-#                             temp file for the length of the secret read and in
-#                             mount_smbfs' argv for the length of the call (the
-#                             same user's processes only); never in a tracked
+#                             HomeLab that is down). The password reaches
+#                             mount_smbfs through a pty (smb-mount.exp), never
+#                             its argv; it is also in a 0600 temp file for the
+#                             length of the secret read. Never in a tracked
 #                             file, the plist, the log or the environment.
+#
+# Health probe: macOS answers `Operation not permitted` (or hangs on a prompt nobody
+# sees) to a launchd job that READS an SMB mount unless the job's program holds the
+# Network Volumes grant, which is keyed on a versioned bun path. So the mini's probe
+# reads nothing: stat + df + `smbutil statshares -m`, none of which needs the grant,
+# and together they hang on a silent server and fail on a dropped session (`stat`
+# alone is answered from cache). The MacBook, where the job runs in the GUI session,
+# still lists the root with `ls -a`. EPERM is "cannot probe", never "stale".
 #
 # Every external call is bounded: a hung smbfs call is abandoned, never waited
 # on (launchd reaps the leftover when the run exits). Declared shares:
@@ -55,6 +63,11 @@ fi
 
 [ -f "$CONF" ] || { log "no share declaration at $CONF"; exit 1; }
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN_TMP=$(mktemp -d "${TMPDIR:-/tmp}/smb-keepalive.XXXXXX") || exit 1
+trap 'rm -rf "$RUN_TMP"' EXIT
+PROBE_ERR="$RUN_TMP/probe.err"
+
 # Run "$@" for at most $1 seconds. 0 = exited 0; 1 = failed; 124 = still running
 # after the deadline (abandoned, never waited on — a hung smbfs call can sit in
 # the kernel uninterruptibly). Output is discarded.
@@ -62,6 +75,35 @@ bounded() {
   local secs="$1" pid i
   shift
   "$@" </dev/null >/dev/null 2>&1 &
+  pid=$!
+  for ((i = 0; i < secs * 4; i++)); do
+    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
+    sleep 0.25
+  done
+  kill -9 "$pid" 2>/dev/null
+  return 124
+}
+
+# bounded, with $1 seconds, $2 = file receiving stderr; stdout discarded.
+bounded_err() {
+  local secs="$1" err="$2" pid i
+  shift 2
+  "$@" </dev/null >/dev/null 2>"$err" &
+  pid=$!
+  for ((i = 0; i < secs * 4; i++)); do
+    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
+    sleep 0.25
+  done
+  kill -9 "$pid" 2>/dev/null
+  return 124
+}
+
+# bounded, but $SECRET_INPUT (one line) is fed to the command's stdin through a pipe (printf is
+# a builtin: nothing in any argv). For the pty mount only.
+bounded_input() {
+  local secs="$1" pid i
+  shift
+  printf '%s\n' "$SECRET" | "$@" >/dev/null 2>&1 &
   pid=$!
   for ((i = 0; i < secs * 4; i++)); do
     kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
@@ -97,26 +139,28 @@ mount_point() {
     }'
 }
 
-# Each command bounded on its own, run directly (no `sh -c` wrapper), so the
-# process killed on a timeout is the one actually stuck — no orphaned grandchild.
-probe() {
+# Probe a mounted share: 0 healthy, 1 failed, 124 hung, 2 cannot probe (macOS refuses the read:
+# EPERM is not a stale mount). Each command bounded on its own, run directly (no `sh -c`
+# wrapper), so the process killed on a timeout is the one actually stuck.
+probe_cmd() { # $1 = name, rest = the command; stderr kept in $PROBE_ERR to tell EPERM from a dead mount
   local rc
-  bounded "$PROBE_SECONDS" stat "$1"; rc=$?
-  [ "$rc" -eq 0 ] || return "$rc"
-  bounded "$PROBE_SECONDS" ls -a "$1"
+  bounded_err "$PROBE_SECONDS" "$PROBE_ERR" "${@:2}"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q "Operation not permitted" "$PROBE_ERR" 2>/dev/null && return 2
+  return "$rc"
 }
 
-# RFC 3986 percent-encoding of one string, bytewise (the URL carries the password).
-urlencode() {
-  local LC_ALL=C s="$1" i c out=""
-  for ((i = 0; i < ${#s}; i++)); do
-    c="${s:i:1}"
-    case "$c" in
-      [A-Za-z0-9._~-]) out+="$c" ;;
-      *) out+=$(printf '%%%02X' "'$c") ;;
-    esac
-  done
-  printf '%s' "$out"
+probe() {
+  local mp="$1" rc
+  probe_cmd stat stat "$mp"; rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
+  if [ "$host_kind" = mini ]; then
+    probe_cmd df df -k "$mp"; rc=$?
+    [ "$rc" -eq 0 ] || return "$rc"
+    probe_cmd statshares smbutil statshares -m "$mp"
+  else
+    # the root's attributes can come from cache; the listing has to reach the server
+    probe_cmd ls ls -a "$mp"
+  fi
 }
 
 # The password, once per run, from the secrets cache. Sets SECRET; 1 = unavailable.
@@ -125,11 +169,10 @@ SECRET_FAILED=0
 load_secret() {
   [ -n "$SECRET" ] && return 0
   [ "$SECRET_FAILED" -eq 1 ] && return 1
-  local dir rc
-  dir=$(mktemp -d "${TMPDIR:-/tmp}/smb-keepalive.XXXXXX") || return 1
-  bounded_to "$SECRET_SECONDS" "$dir/pw" secrets-run read "$SECRET_REF"; rc=$?
-  SECRET=$(cat "$dir/pw" 2>/dev/null); SECRET=${SECRET%$'\n'}
-  rm -rf "$dir"
+  local rc
+  bounded_to "$SECRET_SECONDS" "$RUN_TMP/pw" secrets-run read "$SECRET_REF"; rc=$?
+  SECRET=$(cat "$RUN_TMP/pw" 2>/dev/null); SECRET=${SECRET%$'\n'}
+  rm -f "$RUN_TMP/pw"
   [ "$rc" -eq 0 ] && [ -n "$SECRET" ] && return 0
   SECRET=""; SECRET_FAILED=1
   case "$rc" in
@@ -165,13 +208,13 @@ smb_mount_mini() {
   local server="$1" user="$2" share="$3" mp="$MOUNT_ROOT/$3" rc
   load_secret || { release_mount_point "$share"; return 1; }
   mkdir -p "$mp" || { log "$share: cannot create $mp"; return 1; }
-  bounded "$MOUNT_SECONDS" mount_smbfs -N -o nobrowse \
-    "//$(urlencode "$user"):$(urlencode "$SECRET")@${server}/${share}" "$mp"
+  bounded_input "$MOUNT_SECONDS" expect -f "$HERE/smb-mount.exp" -- "$user" "$server" "$share" "$mp"
   rc=$?
   if [ "$rc" -eq 0 ]; then log "$share: mounted at $mp"; return 0; fi
   release_mount_point "$share"
   case "$rc" in
     124) log "$share: mount timed out after ${MOUNT_SECONDS}s" ;;
+    77)  log "$share: the server refused the password (is the cached secret current? make secrets-reseal-request)" ;;
     *)   log "$share: mount_smbfs failed (rc $rc)" ;;
   esac
   return 1
@@ -223,10 +266,10 @@ while read -r server user share automount scope _rest; do
   probe "$mp"
   rc=$?
   [ "$rc" -eq 1 ] && { sleep "$RETRY_SLEEP"; probe "$mp"; rc=$?; }
-  if [ "$rc" -eq 0 ]; then
-    log "$share: healthy at $mp"
-    continue
-  fi
+  case "$rc" in
+    0) log "$share: healthy at $mp"; continue ;;
+    2) log "$share: mount at $mp cannot be probed (macOS refuses the read: Operation not permitted) — left alone"; continue ;;
+  esac
 
   log "$share: mount at $mp is stale (probe $([ "$rc" -eq 124 ] && echo "hung > ${PROBE_SECONDS}s" || echo failed twice)) — remounting"
   { force_unmount "$mp" "$share" && smb_mount "$server" "$user" "$share"; } || failed=$((failed + 1))
