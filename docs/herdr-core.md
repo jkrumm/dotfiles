@@ -320,8 +320,8 @@ removes a stale `com.jkrumm.herdr-core` / `-update` LaunchAgent.
 
 **Core up** is defined once, in `scripts/lib/core-up.sh`: the default socket answers (bare `nc -U`, never an `hc` call)
 **and** a launchd-born core exists (`ps`: `herdr-core --hc-launchd`, parent pid 1). Used by `lib/core-health.sh`
-(heartbeat component `core`, `doctor.sh`), `rd`'s `require_core`, `claude-relogin`, `hc-events`, `hc-resume`, `hc-reap`
-and `collie-setup`. Any `hc` call auto-starts a core when none answers, which is why every consumer asks `core_up` first.
+(heartbeat component `core`, `doctor.sh`), `rd`'s `require_core`, `claude-relogin`, `hc-events`, `hc-resume`, `hc-reap`,
+`collie-setup` and `recovery-check`. Any `hc` call auto-starts a core when none answers, which is why every consumer asks `core_up` first.
 
 **Strays.** A core started by a client (`herdr-core connect` over ssh, upstream herdr-core #12; a `hc` call while no core
 runs) answers on the same socket but is attributed to sshd and has no keychain: Claude silently falls back to API

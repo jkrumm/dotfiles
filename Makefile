@@ -3568,6 +3568,7 @@ help:
 	@echo "  make caddy-tailnet-test    Hermetic tailnet generator suite (extra FQDN doors, refusals, missing file)"
 	@echo "  make swapout-rate-test  Hermetic swapout-rate delta/reset suite"
 	@echo "  make devhost-heartbeat-test  Hermetic heartbeat bounded-run / budget / side-monitor suite"
+	@echo "  make recovery-check  Read-only after a boot: resumable vs running-claude terminals (ARGS=--json)"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
