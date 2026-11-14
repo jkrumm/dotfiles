@@ -70,6 +70,16 @@ describe("state + atomic write", () => {
     const intr = nextState(ok, a, { run_id: "b", started: t0 + 100, finished: t0 + 200, rc: 143, tail: [], sha: null, interrupted: true })
     expect([intr.consecutive_fail, intr.fails_24h, intr.rc, intr.last_ok]).toEqual([0, 0, 143, ok.last_ok])
   })
+  test("an undelivered push (75) and a timeout on an overloaded host are not the job's failures; a timeout on a healthy host is", () => {
+    const a = { label: "c", owner: "o", every: 60, timeout: null, lock: null, kuma: null, cmd: ["x"] }
+    const t0 = Date.parse("2026-10-16T10:00:00Z")
+    const ok = nextState(null, a, { run_id: "a", started: t0, finished: t0 + 1, rc: 0, tail: [], sha: null })
+    const run = (rc: number, hostOverloaded?: boolean) => nextState(ok, a, { run_id: "b", started: t0 + 100, finished: t0 + 200, rc, tail: [], sha: null, hostOverloaded })
+    expect([run(75).consecutive_fail, run(75).fails_24h, run(75).rc, run(75).last_ok]).toEqual([0, 0, 75, ok.last_ok])
+    expect([run(124, true).consecutive_fail, run(124, true).fails_24h, run(124, true).host_overloaded]).toEqual([0, 0, true])
+    expect([run(124, false).consecutive_fail, run(124, false).fails_24h]).toEqual([1, 1])
+    expect(run(1, true).consecutive_fail).toBe(1) // overload excuses a timeout, nothing else
+  })
   test("fail_times older than 24 h age out; runs keeps the last 5", () => {
     const a = { label: "c", owner: "o", every: 60, timeout: null, lock: null, kuma: null, cmd: ["x"] }
     let s: JobState | null = null
@@ -222,7 +232,7 @@ describe("jobrun end to end", () => {
     writeFileSync(fake, "#!/bin/sh\nexit 1\n")
     chmodSync(fake, 0o755)
     const r = jobrun(["knoref", "--owner", "o", "--kuma", "op://v/i/f", "--", "true"], { JOBRUN_SECRETS_RUN: fake })
-    expect(r.rc).toBe(1)
+    expect(r.rc).toBe(75) // undelivered push, recorded as a run that passed
     expect(state("knoref").rc).toBe(0)
   })
   test("jobrun state is graded by jobs-grade (producer/consumer contract)", () => {

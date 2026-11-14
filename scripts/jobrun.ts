@@ -5,13 +5,14 @@
 //
 // Prefixes every output line with a timestamp, enforces the deadline (TERM, then KILL), takes an
 // optional cross-label lock, writes ~/.local/state/jobs/<label>.json atomically, and pushes Kuma
-// (only when --kuma is given, only on rc=0) with the URL resolved through `secrets-run`.
+// (only when --kuma is given, only on rc=0) with the URL resolved through `secrets-run`. A job that ran its check but could not
+// deliver its own push exits 75 (PUSH_UNDELIVERED_RC): recorded as a run, never as a failure; jobs-grade grades it `undelivered`.
 // The state file is read by scripts/lib/jobs-grade.ts — the only grading logic.
 import { spawn, spawnSync } from "node:child_process"
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs"
 import { homedir, constants as osConstants } from "node:os"
 import { dirname, join } from "node:path"
-import { type JobState, defaultStateDir } from "./lib/jobs-grade.ts"
+import { type JobState, PUSH_UNDELIVERED_RC, TIMEOUT_RC, defaultStateDir, isHostOverloaded, readHostLoad } from "./lib/jobs-grade.ts"
 
 const TAIL_LINES = 40
 const RUN_HISTORY = 5
@@ -179,11 +180,16 @@ export interface RunResult {
   sha: string | null
   /** jobrun itself was told to stop (launchd unload, reboot): not the job's fault, so not a failure. */
   interrupted?: boolean
+  /** The host was over its load ceiling (or booting) at the start or the end of the run. */
+  hostOverloaded?: boolean
 }
 
 export function nextState(prev: JobState | null, args: Args, run: RunResult): JobState {
   const iso = (ms: number) => new Date(ms).toISOString()
-  const failed = run.rc !== 0 && !run.interrupted
+  // Not the job's fault, so not a failure: jobrun was told to stop, the push could not be delivered (the check ran), or the run
+  // timed out while the host was overloaded (jobs-grade grades those `undelivered` / `overloaded`).
+  const hostTimeout = run.rc === TIMEOUT_RC && !!run.hostOverloaded
+  const failed = run.rc !== 0 && !run.interrupted && run.rc !== PUSH_UNDELIVERED_RC && !hostTimeout
   const durationMs = run.finished - run.started
   const failTimes = [...(prev?.fail_times ?? []), ...(failed ? [iso(run.finished)] : [])]
     .filter((t) => run.finished - Date.parse(t) < DAY_MS)
@@ -205,6 +211,7 @@ export function nextState(prev: JobState | null, args: Args, run: RunResult): Jo
     fail_times: failTimes,
     tail: run.tail,
     runs: [...(prev?.runs ?? []), entry].slice(-RUN_HISTORY),
+    host_overloaded: !!run.hostOverloaded,
   }
 }
 
@@ -319,6 +326,7 @@ export async function main(argv: string[]): Promise<number> {
     return 0
   }
   const started = Date.now()
+  const overloadedAtStart = isHostOverloaded(readHostLoad())
   const run_id = `${started.toString(36)}-${process.pid}`
   const tail: string[] = []
   let result: { rc: number; interrupted: boolean }
@@ -330,7 +338,7 @@ export async function main(argv: string[]): Promise<number> {
     })
     if (result.rc === 124) log(`jobrun: deadline ${a.timeout}s exceeded, killed`)
     const prev = readPrev(statePath)
-    const next = nextState(prev, a, { run_id, started, finished: Date.now(), rc: result.rc, tail, sha: ownerSha(a.owner), interrupted: result.interrupted })
+    const next = nextState(prev, a, { run_id, started, finished: Date.now(), rc: result.rc, tail, sha: ownerSha(a.owner), interrupted: result.interrupted, hostOverloaded: overloadedAtStart || isHostOverloaded(readHostLoad()) })
     writeAtomic(statePath, `${JSON.stringify(next, null, 2)}\n`)
   } finally {
     release() // before the Kuma push: a slow push must not hold other jobs' lock
@@ -340,7 +348,7 @@ export async function main(argv: string[]): Promise<number> {
       await pushKuma(a.kuma, a.label)
     } catch (e) {
       log(`jobrun: ${(e as Error).message}`)
-      return 1 // the push failing must be visible; the run itself is already recorded ok
+      return PUSH_UNDELIVERED_RC // the run is recorded ok; the undelivered push is the monitor's problem and graded as such
     }
   }
   return result.rc

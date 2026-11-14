@@ -1665,6 +1665,7 @@ fi
 
 # Exit semantics (this runs under jobrun, where non-zero is a recorded job failure
 # that jobs-grade files as a signal on dotfiles): a DOWN verdict is a DELIVERED state and Kuma
-# alerts on it, so it exits 0. Non-zero means a push did not go out (or, above,
-# no push URL resolved) — the one case Kuma cannot see for itself.
-(( push_rc == 0 && side_push_rc == 0 )) || exit 1
+# alerts on it, so it exits 0. A push that did not go out is exit 75 (EX_TEMPFAIL, jobs-grade's PUSH_UNDELIVERED_RC): the
+# check ran and Kuma was slow or down, so jobs-grade grades `undelivered` and files one signal naming the target, never
+# "the job failed". An unresolvable push URL (above) stays exit 1: that is this job's own fault.
+(( push_rc == 0 && side_push_rc == 0 )) || exit 75

@@ -145,21 +145,21 @@ assert_contains "later component not run" "check_agents_md_flag not run (heartbe
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_HEARTBEAT_BUDGET=0
 assert_contains "zero budget runs nothing" "check_obsidian not run (heartbeat budget spent)" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 
-echo "exit 1 only when a push was not delivered"
+echo "exit 75 (undelivered) only when a push was not delivered; exit 1 when no push URL resolves"
 run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_FAIL=1
-assert_eq "failed push exits 1" 1 "$RC"
+assert_eq "failed push exits 75" 75 "$RC"
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_PUSH_URL_FILE="$TMP/missing-url"
 assert_eq "no push URL exits 1" 1 "$RC"
 assert_eq "...and pushes nothing" 0 "$(pushes)"
 
-echo "a push that times out once is retried: exit 0; a dead Kuma still exits 1 and retries only once"
+echo "a push that times out once is retried: exit 0; a dead Kuma still exits 75 and retries only once"
 rm -f "$TMP/timeout.calls"
 run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_TIMEOUT=once
 assert_eq "one timed-out push is absorbed by the retry" 0 "$RC"
 base=$(( $(pushes) - 1 ))
 rm -f "$TMP/timeout.calls"
 run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_TIMEOUT=always
-assert_eq "Kuma down: exit 1" 1 "$RC"
+assert_eq "Kuma down: exit 75" 75 "$RC"
 assert_eq "Kuma down: one retry in the whole run, not one per push" $(( base + 1 )) "$(pushes)"
 
 echo "drift: runs once after the composite, the stamp holds it back for 20 h"

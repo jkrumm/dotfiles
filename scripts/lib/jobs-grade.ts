@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // jobs-grade — the ONLY grading logic for background jobs (ops-signals.md §3 T1, §5).
 // Reads the jobrun state dir plus `launchctl print` and grades every label:
-//   ok | failing | stale | flapping | unloaded | retired
+//   ok | failing | stale | flapping | unloaded | retired | undelivered | overloaded
 // Called by the heartbeat (WARN), `make doctor` (table) and any remediation consumer.
 //
 //   jobs-grade            JSON array on stdout
@@ -28,6 +28,17 @@
 // loaded grades normally, so reinstalling the plist brings the job back without touching the marker; remove the marker
 // on the way back anyway.
 //
+// Disabled: a label launchd reports disabled (`launchctl print-disabled`) is switched off on purpose. It is not graded
+// at all (no row, no summary entry, no signal) and `--report` drops its stored counters.
+//
+// Undelivered: a heartbeat job exits PUSH_UNDELIVERED_RC (75, EX_TEMPFAIL) when its check ran but the push to the monitor could
+// not be delivered. That is the push target being slow or down, never the job failing: jobrun does not count it as a failure,
+// the grade is `undelivered`, and `--report` files ONE signal naming the target for every job in that state.
+//
+// Overloaded: a timeout (rc=124) while the host is over its load ceiling (HOST_LOAD_PER_CPU x cpus) or inside the boot grace is the
+// host's problem, not the job's. jobrun records `host_overloaded` on the run and does not count it as a failure; the grade is
+// `overloaded` and `--report` files ONE signal per overload episode, however many jobs timed out.
+//
 // Hermes cron jobs (~/.hermes/cron/jobs.json) are graded too, through an adapter below.
 //
 // Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
@@ -37,10 +48,10 @@
 // JOBS_GRADE_NTFY_TOKEN (default: `secrets-run read op://common/ntfy/TOKEN`), JOBS_GRADE_NTFY_URL or NTFY_URL (default: the
 // base-url in ~/SourceRoot/homelab/config/ntfy/server.yml, read at run time because the host is private; tests point it at a stub).
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs"
-import { homedir, hostname } from "node:os"
+import { cpus, homedir, hostname, loadavg, uptime } from "node:os"
 import { dirname, join } from "node:path"
 
-export type Grade = "ok" | "failing" | "stale" | "flapping" | "unloaded" | "retired"
+export type Grade = "ok" | "failing" | "stale" | "flapping" | "unloaded" | "retired" | "undelivered" | "overloaded"
 
 export interface JobState {
   label: string
@@ -58,6 +69,8 @@ export interface JobState {
   fail_times: string[]
   tail: string[]
   runs: { run_id: string; started: string; rc: number; duration_ms: number }[]
+  /** The host was over its load ceiling (or booting) when the run started or ended; absent on older state files. */
+  host_overloaded?: boolean
 }
 
 export interface Graded {
@@ -85,6 +98,27 @@ export const RECOVERED_RUNS = 3
 export const MIN_WINDOW_S = 30 * 60
 export const DAILY_EVERY_S = 86400
 export const DAILY_GRACE_S = 2 * 3600
+
+// Exit code of a heartbeat job whose check ran but whose push to the monitor was not delivered (sysexits EX_TEMPFAIL).
+export const PUSH_UNDELIVERED_RC = 75
+export const PUSH_TARGET = "Uptime Kuma"
+export const TIMEOUT_RC = 124
+// Host overload: 1-minute load above HOST_LOAD_PER_CPU x cpus (a healthy mini ran load 7 on 12 cpus; 2026-11-12 hit 260+), or booted
+// less than BOOT_GRACE_S ago (the heartbeat's own boot grace).
+export const HOST_LOAD_PER_CPU = 2
+export const BOOT_GRACE_S = 300
+
+export interface HostLoad {
+  load1: number
+  ncpu: number
+  uptimeS: number
+}
+
+export const isHostOverloaded = (h: HostLoad): boolean => h.load1 > HOST_LOAD_PER_CPU * h.ncpu || h.uptimeS < BOOT_GRACE_S
+
+export function readHostLoad(): HostLoad {
+  return { load1: loadavg()[0], ncpu: Math.max(1, cpus().length), uptimeS: uptime() }
+}
 
 export const RETIRED_SUFFIX = ".retired"
 
@@ -116,6 +150,19 @@ export function isLoaded(label: string): boolean {
   const uid = process.getuid?.() ?? 0
   const r = Bun.spawnSync(["/bin/launchctl", "print", `gui/${uid}/${label}`], { stdout: "ignore", stderr: "ignore" })
   return r.exitCode === 0
+}
+
+/** Labels launchd reports disabled (`launchctl print-disabled`): `"<label>" => disabled`. Unreadable output disables nothing. */
+export function parseDisabled(out: string): Set<string> {
+  const labels = new Set<string>()
+  for (const m of out.matchAll(/"([^"]+)"\s*=>\s*(?:disabled|true)\b/g)) labels.add(m[1])
+  return labels
+}
+
+export function readDisabled(): Set<string> {
+  const uid = process.getuid?.() ?? 0
+  const r = Bun.spawnSync(["/bin/launchctl", "print-disabled", `gui/${uid}`], { stdout: "pipe", stderr: "ignore" })
+  return r.exitCode === 0 ? parseDisabled(r.stdout.toString()) : new Set()
 }
 
 const CORRUPT = "corrupt"
@@ -234,6 +281,8 @@ export interface GradeOpts {
   expected?: Expected[]
   cron?: JobState[] // Hermes cron jobs, already translated by readCronStates
   retired?: Map<string, string> // label -> reason, from readRetired
+  disabled?: Set<string> // labels launchd reports disabled: not graded at all
+  host?: { overloaded: boolean } // the host right now; a timeout while it is true grades `overloaded`
 }
 
 export const defaultPlistDir = () => process.env.JOBRUN_PLIST_DIR || join(homedir(), "Library/LaunchAgents")
@@ -321,6 +370,10 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
     return why === undefined ? done("unloaded", "not loaded in launchd") : done("retired", retiredReason(why))
   }
 
+  // The check ran, the push did not arrive: the monitor's fault, never the job's. A real failure streak still wins.
+  if (s.rc === PUSH_UNDELIVERED_RC && s.consecutive_fail < FAILING_STREAK) return done("undelivered", `push target slow or down (${PUSH_TARGET}), the check itself ran`)
+  if (s.rc === TIMEOUT_RC && (s.host_overloaded || o.host?.overloaded) && s.consecutive_fail < FAILING_STREAK) return done("overloaded", "host overloaded, run timed out (rc=124)")
+
   const ageS = (iso: string | null) => (iso ? (o.now - Date.parse(iso)) / 1000 : Number.POSITIVE_INFINITY)
   const windowS = s.every ? windowSeconds(s.every) : null
   const daily = !!s.every && s.every >= DAILY_EVERY_S
@@ -350,10 +403,11 @@ function recovered(s: JobState): boolean {
 export function gradeAll(dir: string, o: GradeOpts): Graded[] {
   // A cron job runs inside the Hermes gateway, so it is loaded exactly when the gateway is.
   const cronLoaded = { ...o, loaded: (l: string) => o.loaded(l.startsWith(CRON_PREFIX) ? CRON_GATEWAY_LABEL : l) }
-  const rows = [...readStates(dir).map((s) => gradeOne(s, o)), ...(o.cron ?? []).map((s) => gradeOne(s, cronLoaded))]
+  const on = (x: { label: string }) => !o.disabled?.has(x.label) // a disabled label is switched off, not failing
+  const rows = [...readStates(dir).filter(on).map((s) => gradeOne(s, o)), ...(o.cron ?? []).filter(on).map((s) => gradeOne(s, cronLoaded))]
   const seen = new Set(rows.map((r) => r.label))
   for (const e of o.expected ?? []) {
-    if (seen.has(e.label)) continue
+    if (seen.has(e.label) || !on(e)) continue
     seen.add(e.label) // two plists declaring one label are one job
     rows.push(gradeNeverRecorded(e, o))
   }
@@ -415,6 +469,8 @@ export interface JobReport {
   bad: number
   filedAt: number | null
   ntfyAt: number | null
+  /** Groups only: when a member was last graded. A gap of EPISODE_GAP_MS ends the episode, so the next one files again. */
+  seenAt?: number
 }
 export type ReportState = Record<string, JobReport>
 
@@ -431,12 +487,63 @@ export function signalFor(r: Graded): { repo: string; title: string; text: strin
   return { repo, title: `Background job ${r.label} needs a fix`, text: clip(lines.join("\n"), 8000) }
 }
 
+// Grades that are one shared cause, not one job's fault: every row in such a grade joins ONE group, reported once per episode.
+export const EPISODE_GAP_MS = 30 * 60_000
+export const PUSH_GROUP_KEY = `push:${PUSH_TARGET}`
+export const OVERLOAD_GROUP_KEY = "host:overloaded"
+const GROUP_OF: Partial<Record<Grade, string>> = { undelivered: PUSH_GROUP_KEY, overloaded: OVERLOAD_GROUP_KEY }
+
+export interface DueGroup {
+  key: string
+  rows: Graded[]
+}
+
+/** The one signal for a group: it names the push target, or the overloaded host, and every job it hit. */
+export function signalForGroup(g: DueGroup): { repo: string; title: string; text: string } {
+  const jobs = g.rows.map((r) => `- ${r.label} (owner ${r.owner}): last rc=${r.rc}, last run ${r.last_started || "never"}`)
+  if (g.key === PUSH_GROUP_KEY) {
+    return {
+      repo: "dotfiles",
+      title: `Push target ${PUSH_TARGET} slow or down`,
+      text: clip([
+        `${g.rows.length} heartbeat job(s) ran their check but could not deliver the push to ${PUSH_TARGET} (exit ${PUSH_UNDELIVERED_RC}): the push target is slow or down, the jobs are not failing.`,
+        ...jobs,
+        `Look at ${PUSH_TARGET} and the path to it (Cloudflare, the tunnel, the host load), not at the jobs. Grading: \`bun scripts/lib/jobs-grade.ts --table\` in dotfiles.`,
+      ].join("\n"), 8000),
+    }
+  }
+  return {
+    repo: "dotfiles",
+    title: "Host overloaded: background jobs timing out",
+    text: clip([
+      `${g.rows.length} job(s) timed out (rc=${TIMEOUT_RC}) while the host was over its load ceiling (${HOST_LOAD_PER_CPU} x cpus) or inside the boot grace. One cause, one message per episode: the jobs are not at fault.`,
+      ...jobs,
+      "Look at what loaded the host (runaway processes, a build storm, Spotlight/fseventsd), not at the jobs. Grading: `bun scripts/lib/jobs-grade.ts --table` in dotfiles.",
+    ].join("\n"), 8000),
+  }
+}
+
 /** Advance the per-job counters one grade and decide which jobs are due a report.
- *  `due` = not ok for REPORT_AFTER_GRADES grades in a row, and not reported (signal or ntfy) in REPORT_EVERY_MS. */
-export function reportPlan(prev: ReportState, rows: Graded[], now: number): { next: ReportState; due: Graded[] } {
+ *  `due` = not ok for REPORT_AFTER_GRADES grades in a row, and not reported (signal or ntfy) in REPORT_EVERY_MS.
+ *  `dueGroups` = the same for the shared causes (an undelivered push, an overloaded host): one entry per cause, per episode. */
+export function reportPlan(prev: ReportState, rows: Graded[], now: number): { next: ReportState; due: Graded[]; dueGroups: DueGroup[] } {
   const next: ReportState = {}
   const due: Graded[] = []
+  const groups = new Map<string, Graded[]>()
   for (const r of rows) {
+    const key = GROUP_OF[r.grade]
+    if (key) groups.set(key, [...(groups.get(key) ?? []), r])
+  }
+  const dueGroups: DueGroup[] = []
+  for (const [key, members] of groups) {
+    const old = prev[key] ?? { bad: 0, filedAt: null, ntfyAt: null }
+    const sameEpisode = old.seenAt !== undefined && now - old.seenAt <= EPISODE_GAP_MS
+    const cur = { bad: old.bad + 1, filedAt: sameEpisode ? old.filedAt : null, ntfyAt: sameEpisode ? old.ntfyAt : null, seenAt: now }
+    next[key] = cur
+    if (cur.bad >= REPORT_AFTER_GRADES && cur.filedAt === null && cur.ntfyAt === null) dueGroups.push({ key, rows: members })
+  }
+  for (const r of rows) {
+    if (GROUP_OF[r.grade]) continue // counted in its group, never as the job's own failure
     const old = prev[r.label] ?? { bad: 0, filedAt: null, ntfyAt: null }
     if (!isBad(r)) {
       // history only: a job that recovered keeps its last-report stamps for a day so a quick relapse is still one signal a day
@@ -450,13 +557,17 @@ export function reportPlan(prev: ReportState, rows: Graded[], now: number): { ne
   }
   for (const [label, rep] of Object.entries(prev)) {
     if (next[label]) continue
+    if (rep.seenAt !== undefined) {
+      if (now - rep.seenAt <= EPISODE_GAP_MS) next[label] = rep // a quiet tick inside the episode: it goes on
+      continue // past the gap the episode is over, nothing left to remember
+    }
     // a job that vanished from grading keeps its stamps until they are old
     if ((rep.filedAt ?? 0) > now - STATE_KEEP_MS || (rep.ntfyAt ?? 0) > now - STATE_KEEP_MS) next[label] = { ...rep, bad: 0 }
   }
   for (const [label, rep] of Object.entries(next)) {
     if (rep.bad === 0 && (rep.filedAt ?? 0) <= now - STATE_KEEP_MS && (rep.ntfyAt ?? 0) <= now - STATE_KEEP_MS) delete next[label]
   }
-  return { next, due }
+  return { next, due, dueGroups }
 }
 
 function readReportState(path: string): ReportState {
@@ -467,7 +578,8 @@ function readReportState(path: string): ReportState {
     return Object.fromEntries(Object.entries(parsed).flatMap(([label, v]) => {
       if (typeof v !== "object" || v === null) return []
       const o = v as Record<string, unknown>
-      return [[label, { bad: num(o.bad) ?? 0, filedAt: num(o.filedAt), ntfyAt: num(o.ntfyAt) }]]
+      const seenAt = num(o.seenAt)
+      return [[label, { bad: num(o.bad) ?? 0, filedAt: num(o.filedAt), ntfyAt: num(o.ntfyAt), ...(seenAt === null ? {} : { seenAt }) }]]
     }))
   } catch {
     return {} // missing or corrupt = nothing reported yet
@@ -520,6 +632,8 @@ export interface ReportDeps {
   now?: number
   file?: (s: { repo: string; title: string; text: string }) => Promise<boolean>
   ntfy?: (text: string) => Promise<void>
+  /** Labels launchd reports disabled: their stored counters are dropped. */
+  disabled?: Set<string>
 }
 
 /** Best-effort: file a signal for every job that is due, ntfy (priority 3, once a day per job) only for a job the
@@ -531,30 +645,34 @@ export async function reportJobs(rows: Graded[], statePath: string = defaultRepo
   let failed = false
   let reported = false
   const prev = readReportState(statePath)
-  const { next, due } = reportPlan(prev, rows, now)
-  for (const r of due) {
-    const sig = signalFor(r)
+  const { next, due, dueGroups } = reportPlan(prev, rows, now)
+  const items = [
+    ...due.map((r) => ({ key: r.label, sig: signalFor(r), what: `${r.label}=${r.grade} (${r.reason})` })),
+    ...dueGroups.map((g) => ({ key: g.key, sig: signalForGroup(g), what: `${g.key}: ${g.rows.map((r) => r.label).join(", ")}` })),
+  ]
+  for (const { key, sig, what } of items) {
     try {
       if (await file(sig)) {
-        next[r.label].filedAt = now
+        next[key].filedAt = now
         reported = true
         continue
       }
     } catch (e) {
       console.error(`jobs-grade: factory signal failed: ${(e as Error).message}`)
     }
-    // factory unreachable: the fallback, at most once a day per job
-    const ntfyAt = next[r.label].ntfyAt
+    // factory unreachable: the fallback, at most once a day per job (a group: once per episode, see reportPlan)
+    const ntfyAt = next[key].ntfyAt
     if (ntfyAt !== null && now - ntfyAt < REPORT_EVERY_MS) continue
     try {
-      await ntfy(clip(`jobs-grade[${shortHost()}]: ${r.label}=${r.grade} (${r.reason}) — factory unreachable, signal not filed for ${sig.repo}`))
-      next[r.label].ntfyAt = now
+      await ntfy(clip(`jobs-grade[${shortHost()}]: ${what} — factory unreachable, signal not filed for ${sig.repo}`))
+      next[key].ntfyAt = now
       reported = true
     } catch (e) {
       console.error(`jobs-grade: ntfy fallback failed: ${(e as Error).message}`)
       failed = true
     }
   }
+  for (const label of deps.disabled ?? []) delete next[label] // switched off on purpose: no stored grade survives
   try {
     mkdirSync(dirname(statePath), { recursive: true })
     const tmp = `${statePath}.${process.pid}.tmp`
@@ -570,7 +688,8 @@ export async function reportJobs(rows: Graded[], statePath: string = defaultRepo
 const readAwakeSeconds = () => awakeSeconds(Bun.spawnSync(["/usr/sbin/sysctl", "-n", "kern.waketime"], { stderr: "ignore" }).stdout.toString(), Date.now())
 
 if (import.meta.main) {
-  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), retired: readRetired(defaultStateDir()), cron: readCronStates(defaultCronJobs()) })
+  const disabled = readDisabled()
+  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), retired: readRetired(defaultStateDir()), cron: readCronStates(defaultCronJobs()), disabled, host: { overloaded: isHostOverloaded(readHostLoad()) } })
   if (process.argv.includes("--notify")) {
     const { line, code } = summarize(judgeAgainstAwake(rows, readAwakeSeconds()))
     if (code !== 0) notify(line)
@@ -578,7 +697,7 @@ if (import.meta.main) {
     process.exit(code)
   }
   const reportStatus = process.argv.includes("--report") && (process.argv.includes("--summary") || process.argv.includes("--table"))
-    ? await reportJobs(judgeAgainstAwake(rows, readAwakeSeconds()))
+    ? await reportJobs(judgeAgainstAwake(rows, readAwakeSeconds()), defaultReportState(), { disabled })
     : null
   const failedNote = reportStatus === "failed" ? " [report failed]" : ""
   if (process.argv.includes("--summary")) {

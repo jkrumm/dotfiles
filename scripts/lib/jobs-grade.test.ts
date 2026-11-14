@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type Expected, type Graded, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, readRetired, renderTable, REPORT_AFTER_GRADES, REPORT_EVERY_MS, reportJobs, reportPlan, signalFor, summarize, windowSeconds } from "./jobs-grade.ts"
+import { type Expected, type Graded, type JobState, BOOT_GRACE_S, EPISODE_GAP_MS, HOST_LOAD_PER_CPU, PUSH_UNDELIVERED_RC, awakeSeconds, isHostOverloaded, parseDisabled, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, readRetired, renderTable, REPORT_AFTER_GRADES, REPORT_EVERY_MS, reportJobs, reportPlan, signalFor, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -453,5 +453,110 @@ describe("retired jobs (stopped on purpose)", () => {
       expect(plan.due).toEqual([])
       state = plan.next
     }
+  })
+})
+
+describe("disabled labels", () => {
+  const disabled = new Set(["com.jkrumm.weatherorb.retention"])
+  const stateDir = (...states: JobState[]) => {
+    const dir = mkdtempSync(join(tmpdir(), "jg-"))
+    for (const st of states) writeFileSync(join(dir, `${st.label}.json`), JSON.stringify(st))
+    return dir
+  }
+  const dead = job({ label: "com.jkrumm.weatherorb.retention", owner: "weatherorb", rc: 1, consecutive_fail: 406 })
+
+  test("parseDisabled reads `launchctl print-disabled` output", () => {
+    const out = 'disabled services = {\n\t"com.jkrumm.weatherorb.retention" => disabled\n\t"com.jkrumm.linewatch-heartbeat" => enabled\n\t"com.x" => true\n}'
+    expect(parseDisabled(out)).toEqual(new Set(["com.jkrumm.weatherorb.retention", "com.x"]))
+    expect(parseDisabled("")).toEqual(new Set())
+  })
+  test("a disabled label yields no grade, from its state file, its plist and the summary", () => {
+    const e: Expected = { label: "com.jkrumm.weatherorb.retention", owner: "weatherorb", every: 300, installedAt: NOW - 3600_000 }
+    expect(gradeAll(stateDir(dead), { now: NOW, loaded, disabled })).toEqual([])
+    expect(gradeAll(stateDir(), { now: NOW, loaded: () => false, expected: [e], disabled })).toEqual([])
+    const rows = gradeAll(stateDir(dead, job({ label: "com.jkrumm.ok" })), { now: NOW, loaded, disabled })
+    expect(rows.map((r) => r.label)).toEqual(["com.jkrumm.ok"])
+    expect(summarize(rows).code).toBe(0)
+    // enabled again: graded again
+    expect(gradeAll(stateDir(dead), { now: NOW, loaded, disabled: new Set() })[0].grade).toBe("failing")
+  })
+  test("--report drops the stored grade of a disabled label and keeps the others", async () => {
+    const state = join(mkdtempSync(join(tmpdir(), "report-")), "report.json")
+    const old = { "com.jkrumm.weatherorb.retention": { bad: 406, filedAt: NOW - 1000, ntfyAt: null }, "com.jkrumm.t": { bad: 0, filedAt: NOW - 1000, ntfyAt: null } }
+    writeFileSync(state, JSON.stringify(old))
+    await reportJobs([], state, { now: NOW, disabled, file: async () => true, ntfy: async () => {} })
+    expect(Object.keys(JSON.parse(readFileSync(state, "utf8")))).toEqual(["com.jkrumm.t"])
+  })
+})
+
+describe("undelivered pushes and host overload", () => {
+  const MIN = 60_000
+  const T0 = NOW
+  const filed: { repo: string; title: string; text: string }[] = []
+  const deps = (now: number) => ({ now, file: async (s: { repo: string; title: string; text: string }) => (filed.push(s), true), ntfy: async () => {} })
+  const tmpState = () => join(mkdtempSync(join(tmpdir(), "report-")), "report.json")
+  const gradeRows = (jobs: JobState[], at: number) => jobs.map((j) => gradeOne(j, { now: at, loaded }))
+
+  test("a push that could not be delivered is `undelivered`, never failing; a real streak still wins", () => {
+    expect(grade({ rc: PUSH_UNDELIVERED_RC, consecutive_fail: 0 })).toBe("undelivered")
+    expect(grade({ rc: PUSH_UNDELIVERED_RC, consecutive_fail: 2 })).toBe("undelivered")
+    expect(grade({ rc: PUSH_UNDELIVERED_RC, consecutive_fail: 3 })).toBe("failing")
+    expect(gradeOne(job({ rc: PUSH_UNDELIVERED_RC }), { now: NOW, loaded }).reason).toContain("push target slow or down")
+    expect(summarize(gradeRows([job({ rc: PUSH_UNDELIVERED_RC })], NOW)).line).toContain("=undelivered")
+  })
+
+  test("three jobs with push timeouts in one window are one message naming the push target", async () => {
+    filed.length = 0
+    const state = tmpState()
+    const jobs = ["com.jkrumm.devhost-health", "com.jkrumm.linewatch-heartbeat", "com.jkrumm.hermes-serve-liveness"].map((label) => job({ label, rc: PUSH_UNDELIVERED_RC }))
+    for (let i = 0; i < 6; i++) await reportJobs(gradeRows(jobs, T0 + i * 5 * MIN), state, deps(T0 + i * 5 * MIN))
+    expect(filed).toHaveLength(1)
+    expect(filed[0].title).toContain("Uptime Kuma")
+    for (const j of jobs) expect(filed[0].text).toContain(j.label)
+    expect(filed[0].title).not.toContain("needs a fix")
+  })
+
+  test("the same push target down again after the episode ended is a new message", async () => {
+    filed.length = 0
+    const state = tmpState()
+    const j = [job({ rc: PUSH_UNDELIVERED_RC })]
+    for (let i = 0; i < 3; i++) await reportJobs(gradeRows(j, T0 + i * 5 * MIN), state, deps(T0 + i * 5 * MIN))
+    const later = T0 + 10 * 5 * MIN + EPISODE_GAP_MS
+    for (let i = 0; i < 3; i++) await reportJobs(gradeRows(j, later + i * 5 * MIN), state, deps(later + i * 5 * MIN))
+    expect(filed).toHaveLength(2)
+  })
+
+  test("a timeout is `overloaded` only while the host is over its ceiling or booting", () => {
+    expect(isHostOverloaded({ load1: HOST_LOAD_PER_CPU * 12 + 1, ncpu: 12, uptimeS: 86400 })).toBe(true)
+    expect(isHostOverloaded({ load1: 7, ncpu: 12, uptimeS: 86400 })).toBe(false)
+    expect(isHostOverloaded({ load1: 1, ncpu: 12, uptimeS: BOOT_GRACE_S - 1 })).toBe(true)
+    expect(grade({ rc: 124, consecutive_fail: 1, host_overloaded: true })).toBe("overloaded")
+    expect(gradeOne(job({ rc: 124, consecutive_fail: 1 }), { now: NOW, loaded, host: { overloaded: true } }).grade).toBe("overloaded")
+    expect(gradeOne(job({ rc: 124, consecutive_fail: 1 }), { now: NOW, loaded, host: { overloaded: false } }).grade).toBe("ok")
+    expect(gradeOne(job({ rc: 1, consecutive_fail: 1, host_overloaded: true }), { now: NOW, loaded }).grade).toBe("ok") // only timeouts
+    expect(grade({ rc: 124, consecutive_fail: 3, host_overloaded: true })).toBe("failing") // a streak jobrun counted is the job's own
+  })
+
+  test("a rerun of 2026-11-12 (log-rotate rc=124 + claude-accounts-keepalive under load 260, four hours) is one overload message", async () => {
+    filed.length = 0
+    const state = tmpState()
+    let n = 0
+    for (let at = T0; at < T0 + 4 * 60 * MIN; at += 5 * MIN, n++) {
+      // grades move around tick by tick: one job times out, both do, one recovers for a tick, the other keeps a stale streak
+      const jobs = [
+        job({ label: "com.jkrumm.log-rotate", rc: n % 7 === 3 ? 0 : 124, host_overloaded: true, consecutive_fail: n % 3 }),
+        job({ label: "com.jkrumm.claude-accounts-keepalive", rc: 124, host_overloaded: n % 5 !== 0, consecutive_fail: n % 3 }),
+      ]
+      const rows = gradeOne(jobs[0], { now: at, loaded, host: { overloaded: true } })
+      await reportJobs([rows, gradeOne(jobs[1], { now: at, loaded, host: { overloaded: true } })], state, deps(at))
+    }
+    expect(filed).toHaveLength(1)
+    expect(filed[0].title).toContain("Host overloaded")
+    expect(filed[0].text).toContain("com.jkrumm.log-rotate")
+    // a quiet hour ends the episode; the next overload is a new message
+    const later = T0 + 6 * 60 * MIN
+    const again = [job({ rc: 124, host_overloaded: true, consecutive_fail: 1 })]
+    for (let i = 0; i < 3; i++) await reportJobs(gradeRows(again, later + i * 5 * MIN), state, deps(later + i * 5 * MIN))
+    expect(filed).toHaveLength(2)
   })
 })
