@@ -23,7 +23,8 @@ with one exception: the Shutterflow library, which syncs its finals to B2 itself
 | Class | Home | Local copy | Offsite |
 |-|-|-|-|
 | Documents (tax, finance, studies, CV, sailing) | `SSD/Dokumente` | EXT mirror | restic |
-| Photos: finals, phone archives, old libraries, Immich uploads and its database dumps | `SSD/Bilder` | EXT mirror | restic |
+| Fuji finals | the Shutterflow library on the MacBook | none | B2, by Shutterflow's own sync |
+| Other photos: phone archives, old libraries | `SSD/Bilder` | EXT mirror | restic |
 | Books, dev archive, small personal videos, public files | `SSD/{Bücher,Dev,Videos,Public}` | EXT mirror | restic |
 | Fuji RAWs | `HDD/fuji/RAWs` | EXT mirror | restic |
 | Fuji videos | `HDD/fuji/Videos` | EXT mirror | none (owner, 2026-11-14) |
@@ -102,8 +103,9 @@ MacBook. Until then: `make smb-keepalive-status` for the mounts, the Kuma push m
 | Big videos offsite | no |
 | The 2.0 TiB film copy on the HDD's second partition | delete, after file-by-file proof against `HDD/Filme` (homelab row `storage-consolidate`). Jellyfin's library is the copy that stays |
 | Personal folders on EXT | documents to `SSD/Dokumente`, drone and project videos to `HDD/Videos`, the rescued USB stick dropped once its unique files are moved |
+| Immich | retired (homelab issue 1201). It only showed the pre-Shutterflow copy of the finals in `SSD/Bilder/Fuji`; that copy and the old staging folder go once B2 is proven to hold every file |
 
-Still open: the mini's 19 GiB Photos library (`~/Pictures`) has no declared home or copy.
+Still open: the mini's 19 GiB Photos library (`~/Pictures`, last written 2026-05) has no declared home or copy.
 
 ## Found on 2026-11-14
 
