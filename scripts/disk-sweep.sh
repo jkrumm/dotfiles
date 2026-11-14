@@ -26,7 +26,7 @@
 # run. A step also reports FAILED when it removes less than it set out to, or when it cannot tell
 # what is safe to remove (tmpdir with no lsof answer removes nothing). Every external tool runs
 # under with_timeout. Overrides (also what the test suite uses): DISK_SWEEP_TMPDIR,
-# DISK_SWEEP_LSOF, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
+# DISK_SWEEP_LSOF, DISK_SWEEP_PGREP, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
 # DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT. `make disk-sweep-run` runs every step once, docker included.
 
 set -euo pipefail
@@ -35,11 +35,12 @@ BUILDCACHE_MAX="${DISK_SWEEP_BUILDCACHE_MAX:-15GB}"
 NPM_MAX_GB="${DISK_SWEEP_NPM_MAX_GB:-3}"
 BUN_MAX_GB="${DISK_SWEEP_BUN_MAX_GB:-5}"
 LSOF="${DISK_SWEEP_LSOF:-/usr/sbin/lsof}"
+PGREP="${DISK_SWEEP_PGREP:-pgrep}"
 TOOL_TIMEOUT=600
 UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
-STEPS=(tmpdir pkg-caches simulators docker colima-trim)
+STEPS=(tmpdir pkg-caches lima-cache simulators docker colima-trim)
 
 # Free KB on the volume holding $1; 0 when df cannot say, so the arithmetic below never breaks.
 free_kb() {
@@ -232,6 +233,24 @@ step_pkg-caches() {
   [ -n "$parts" ] || { skip pkg-caches "no package manager found"; return 0; }
   echo "pkg-caches: ${parts}$(delta "$before" "$after")"
   return "$rc"
+}
+
+# Lima's download cache holds every macOS IPSW a `limactl create` fetched, 16-20 GB each, and keeps it
+# after the VM exists (2026-11-14: two IPSWs, 36 GB, beside two 28 GB VM disks took the mini from 86% to
+# 95% and past the 90% page). A VM already created never needs its image again; re-creating one
+# re-downloads it. Entries untouched for a day go, and none while a limactl create/start runs.
+step_lima-cache() {
+  local dir="$HOME/Library/Caches/lima/download/by-url-sha256"
+  [ -d "$dir" ] || { skip lima-cache "no lima download cache"; return 0; }
+  if "$PGREP" -qf 'limactl (create|start|clone)'; then skip lima-cache "limactl create/start running"; return 0; fi
+  local before after n=0 entry
+  before=$(free_kb "$HOME")
+  while IFS= read -r -d '' entry; do
+    [ -z "$(find "$entry" -mmin -1440 -print -quit 2>/dev/null)" ] || continue
+    rm -rf -- "$entry" && n=$((n + 1))
+  done < <(find "$dir" -mindepth 1 -maxdepth 1 -print0)
+  after=$(free_kb "$HOME")
+  echo "lima-cache: $n image(s) older than 1 day removed, $(delta "$before" "$after")"
 }
 
 step_simulators() {

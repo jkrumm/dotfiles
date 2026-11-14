@@ -105,4 +105,12 @@ check "uv real error: step fails, exit 1" sh -c '[ "$1" -eq 1 ] && printf "%s" "
 out10=$(uvsweep ok); rc10=$?
 check "uv prune ok: pruned, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "uv pruned"' _ "$rc10" "$out10"
 
+# (f) lima-cache: an image untouched for 2 days goes, a fresh one stays.
+L="$HOME/Library/Caches/lima/download/by-url-sha256"; mkdir -p "$L/stale" "$L/fresh"
+echo x > "$L/stale/data"; echo x > "$L/fresh/data"
+old 2 "$L/stale/data" "$L/stale"
+printf "#!/bin/sh\nexit 1\n" > "$FAKE/pgrep-none"; chmod +x "$FAKE/pgrep-none"
+out11=$(DISK_SWEEP_PGREP="$FAKE/pgrep-none" bash "$HERE/disk-sweep.sh" lima-cache 2>&1); rc11=$?
+check "lima-cache: exit 0, stale image removed, fresh kept" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/stale" ] && [ -d "$2/fresh" ] && printf "%s" "$3" | grep -q "1 image(s)"' _ "$rc11" "$L" "$out11"
+
 exit "$fail"
