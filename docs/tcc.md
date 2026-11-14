@@ -74,9 +74,10 @@ Mini, 2026-10-31 (68 agents; the unified log of the last 7 days holds no `AUTHRE
 |-|-|-|
 | `com.iu.athena-postgres`, `sh.brew.postgresql@18` | Cellar path, ad-hoc | no grant (data under `/opt/homebrew/var`) |
 | `com.iu.prometheus-dashboard-autodeploy`, `com.iu.teamchat-runtime-deploy` | python3 in a Cellar path | no grant (`~/IuRoot`) |
-| `com.iu.prometheus-vpn-watcher`, `com.jkrumm.weatherorb.worker-*`, `…watchdog` | uv python, ad-hoc | no grant (`~/IuRoot`, `~/SourceRoot`) |
+| `com.iu.prometheus-vpn-watcher` | uv python, ad-hoc | no grant (`~/IuRoot`, `~/SourceRoot`) |
+| `com.jkrumm.weatherorb.worker-*`, `…watchdog` | uv python, ad-hoc | removable: their data is on the external volume since 2026-11-14 (`docs/external-ssd.md` §TCC) |
 | `com.jkrumm.modelpick-web` | bun in a Cellar path (Developer ID signed) | no grant |
-| `com.jkrumm.weatherorb.serve` | ad-hoc built `openmeteo-api` | no grant (`~/SourceRoot/weatherorb`) |
+| `com.jkrumm.weatherorb.serve` | ad-hoc built `openmeteo-api` | removable: `data/` and `products/` are symlinks onto the external volume (`docs/external-ssd.md` §TCC) |
 | `com.jkrumm.collie` | compiled bridge in `~/.local/share/collie` | no grant (own config, state and log only) |
 | `homebrew.mxcl.sleepwatcher` | Cellar path, ad-hoc | no grant |
 | bash/zsh/osascript/python-by-shebang jobs, `jobrun`/script jobs | Apple platform binaries or unsigned scripts: stable identity | not flagged |
