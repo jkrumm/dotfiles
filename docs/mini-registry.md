@@ -86,8 +86,9 @@ no such command has none registered and the verb refuses. `mini-profile` runs th
 | a registry that does not parse or validate | FAIL | FAIL |
 | a footprint above its budget | WARN | WARN (named in the message) |
 
-`com.jkrumm.orb.corpus-obs` shows up here on purpose: its program lives in a weatherorb worktree (Issue 1005 owns the
-fix), so both FAIL lines name it until that job is installed from a release dir and registered.
+A job installed by hand and never registered is exactly this FAIL: it turns the detail monitor DOWN until its row lands
+(2026-11-14: `kiri-sample`, `orb.corpus-extend`, `orb.corpus-obs`). Register at install time, in the same commit as the
+architecture row.
 
 ## Budgets
 
