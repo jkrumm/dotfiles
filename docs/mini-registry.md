@@ -16,9 +16,9 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 
 | Tier | Rule | Members today |
 |-|-|-|
-| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, the teamchat api and broker |
-| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), the teamchat sandbox and its VM, `research-chrome`, `shared-chrome` (the `/browse` Chrome) |
-| `manual` | started and stopped as a profile | `work` (VPN, dashboard, token minters, deploy gates), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs have no profile |
+| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, the teamchat api, broker and sandbox, and the work stack colleagues reach (VPN, import dashboard, its watcher and token jobs) |
+| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), `research-chrome`, `shared-chrome` (the `/browse` Chrome) |
+| `manual` | started and stopped as a profile | `work` (student-enrolment, deploy gates), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs have no profile |
 
 A tier is a promise the registry holds, not yet one the host keeps: nothing is moved here. The on-demand wake, the idle
 stop and the VM that starts only when a service needs it are the rows that follow (`docs/plan.yaml`: `mini-apps-page`,
@@ -46,7 +46,11 @@ services:
 | `process_type` | `interactive`, for a `core` launchd service others wait on: `make mini-ps` and the check fail while it runs lower (§Process type) |
 | `shared_memory` | Postgres: every process's footprint counts the shared buffers again (below) |
 | `start`, `stop`, `status` | The owner repo's own command (`make -C <repo> <target>`; `~/` expands). A launchd job without `start`/`stop` gets `launchctl bootstrap`/`kickstart` and `bootout`; anything else refuses the verb |
+| `debt`, `exception` | A known breach of a run rule: `debt: { <rule>: <plan row or issue> }`, or `exception: { <rule>: <reason> }` when it is allowed. Rules: `restart-policy`, `no-memory-limit`, `port-binding`, `second-vm`, `shared-infrastructure`, `no-budget`, `worktree-program`, and the ones only a person can see (`keepalive-poll`, `docker-build-tool`) |
+| `oneshot` | `true` for a root job that runs once at boot: no process, so a budget of 0 is allowed |
 | `note` | One line for whoever reads the table |
+
+A file may end with a top-level `debt:` list of `{ repo, target, rule, plan }` for what belongs to no service (a make target that runs docker as a build tool).
 
 A repo that adds a job registers it in the same commit: a `mini-services.yaml` at its root with the same `services:`
 list (only the repo's own entries; `repo` may be omitted). A duplicate name or label across files is an error, and a
@@ -125,6 +129,9 @@ another repo's plist, not measured to starve).
 | a job whose program is inside a worktree | FAIL | FAIL |
 | a registry that does not parse or validate | FAIL | FAIL |
 | a service running below its declared `process_type`, or whose plist lost it | FAIL | FAIL |
+| a breach of a run rule (`rules/run-on-mini.md`) with no `debt`/`exception` on its entry | FAIL | FAIL |
+| a `debt`/`exception` field whose breach is gone | FAIL | FAIL |
+| the core services of a VM limited to more than the VM has | WARN | WARN |
 | a footprint above its budget | WARN | WARN (named in the message) |
 
 A job installed by hand and never registered is exactly this FAIL: it turns the detail monitor DOWN until its row lands
@@ -136,3 +143,23 @@ architecture row.
 Budgets start at 1.5 times what each job used on 2026-11-14 (50 MiB for a timer between runs). They exist to make a
 leak visible, not to cap anything. A budget that keeps warning is a number to raise, with the reason in the commit.
 Postgres carries 1.5 GiB since row `pg-buffers` set `shared_buffers` to 512 MB (it was 3.5 GiB).
+
+## Run rules
+
+`rules/run-on-mini.md` is the ruling (five placement questions, tiers, the never list); the skill `mini-service` is the procedure.
+The check is `ruleBreaches` in `scripts/mini-registry.ts`:
+
+| Rule | A breach is | Read from |
+|-|-|-|
+| `restart-policy` | `always` or `unless-stopped` on a compose container whose tier is not `core` | `docker inspect` |
+| `no-memory-limit` | a compose container with no `mem_limit` | `docker inspect` |
+| `port-binding` | a published port whose host address is not 127.0.0.1 | `docker inspect` |
+| `second-vm` | a `vm` entry for any Colima profile but `default` | the registry |
+| `shared-infrastructure` | a Postgres, Redis, Valkey, KeyDB or Memcached image in a compose container, a second native Postgres, a second native cache | `docker inspect`, the registry |
+| `no-budget` | `memory_mib: 0` on anything but a `static` entry or a `oneshot` | the registry |
+| `worktree-program` | a loaded job whose program is inside `/.claude/worktrees/` | the plist |
+
+A container is judged once it exists, so a manual project that is down is not graded, and its debt field is not called stale
+meanwhile. `make mini-ps` ends with the `RUN RULES` section; `bun scripts/mini-registry.ts debt` prints the recorded list, which
+`make doctor` shows under the registry check. A KeepAlive agent that polls in a loop cannot be told from a server here: the
+`keepalive-poll` record is declared by hand and left to the factory's hygiene probe.
