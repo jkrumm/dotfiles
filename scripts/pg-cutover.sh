@@ -159,7 +159,7 @@ verify_clients() { # the DB clients answer: the factory's health and CLI, agw's 
     sleep 2
   done
   [ "$ok" = 1 ] || return 1
-  factory queue get >/dev/null || return 1
+  factory --format json read flow >/dev/null || return 1 # the CLI reaches the server, which reads the database
   make -C "$HOME/SourceRoot/agent-workflows" verify || return 1
   make -C "$HOME/SourceRoot/software-factory" verify || log "WARN: software-factory make verify failed (above); its health and CLI answer"
   return 0
@@ -208,10 +208,15 @@ rollback() {
   else
     log "WARN: rollback done, but a client check failed (above)"
   fi
-  factory queue set run >/dev/null && log "queue: run"
+  undrain
   DONE=1
 }
 ROLLBACK_OK=0
+DRAINED=0
+undrain() {
+  [ "$DRAINED" = 1 ] || return 0
+  factory queue set run >/dev/null 2>&1 && { DRAINED=0; log "queue: run"; } || log "WARN: could not set the queue back to run"
+}
 trap 'rollback' ERR
 trap 'rollback; exit 1' INT TERM
 
@@ -231,7 +236,9 @@ mkdir -p "$RUN/saved"
 cp "$BARE_DATA/postgresql.auto.conf" "$BARE_DATA/pg_hba.conf" "$BARE_DATA/pg_ident.conf" "$RUN/saved/"
 
 log "drain the queue"
-factory queue set drain >/dev/null
+# Best effort: an agent token may not set the queue state (403); the window then runs unannounced
+# and leads that touch the factory meanwhile see a few minutes of errors (owner-accepted downtime).
+if factory queue set drain >/dev/null 2>&1; then DRAINED=1; else log "WARN: factory queue set drain was refused; the window is not announced"; fi
 for l in "${CLIENT_LABELS[@]}"; do
   if launchctl print "$UID_GUI/$l" >/dev/null 2>&1; then
     log "stop $l"
@@ -294,6 +301,6 @@ fi
 grep -q '^plan: in sync' "$RUN/plan-after-switch.txt" || { log "the switched server differs from the declaration"; false; }
 start_clients
 verify_clients || { log "client verification failed"; false; }
-factory queue set run >/dev/null
+undrain
 DONE=1
 log "cutover PASSED. Docker volume vps_postgres-dev-data and Athena's data dir are untouched (kept 7 days). Reports: $RUN"

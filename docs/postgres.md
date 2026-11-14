@@ -95,7 +95,8 @@ install has a `simple_detail` type an upgraded one lacks).
 1. `fresh-build`: a scratch cluster on port 5499, `apply --no-schemas`, every declared database
    copied in from where it lives today (the Docker container, Athena's cluster, the bare server),
    each copy proven, then `plan` must say `in sync`. Reads the live servers only.
-2. `rollback-drill`: drain the queue, stop the database clients (`com.jkrumm.software-factory`,
+2. `rollback-drill`: drain the queue (best effort: an agent token is refused `queue set`, and the
+   window then runs unannounced), stop the database clients (`com.jkrumm.software-factory`,
    `com.jkrumm.argo`, the agent-workflows host, audio and gateway) and Athena's server, stop the
    Docker container, switch the bare server to 5432, then roll back for real: the saved
    `postgresql.auto.conf`, `pg_hba.conf` and `pg_ident.conf` back, the bare server on 5433, the
