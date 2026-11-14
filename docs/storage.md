@@ -24,7 +24,8 @@ with one exception: the Shutterflow library, which syncs its finals to B2 itself
 |-|-|-|-|
 | Documents (tax, finance, studies, CV, sailing) | `SSD/Dokumente` | EXT mirror | restic |
 | Fuji finals | the Shutterflow library on the MacBook | none | B2, by Shutterflow's own sync |
-| Other photos: phone archives, old libraries | `SSD/Bilder` | EXT mirror | restic |
+| Phone photos since 2021 (35,540 assets, 96 GiB) | iCloud Photos | **none yet**: a nightly export to `SSD/Bilder/iCloud` (plan row `icloud-photos-export`) | restic, once exported |
+| Other photos: phone archives to 2020, old libraries to 2019 | `SSD/Bilder` | EXT mirror | restic |
 | Books, dev archive, small personal videos, public files | `SSD/{Bücher,Dev,Videos,Public}` | EXT mirror | restic |
 | Fuji RAWs | `HDD/fuji/RAWs` | EXT mirror | restic |
 | Fuji videos | `HDD/fuji/Videos` | EXT mirror | none (owner, 2026-11-14) |
@@ -105,7 +106,8 @@ MacBook. Until then: `make smb-keepalive-status` for the mounts, the Kuma push m
 | Personal folders on EXT | documents to `SSD/Dokumente`, drone and project videos to `HDD/Videos`, the rescued USB stick dropped once its unique files are moved |
 | Immich | retired (homelab issue 1201). It only showed the pre-Shutterflow copy of the finals in `SSD/Bilder/Fuji`; that copy and the old staging folder go once B2 is proven to hold every file |
 
-Still open: the mini's 19 GiB Photos library (`~/Pictures`, last written 2026-05) has no declared home or copy.
+The mini's Photos library (`~/Pictures`, 19 GiB) stays: it is the signed-in iCloud client, with
+1,093 of the originals on disk, and the machine the export reads from.
 
 ## Found on 2026-11-14
 
@@ -118,6 +120,7 @@ Content hashes over the SSD share, `HDD/fuji` and the personal folders on EXT.
 | Second film copy on the HDD's other partition, frozen since 2025-01 | 2.0 TiB | stale: delete after approval |
 | Old Shutterflow staging folder overlaps the finals folder | 13 GiB of 27 | stale: the library on the MacBook superseded both |
 | Byte-identical duplicates elsewhere in the SSD share | under 3 GiB | not worth a pass |
+| iCloud Photos is the only copy of the phone photos from 2021 on. The library on the SSD share ends in 2019, the phone folders in 2020, and none of the mini's local originals exist on the HomeLab | 96 GiB | **one copy, at a sync service**: plan row `icloud-photos-export` |
 
 The duplication the many iterations were suspected of is small. The real gap was the opposite:
 data with one copy.
