@@ -882,6 +882,8 @@ const RUN_AND_EXIT = /--abort-on-container-(?:exit|failure)|--exit-code-from/;
 const LONG_RUN = /\bdocker\s+run\b[^\n]*\s(?:-d|--detach)\b/;
 
 export function startsLongRunning(line: string): boolean {
+  // a recipe line that already runs under a slot is the sanctioned way: the slot names the project and removes the containers
+  if (/^[@+-]*\s*factory\s+slot\b/.test(line)) return false;
   if (LONG_UP.test(line)) return !RUN_AND_EXIT.test(line);
   return LONG_RUN.test(line);
 }
@@ -921,14 +923,15 @@ export interface WorktreeProbe {
 
 export const realWorktreeProbe: WorktreeProbe = {
   isWorktree(dir) {
+    if (!isDirectory(dir)) return false; // a mistyped `make -C` is make's error to report, not a crash of the hook
     const git = (arg: string) => Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", arg], { cwd: dir, stdout: "pipe", stderr: "pipe" });
     const here = git("--git-dir");
     const common = git("--git-common-dir");
     return here.exitCode === 0 && common.exitCode === 0 && here.stdout.toString().trim() !== common.stdout.toString().trim();
   },
   readMakefile(dir) {
-    const r = Bun.spawnSync(["cat", `${dir}/Makefile`], { stdout: "pipe", stderr: "pipe" });
-    return r.exitCode === 0 ? r.stdout.toString() : null;
+    const r = isDirectory(dir) ? Bun.spawnSync(["cat", `${dir}/Makefile`], { stdout: "pipe", stderr: "pipe" }) : null;
+    return r?.exitCode === 0 ? r.stdout.toString() : null;
   },
 };
 
