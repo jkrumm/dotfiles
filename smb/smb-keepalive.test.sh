@@ -23,14 +23,19 @@ fake() { printf '#!/bin/bash\n%s\n' "$2" > "$FAKE/$1"; chmod +x "$FAKE/$1"; }
 fake mount 'cat "$FIX/table"'
 fake nc '[ ! -e "$FIX/down" ]'
 fake stat '[ -e "$FIX/hang" ] && exec sleep 30; [ -e "$FIX/statfail" ] && exit 1; exit 0'
-fake ls 'exit 0'
+fake ls '[ -e "$FIX/eperm" ] && { echo "ls: $2: Operation not permitted" >&2; exit 1; }; exit 0'
+fake df '[ -e "$FIX/silent" ] && exec sleep 30; [ -e "$FIX/eperm" ] && { echo "df: Operation not permitted" >&2; exit 1; }; exit 0'
+fake smbutil '[ -e "$FIX/silent" ] && exec sleep 30; [ -e "$FIX/sessiongone" ] && exit 64; exit 0'
 fake secrets-run '[ -e "$FIX/nosecret" ] && exit 1; printf "p@ss word/1\n"'
+# The real mount_smbfs asks for the password on its controlling terminal; the fake does the same and
+# records what it received apart from its argv, so the suite proves the secret is on the pty only.
 fake mount_smbfs 'echo "$*" >> "$FIX/mount_smbfs.args"; [ -e "$FIX/mountfail" ] && exit 1
-  # last arg = mount point, previous = //user:pw@server/share
-  mp="${@: -1}"; src="${@: -2:1}"; src="//${src#//*@}"; src="//fixture-user@${src#//}"
+  printf "Password for %s: " "${@: -2:1}" > /dev/tty; read -rs pw < /dev/tty; echo "$pw" > "$FIX/received.pw"
+  [ "$pw" = "p@ss word/1" ] || exit 1
+  mp="${@: -1}"; src="${@: -2:1}"; src="//fixture-user@${src#//*@}"
   echo "$src on $mp (smbfs, nodev, nosuid, mounted by test)" >> "$FIX/table"'
 fake osascript 'echo "$*" >> "$FIX/osascript.args"; [ -e "$FIX/mountfail" ] && exit 1
-  url="${*#*\"smb://}"; url="${url%\"*}"; share="${url##*/}"
+  url=$(printf "%s" "$*" | sed -n "s/.*\"smb:\/\/\([^\"]*\)\".*/\1/p"); share="${url##*/}"
   echo "//${url} on /Volumes/$share (smbfs, nodev, nosuid, mounted by test)" >> "$FIX/table"'
 fake diskutil 'echo "unmount $*" >> "$FIX/diskutil.log"; [ -e "$FIX/unmountfail" ] && exit 1
   grep -v " on $2 " "$FIX/table" > "$FIX/table.new"; mv "$FIX/table.new" "$FIX/table"'
@@ -76,7 +81,8 @@ check "exits 0" test "$rc" -eq 0
 check "SSD mounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
 check "HDD mounted (mini row)" grep -q "/HomeLab/HDD (smbfs" "$FIX/table"
 check "mount points exist" test -d "$HOME/HomeLab/SSD" -a -d "$HOME/HomeLab/HDD"
-check "password url-encoded in the mount call" grep -q 'fixture-user:p%40ss%20word%2F1@nas.example.test/SSD' "$FIX/mount_smbfs.args"
+check "password reached mount_smbfs through the pty" grep -qx 'p@ss word/1' "$FIX/received.pw"
+check "password in no argv" sh -c '! grep -q "p@ss\|p%40ss\|word" "$1"' _ "$FIX/mount_smbfs.args"
 check "password never logged" sh -c '! printf "%s" "$1" | grep -q "p@ss\|p%40ss"' _ "$out"
 check "no osascript on the mini" test ! -e "$FIX/osascript.args"
 
@@ -100,6 +106,37 @@ check "force-unmounted" grep -q "unmount force $HOME/HomeLab/SSD" "$FIX/diskutil
 check "remounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
 check "bounded (a 30 s hang finished in under 15 s)" test "$elapsed" -lt 15
 : > "$FIX/diskutil.log"
+
+echo "# silent server (stat answers from cache, df and statshares never return): hung, remounted"
+touch "$FIX/silent"
+SECONDS=0
+( sleep 2; rm -f "$FIX/silent" ) &
+run
+elapsed=$SECONDS
+wait
+check "exits 0" test "$rc" -eq 0
+check "probe reported hung" has "hung > 1s"
+check "force-unmounted" grep -q "unmount force $HOME/HomeLab/SSD" "$FIX/diskutil.log"
+check "remounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
+check "bounded" test "$elapsed" -lt 15
+: > "$FIX/diskutil.log"
+
+echo "# dropped session (statshares fails, the rest answers from cache): one retry, remounted"
+touch "$FIX/sessiongone"
+run
+rm "$FIX/sessiongone"
+check "failed twice, remounted" has "failed twice"
+check "force-unmounted" grep -q "unmount force" "$FIX/diskutil.log"
+: > "$FIX/diskutil.log"
+
+echo "# EPERM (the job's program lacks the Network Volumes grant) is cannot probe, never stale"
+touch "$FIX/eperm"
+run
+rm "$FIX/eperm"
+check "exits 0" test "$rc" -eq 0
+check "says it cannot probe" has "cannot be probed"
+check "nothing unmounted" test ! -s "$FIX/diskutil.log"
+check "still mounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
 
 echo "# fast stat failure: one retry, then the same path"
 touch "$FIX/statfail"
@@ -141,6 +178,15 @@ check "SSD mounted via osascript" grep -q "/Volumes/SSD (smbfs" "$FIX/table"
 check "HDD (automount no) not mounted" sh -c '! grep -q "/Volumes/HDD" "$1"' _ "$FIX/table"
 check "mini row skipped" has "HDD: reachable, not mounted (automount off)"
 check "nothing created under the home" test ! -e "$HOME/HomeLab"
+
+echo "# MacBook: ls refused with EPERM is cannot probe too"
+: > "$FIX/diskutil.log"; touch "$FIX/eperm"
+KIND=macbook run
+rm "$FIX/eperm"
+unset KIND
+check "exits 0" test "$rc" -eq 0
+check "says it cannot probe" has "cannot be probed"
+check "nothing unmounted" test ! -s "$FIX/diskutil.log"
 
 echo "# missing declaration: exit 1"
 out=$(PATH="$FAKE:$PATH" SMB_HOST_KIND=mini SMB_SHARES_CONF="$TMP/none" bash "$HERE/smb-keepalive.sh" 2>&1); rc=$?
