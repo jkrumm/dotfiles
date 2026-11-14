@@ -2,6 +2,7 @@
 name: browse
 description: Chrome DevTools debugging via haiku subagent — console, network, DOM, screenshots. Isolates expensive MCP responses from main context.
 context: fork
+agent: browser
 background: false
 model: haiku
 ---
@@ -12,20 +13,11 @@ Debug frontend issues using Chrome DevTools MCP in an isolated forked context.
 
 ## How It Works
 
-Chrome DevTools MCP is registered globally but uses **deferred tool loading** (~400 tokens for tool names, schemas only loaded on demand via ToolSearch). This skill runs in a `context: fork` to keep MCP call responses (~5-20k tokens for screenshots, DOM, network) out of the main thread.
+The `chrome-devtools` MCP is **not registered**. It is declared inline in `agents/browser.md`, so it starts when this skill's forked `browser` subagent starts and stops when it returns: idle sessions carry no `npx` + `node` pair (~124 MiB each). Tool schemas are deferred; load them via ToolSearch. The fork also keeps MCP responses (~5-20k tokens for screenshots, DOM, network) out of the main thread.
 
 ## Available Tools
 
-Load tools on demand via ToolSearch:
-```
-ToolSearch("select:mcp__chrome-devtools__navigate_page")
-ToolSearch("select:mcp__chrome-devtools__take_screenshot")
-ToolSearch("select:mcp__chrome-devtools__list_console_messages")
-ToolSearch("select:mcp__chrome-devtools__list_network_requests")
-ToolSearch("select:mcp__chrome-devtools__evaluate_script")
-ToolSearch("select:mcp__chrome-devtools__click")
-ToolSearch("select:mcp__chrome-devtools__fill")
-```
+Load tools on demand via ToolSearch, e.g. `ToolSearch("select:mcp__chrome-devtools__navigate_page")`: `navigate_page`, `take_screenshot`, `list_console_messages`, `list_network_requests`, `evaluate_script`, `click`, `fill`.
 
 ## Workflow
 

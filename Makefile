@@ -1563,10 +1563,11 @@ _setup-ghostty:
 
 .PHONY: _setup-browser
 _setup-browser:
-	@echo "  Chrome DevTools MCP (deferred loading — ~400 tokens overhead)..."
-	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_MKDIR) claude mcp remove chrome-devtools --scope user 2>/dev/null || true; \
-		claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false; $(CLAUDE_EACH_END)
-	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
+	@echo "  Chrome DevTools MCP (on demand via agents/browser.md, not a session server)..."
+	@# The server is declared inline in the `browser` subagent and lives only while it runs. A
+	@# user-scope registration starts an npx + node pair in every session, so drop any left over.
+	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_MKDIR) claude mcp remove chrome-devtools --scope user >/dev/null 2>&1 || true; $(CLAUDE_EACH_END)
+	@echo "    ✓ chrome-devtools MCP not registered per session (use via /browse)"
 
 .PHONY: _setup-opencode
 _setup-opencode:
@@ -1836,7 +1837,8 @@ status:
 	@brew services list | grep sleepwatcher | grep -q started && echo "    ✓ sleepwatcher service started" || echo "    ✗ sleepwatcher service [not started — run make setup]"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.wakeup"
 	@echo "  Browser debugging"
-	@$(call CLAUDE_MCP_CHECK,chrome-devtools)
+	@$(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default account}"; if claude mcp list 2>/dev/null | grep -q "chrome-devtools"; then echo "    ✗ chrome-devtools MCP still registered for $$a [starts in every session — run make setup]"; else echo "    ✓ chrome-devtools MCP not session-registered ($$a)"; fi; $(CLAUDE_EACH_END)
+	@grep -q '^mcpServers:' "$(DOTFILES_DIR)/agents/browser.md" && echo "    ✓ browser agent declares chrome-devtools" || echo "    ✗ agents/browser.md lost its mcpServers"
 	@echo "  Colima (Docker runtime)"
 	@for tool in colima docker lazydocker; do \
 		command -v $$tool >/dev/null 2>&1 \
