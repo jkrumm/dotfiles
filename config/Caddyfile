@@ -256,9 +256,55 @@ linewatch.test {
 # script (`npx kill-port 7732 && vite --port 7732 --strictPort`) — a genuine
 # double-booking caught 2026-08-08. 7733 is free and inside the tailnet ACL's
 # tcp:7700-7799 grant.
+#
+# The reader is only files, so Caddy serves them: no container, no VM (it was
+# nginx:alpine in Colima until 2026-11-14, and a VM restart took the door
+# down). Two site blocks, because caddy-tailnet.sh reads only `*.test` blocks
+# that are a single `reverse_proxy` to a loopback port: `brain.test` stays
+# that block, and the loopback listener on 7733 serves the dist. 7733 still
+# answers for the Kuma door (kuma-door/registry.json) and the reader's own
+# `make verify`. `com.jkrumm.brain-web-refresh` rebuilds the dist in place
+# every 5 minutes and is read fresh on the next request.
+#
+# Caching reproduces the retired nginx.conf: no-cache for the app shell
+# (`/`, `/index.html`) and for the files a refresh rewrites in place
+# (`/vault.json`, `/search-index.json`, `/sw.js`); `/assets/*` is
+# content-hashed, so it is immutable. Anything that is not a file (a deep
+# link) is the SPA fallback to /index.html — and is rewritten BEFORE the
+# `header` lines, so it carries the shell's no-cache too (a `route`, not a
+# plain block, because `header` sorts before `try_files`/`rewrite` otherwise
+# and would match the original path). Assets that do not exist stay a plain
+# 404 and the immutable header only goes on a 2xx, or a browser could
+# cache a miss for a year.
+# The path is absolute: Caddy runs as root here, where $HOME is not the user's.
+# Only the mini has the dist; elsewhere the listener answers 404.
 brain.test {
 	import local
 	reverse_proxy localhost:7733
+}
+
+http://127.0.0.1:7733 {
+	bind 127.0.0.1
+	root * /Users/jkrumm/SourceRoot/basalt-ui-obsidian/apps/demo/dist
+
+	@shell path / /index.html /vault.json /search-index.json /sw.js
+	@assets path /assets/*
+	@spa {
+		not path /assets/*
+		not file {
+			try_files {path} {path}/
+		}
+	}
+
+	route {
+		rewrite @spa /index.html
+		header @shell Cache-Control "no-cache"
+		header @assets {
+			Cache-Control "public, max-age=31536000, immutable"
+			match status 2xx
+		}
+		file_server
+	}
 }
 
 # hermes-api — `hermes serve` (loopback :9119), the JSON-RPC/WebSocket backend

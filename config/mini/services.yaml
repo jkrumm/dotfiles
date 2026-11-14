@@ -105,6 +105,7 @@ services:
   - { name: sleepwatcher, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.sleepwatcher, memory_mib: 50 }
   - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, memory_mib: 1536 }
   - { name: caddy, repo: dotfiles, kind: launchd, tier: core, label: sh.brew.caddy, daemon: true, process: caddy, memory_mib: 100, note: "root daemon; needs sudo to stop, no verb registered" }
+  - { name: brain-web, repo: dotfiles, kind: static, tier: core, door: brain, memory_mib: 0, note: "Caddy file_server on 127.0.0.1:7733 over basalt-ui-obsidian/apps/demo/dist, rebuilt by brain-web-refresh; no container, no VM; state follows Caddy" }
   - { name: dnsmasq, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.dnsmasq, daemon: true, process: dnsmasq, memory_mib: 20, note: "root daemon; *.test DNS" }
   - { name: tailscale, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.tailscale, daemon: true, process: tailscaled, memory_mib: 150, note: "root daemon" }
   - { name: maxvnodes, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.maxvnodes, daemon: true, memory_mib: 0, note: "root one-shot at boot (sysctl)" }
@@ -112,7 +113,6 @@ services:
   - { name: external-volume-unlock, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.external-volume-unlock, memory_mib: 50, note: "installed by make setup once attached=true (docs/external-ssd.md); 120 s, StartOnMount" }
   - { name: colima-default, repo: dotfiles, kind: vm, tier: core, vm: default, start: "make -C ~/SourceRoot/dotfiles colima-start", stop: "make -C ~/SourceRoot/dotfiles colima-stop", memory_mib: 4608, note: "core until row mini-docker-idle makes the VM start on demand" }
   - { name: colima-teamchat, repo: epos-ai-teamchat-athena, kind: vm, tier: on-demand, vm: teamchat, memory_mib: 4608, note: "kept up by teamchat-vm-watch; no verb until row teamchat-on-demand" }
-  - { name: brain-web, repo: basalt-ui-obsidian, kind: compose, tier: core, container: brain-web, project: basalt-ui-obsidian, needs: [vm], door: brain, start: "make -C ~/SourceRoot/basalt-ui-obsidian up", stop: "make -C ~/SourceRoot/basalt-ui-obsidian down", memory_mib: 32, note: "nginx on a static dist; Caddy takes it over under row mini-docker-idle" }
   - { name: dashboard-api, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: dashboard-api, project: dashboard, needs: [vm], memory_mib: 500, note: "no verb until row mini-work-profile" }
   - { name: dashboard-ui, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: dashboard-ui, project: dashboard, needs: [vm], memory_mib: 32 }
   - { name: vpn, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: prometheus-vpn, project: vpn, needs: [vm], memory_mib: 64 }
