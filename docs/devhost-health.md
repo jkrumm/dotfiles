@@ -135,7 +135,9 @@ one pusher behind three monitors froze and all three went DOWN. Now:
   `~/.local/state/jobs/com.jkrumm.devhost-health.json`, removed by `make devhost-health-teardown`):
   a non-zero exit is a recorded job failure that `jobs-grade --report` files as a signal on this repo. So the script exits
   **0 whenever every Kuma push was delivered** (a DOWN verdict is a delivered state, and Kuma
-  alerts on it) and **1 only when a push failed or no push URL resolved**.
+  alerts on it) and **1 only when a push failed or no push URL resolved**. `kuma_push` (`scripts/lib/kuma-push.sh`)
+  retries a transport failure (curl timeout, refused, reset; never an HTTP error) once, and only once per run: a single
+  stalled Kuma push used to fail the whole job, and a dead Kuma must not double every push.
 - `DEVHOST_COMPONENTS` replaces the component list (space-separated function names); it exists
   for `make devhost-heartbeat-test`, which drives the timeout, budget, order and exit paths
   against a stub `curl`.
@@ -409,8 +411,8 @@ Side-job rules (`devhost-health-check.sh`): runs when `$STATE_DIR/drift-last-run
 is older than 20 h or absent, through `run_bounded` with `DEVHOST_DRIFT_TIMEOUT`
 (60 s); a completed run stamps now, a timed-out run stamps backdated so it retries
 in about 1 h, not every 5 min. It is skipped when the heartbeat already used more
-than 200 s: the composite push is reached by ~218 s (200 s budget from script start + kill grace
-+ a 15 s push, plus at most one 2 s + 10 s retry per run: `kuma_push` retries a transport failure (curl timeout, refused, reset) once, and only once per process, since a single stalled Kuma push used to fail the whole job) and drift adds at most 60 s from a start at or under 200 s, inside jobrun's 270 s. Its exit code never touches the heartbeat's; it pushes to
+than 200 s: the composite push is reached by ~230 s (200 s budget from script start + kill grace
++ a 15 s push + at most one 2 s + 10 s push retry) and drift adds at most 60 s from a start at or under 200 s, inside jobrun's 270 s. Its exit code never touches the heartbeat's; it pushes to
 `MacMini Drift - Push` itself (2-day Kuma interval, valid while a push arrives
 daily). `DEVHOST_DRIFT_CHECK_BIN` overrides the script path for tests.
 
