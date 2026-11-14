@@ -11,9 +11,10 @@
 #
 # The mount probe reads nothing from the share. A launchd job (the heartbeat that calls this) cannot LIST an SMB mount:
 # macOS answers "Operation not permitted" or hangs on a Network Volumes prompt, unless the program holds that grant
-# (docs/storage.md §Mounts). `stat <mount>`, `df` and `smbutil statshares -m <mount>` need no grant, and together they hang
-# on a silent server and fail on a dropped session, so healthy = all three answered, and `df` named an SMB file system
-# (a path that fell through to the boot volume is not that mount). Not the keepalive's `ls`: a different probe on purpose.
+# (docs/storage.md §Mounts). So it is the keepalive's probe (smb/smb-keepalive.sh, issue 1106), not its `ls`: `stat` of the
+# mount root, then `stat` of a name that cannot exist, which has to reach the server (ENOENT = healthy, a hang = a silent
+# server, "Operation timed out" = a dropped session). `df` only supplies free and total (it is answered from cache, so it
+# proves nothing about liveness) and must name an SMB file system. `smbutil statshares` is not used: it hangs under a job.
 #
 # Sources: the mount table + declared shares (dotfiles-private/smb-shares.conf, for this host), the keepalive's graded jobrun
 # row (scripts/lib/jobs-grade.ts), and on the mini the external volume gate (scripts/lib/volume-gate.sh), the mirror's
@@ -97,29 +98,34 @@ share_probe() {
     else state=unreachable; reason="server not reachable on 445 (HomeLab down, Tailscale down or off-tailnet)"; fi
   else
     state=healthy
+    # 1. the root is there (answered from cache: it only proves the mount exists)
     bcap "$PROBE_SECONDS" "$out.stat" "$out.stat.err" stat "$mp"; rc=$?
-    if [ "$rc" -eq 0 ]; then
+    if [ "$rc" -eq 124 ]; then state=stale; reason="stat hung > ${PROBE_SECONDS}s"
+    elif [ "$rc" -ne 0 ]; then
+      if grep -q "Operation not permitted" "$out.stat.err" 2>/dev/null; then state=unprobeable; reason="macOS refuses the probe (Operation not permitted)"
+      else state=stale; reason="stat failed"; fi
+    fi
+    # 2. a name that cannot exist: the lookup has to reach the server. A healthy share answers ENOENT, a silent server hangs
+    #    it, a dropped session answers "Operation timed out". Reads nothing from the share, needs no grant.
+    if [ "$state" = healthy ]; then
+      bcap "$PROBE_SECONDS" "$out.look" "$out.look.err" stat "$mp/.storage-status-probe-$RANDOM$RANDOM"; rc=$?
+      if [ "$rc" -eq 124 ]; then state=stale; reason="lookup hung > ${PROBE_SECONDS}s (the server is silent)"
+      elif [ "$rc" -ne 0 ] && grep -q "Operation not permitted" "$out.look.err" 2>/dev/null; then state=unprobeable; reason="macOS refuses the probe (Operation not permitted)"
+      elif [ "$rc" -ne 0 ] && ! grep -q "No such file or directory" "$out.look.err" 2>/dev/null; then state=stale; reason="lookup failed (the SMB session is gone)"; fi
+    fi
+    # 3. free and total from df. It is answered from cache, so it proves nothing about liveness, but a path that fell
+    #    through to the boot volume answers it too: the file system must be an SMB one.
+    if [ "$state" = healthy ]; then
       bcap "$PROBE_SECONDS" "$out.df" "$out.df.err" df -k -P "$mp"; rc=$?
-      [ "$rc" -eq 0 ] || { state=stale; reason="df ${rc/124/hung}"; }
-      if [ "$rc" -eq 0 ]; then
-        # filesystem = field 1 ("//user@server/share", no spaces); blocks are 1 KiB. A path that fell through to the
-        # boot volume answers df too, so the filesystem must be an SMB one.
+      if [ "$rc" -ne 0 ]; then state=stale; reason="df $([ "$rc" -eq 124 ] && echo hung || echo failed)"
+      else
+        # filesystem = field 1 ("//user@server/share", no spaces); blocks are 1 KiB
         read -r fs total_k free_k < <(awk 'NR == 2 { print $1, $2, $4 }' "$out.df")
         case "${fs:-}" in
           //*) total=$((total_k * 1024)); free=$((free_k * 1024)) ;;
           *) state=stale; reason="df did not answer for an SMB file system (the mount is gone or hidden)" ;;
         esac
       fi
-      if [ "$state" = healthy ]; then
-        bcap "$PROBE_SECONDS" "$out.sh" "$out.sh.err" smbutil statshares -m "$mp"; rc=$?
-        if [ "$rc" -eq 124 ]; then state=stale; reason="smbutil statshares hung > ${PROBE_SECONDS}s"
-        elif [ "$rc" -ne 0 ]; then state=stale; reason="smbutil statshares failed (the SMB session is gone)"; fi
-      fi
-    fi
-    if [ "$rc" -ne 0 ] && [ "$state" = healthy ]; then   # the stat itself failed
-      if [ "$rc" -eq 124 ]; then state=stale; reason="stat hung > ${PROBE_SECONDS}s"
-      elif grep -q "Operation not permitted" "$out.stat.err" 2>/dev/null; then state=unprobeable; reason="macOS refuses the probe (Operation not permitted)"
-      else state=stale; reason="stat failed"; fi
     fi
     if [ "$state" = healthy ]; then healthy=true
     elif [ "$state" = unprobeable ]; then healthy=null

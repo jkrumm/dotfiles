@@ -104,9 +104,11 @@ healthy and, on the mini, a mirror older than 36 h (`STORAGE_MIRROR_MAX_AGE_HOUR
 
 Read-only and bounded: it never mounts, unmounts or writes, and every call has a deadline (`STORAGE_PROBE_SECONDS`, default 5;
 shares are probed in parallel), so a dead mount costs seconds, not a hang. A launchd job cannot list an SMB mount (see
-Mounts), so the probe reads nothing from the share: `stat <mount>`, `df -k` (which must answer for an `//…` SMB file system,
-not the boot volume) and `smbutil statshares -m <mount>`. All three answering is `healthy`. It is deliberately not the
-keepalive's `ls` probe. The server name never appears in the output.
+Mounts), so the probe reads nothing from the share: the keepalive's own (`smb/smb-keepalive.sh`), `stat <mount>` and then
+`stat` of a name that cannot exist, which has to reach the server. ENOENT is `healthy`; a hang is a silent server and
+`Operation timed out` a dropped session (`stale`). `df -k` supplies free and total only (it is answered from cache, so it is
+no liveness proof) and must name an `//…` SMB file system, not the boot volume. `smbutil statshares` is not used: it hangs
+under a job's program. The server name never appears in the output.
 
 ### JSON contract (`schema: 1`)
 

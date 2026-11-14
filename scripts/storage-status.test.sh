@@ -26,10 +26,13 @@ HOURS=3600
 # Mount table: $FIX/table. Both shares mounted by default.
 fake mount 'cat "$FIX/table"'
 fake nc '[ ! -e "$FIX/down" ]'
-fake stat '[ -e "$FIX/hang" ] && exec sleep 30; [ -e "$FIX/eperm" ] && { echo "stat: $2: Operation not permitted" >&2; exit 1; }; [ -e "$FIX/statfail" ] && exit 1; exit 0'
+fake stat 'case "$1" in */.storage-status-probe-*) probe=1 ;; *) probe="" ;; esac
+  [ -e "$FIX/hang" ] && exec sleep 30; [ -e "$FIX/eperm" ] && { echo "stat: $1: Operation not permitted" >&2; exit 1; }; [ -e "$FIX/statfail" ] && exit 1
+  if [ -n "$probe" ]; then [ -e "$FIX/silent" ] && exec sleep 30; [ -e "$FIX/sessiongone" ] && { echo "stat: $1: Operation timed out" >&2; exit 1; }; echo "stat: $1: stat: No such file or directory" >&2; exit 1; fi
+  exit 0'
 fake df 'if [ -e "$FIX/fallthrough" ]; then fs=/dev/disk3s5; else fs="//fixture-user@nas.example.test/SHARE"; fi
   echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "$fs 1000 400 600 40% $3"'
-fake smbutil '[ -e "$FIX/silent" ] && exec sleep 30; [ -e "$FIX/sessiongone" ] && exit 64; exit 0'
+fake smbutil 'echo smbutil >> "$FIX/forbidden.calls"; exit 1'
 fake ssh '[ -e "$FIX/kumadown" ] && exit 255; if [ -e "$FIX/nobeat" ]; then echo; else echo "$KUMA_EPOCH"; fi'
 fake diskutil 'cat "$FIX/disk.plist"'
 for never in mount_smbfs osascript umount; do fake "$never" "echo $never >> \"\$FIX/forbidden.calls\"; exit 1"; done
@@ -127,9 +130,9 @@ check "free is null on a stale mount" jt '.shares[0].free_bytes == null'
 check "warns" jt '.warnings | map(.code) | index("share_not_healthy") != null'
 check "nothing mounted or unmounted" test ! -e "$FIX/forbidden.calls"
 
-echo "# a silent server (smbutil hangs), a dropped session, a mount hidden behind the boot volume"
+echo "# a silent server (the lookup hangs), a dropped session, a mount hidden behind the boot volume"
 reset; touch "$FIX/silent"; run --json
-check "smbutil hang: stale within the bound" sh -c '[ "$1" -le 6 ] && [ "$2" = stale ]' _ "$secs" "$(j '.shares[0].state')"
+check "lookup hang: stale within the bound" sh -c '[ "$1" -le 6 ] && [ "$2" = stale ]' _ "$secs" "$(j '.shares[0].state')"
 reset; touch "$FIX/sessiongone"; run --json
 check "session gone: stale" test "$(j '.shares[0].state')" = stale
 reset; touch "$FIX/fallthrough"; run --json
