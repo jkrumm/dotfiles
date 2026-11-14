@@ -428,6 +428,67 @@ answered; worked around with a launcher env variable, a lock-reclaiming launcher
 nightly updater). 0.1.18 (2026-11-04): the core ships its own identity, `Herdr Core.app`, the official installer and
 `hc update`; the workaround stack was deleted.
 
+## Core restarts, classified
+
+Read-only audit of 2026-11-14 (Issue 1104). **Of the 18 `stream ended (core restart?)` lines in `~/Library/Logs/hc-resume.log`
+since 2026-10-31, 8 are `hc-resume` restarting itself and 10 are core-side. None is an app-triggered update, and
+none can be shown to be one: recovery after an app-triggered update was never measured.**
+
+Sources: `hc-resume.log`, `hc-events.log`, `herdr-core-update.log`, `herdr-core.log`, the event journal
+(`~/.local/share/herdr-events/*.jsonl`: `created`, `labels`, `lost`, `foreground` records), `last reboot`, `git log`.
+Times are UTC. *Labeled* = terminals alive 5 s before the event that carried `jk.claude.session`, rebuilt from the journal
+(not available before the recorder started at 2026-10-31T16:56:30Z). *Resumed* = `resume` lines until the next event. A
+label survives its Claude exiting, so *labeled* is an upper bound: on 2026-11-01 it was 12 against 6 live sessions.
+
+**The 8 false events are a logging bug.** `hc-resume` closes its link on SIGTERM and the loop then prints the same line
+(`scripts/hc-resume.ts:236-246`, `:365`). Every deploy that changes the script (`agent-refresh.sh` since 2026-11-02, a manual
+restart before) writes a "core restart" line, then `hc-resume started pid=…` under a second later. A real core restart is
+followed by `no core:` lines or `resume` lines, never by a new pid, and `hc-events.log` shows the same stream ending.
+
+| # | UTC | Cause class | Labeled | Resumed | Evidence |
+|-|-|-|-|-|-|
+| 1 | 10-31 15:39:14 | hc-resume restart (inferred) | n/a | 0 | New pid 0.25 s later. Unknown: no recorder yet; `hc-resume` was being written (commit 9f89240 at 15:39:45) |
+| 2 | 10-31 15:51:39 | hc-resume restart (inferred) | n/a | 0 | Same signature, same missing recorder |
+| 3 | 10-31 15:54:42 | hc-resume restart (inferred) | n/a | 0 | Same; commit 27ae8a8 follows at 15:54:53 |
+| 4 | 10-31 18:49:18 | hc-resume restart | 6 | 0 | New pid 0.5 s later; `hc-events` (up since 16:56:30) logged no stream end; commit f37595e touched `hc-resume.ts` at 18:38 |
+| 5 | 11-01 15:02:59 | host reboot (macOS update) | 12 | 6 | `last`: shutdown 15:02, boot 15:14; `herdr-core-resume-pre-reboot-20261101-1554.tsv` names 6 live sessions, the same 6 terminals resumed at 15:20:40: **6 of 6** |
+| 6 | 11-02 03:15:14 | nightly updater, 0.1.15 to 0.1.16 | 41 | 2 | `herdr-core-update.log`: "core restarted: pid 3682 -> 24972", "39 terminals kept their pids". Unknown: why t7 and t12 were at a shell (not the restart: programs were kept) |
+| 7 | 11-02 09:40:47 | hc-resume restart | 46 | 4 | New pid 0.5 s later; commit 05126dd (09:40:07) restarts a loaded `hc-resume` whose script changed. The new process resumed every terminal found at a login shell, t7 and t12 again |
+| 8 | 11-04 03:15:13 | nightly updater, 0.1.16 to 0.1.17, failed | 24 | 1 | Update log "FAILED: core 0.1.17 up: not ready after 60s" at 03:16:24; `hc-events` "no core" until 03:23:15, `hc-resume` resumed t11p at 03:15:44: the two checks disagreed for 8 minutes |
+| 9 | 11-04 13:35:43 | unknown, core side | 13 | 4 | 30 terminals' foreground went null; "herdr-core is not running" until 13:41:15 (resumes 13:41:15-18). Not the updater (log has 03:15 only). Unknown: the core's exit status or the command that ended it |
+| 10 | 11-04 14:13:15 | unknown, core side | 13 | 1 | Same signature, down until 14:19:17. `herdr-core.log`: the launcher SIGTERMed a core.lock holder (logged 15:18:49 local, 14:18:49Z). t8 resumed with a new session id |
+| 11 | 11-04 14:20:36 | unknown, core side | 13 | 0 | Foreground null on 30 terminals, no `no core:` line, core back within a second. Unknown: what ended it |
+| 12 | 11-04 14:38:58 | unknown, core side | 11 | 0 | `hc-events` closed within 3 ms; `recorder.snapshot` seq 0. Unknown: what ended it |
+| 13 | 11-05 21:02:50 | unknown, core side | 24 | 10 | 37 foreground nulls; "herdr-core is not running" until the 21:05:47 deploy of f683ca2 restarted both daemons; 10 resumes at 21:05:49-50. Not the updater ("up to date" at 03:15). Unknown: core exit status |
+| 14 | 11-05 22:05:44 | hc-resume restart | 25 | 2 | Commit 25f15f4 at 22:05:39, new pid 0.9 s later; t16m and t14d came from the new process's first snapshot |
+| 15 | 11-05 22:06:52 | hc-resume restart | 26 | 0 | Commit 29368bd at 22:06:48, new pid 0.7 s later |
+| 16 | 11-13 07:00:35 | owner update (`make herdr-core-update`) | 18 | 18 | Terminal `core-update` created 07:00:33.6, stream ends 1.9 s later; "no launchd-born core" 07:00:36-07:01:37 (a stray core). The 18 resumes at 07:02:08 follow the repair `hc server stop`, which ended the programs the update had kept (§How the core runs now): **18 of 18** |
+| 17 | 11-13 07:07:49 | owner repair test (`hc server restart`) | 19 | 0 | Terminal `restart-test` created at the same ms; programs kept, nothing to resume. "No launchd-born core" until `core_up` accepted `hc --hc-launchd` (0e753eb, 07:09:09) |
+| 18 | 11-13 20:56:37 | hc-resume restart | 16 | 0 | Commit 4790c5f at 20:55:40, new pid 0.5 s later |
+
+Two recovery events have no stream-ended line:
+
+| UTC | Cause class | Labeled | Resumed | Evidence |
+|-|-|-|-|-|
+| 11-05 21:24:55 | unknown, holders replaced | 25 | 15 | 36 `lost` records (`holder_lost`) within 1 s; the stream stayed up, so `hc-resume` logged nothing but resumed 15 terminals at 21:25:01. 10 labeled terminals not resumed, no skip line says why. Unknown: what replaced the holders (4005127, the Herdr Core.app switch, was committed 20 minutes later) |
+| 11-13 ~18:00 | host reboot (kernel panic) | 27 | 25 | `last reboot` 19:01 CET; `hc-resume` died with the host (no line), started 18:09:20; 25 resumes in 9 ms at 18:09:30. The 2 not resumed (t20s, t23k) have no record after boot: **25 of 27** |
+
+**Reading it.**
+- Core-side: 1 host reboot, 2 nightly-updater restarts (retired 2026-11-05), 2 owner restarts, 5 unknown (rows 9-13, all on the
+  0.1.17 days before `Herdr Core.app`). Launchd keeps no exit history, so a crash respawn cannot be told from a kill:
+  rows 9-13 stay unknown until the core's exit status is logged.
+- Complete resume counts exist for three events: 6 of 6, 18 of 18, 25 of 27. Rows 9-13 and the 21:24:55 event cannot be
+  scored: labeled terminals that were not resumed may have been live and kept, or idle and stale, and the log cannot say.
+- Row 16 is the nearest case to an app-triggered update: the core restarted without a reboot and came up as a stray.
+  `hc-resume` refused to join it, as designed, and nothing recovered until a hand repair.
+
+**Closing line: recovery after an app-triggered update is unproven.** No event in the record is one (the app's own
+updater log lives on the MacBook; the mini holds no trace of it, and the MacBook app's 0.1.13 to 0.1.15 update on 2026-11-13 moved
+neither core), and the closest measured case, row 16, needed the owner. The one line that makes the next event measurable
+belongs in `hc-resume` on every snapshot, restart or not: `snapshot: core=<version> terminals=<n> labeled=<k> at_login_shell=<m>`;
+`at_login_shell` is the number that needed resuming, which today has to be guessed from `labeled`. Not added here
+(`docs/incident-2026-11-13-mini-panic.md`, standing constraint 4).
+
 ## Desktop layout (MacBook)
 
 `make herdr-app-setup` converges the app onto `config/herdr-app/`. It's idempotent, and needs the window open to switch the layout and open spaces. It ends by switching layouts away and back, the only reload that picks up edits inside a symlinked mod folder.
