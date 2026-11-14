@@ -160,12 +160,31 @@ docker_su() { docker exec postgres psql -U "$(docker_user)" -d template1 -v ON_E
 COPIED=()
 DONE=0
 
+# launchctl bootout returns before the job is gone; a bootstrap in that window fails, and a
+# fallback kickstart then hits the dying job, which the late bootout unloads (third attempt: the
+# factory stayed unloaded after its rollback). Stop waits for the label to vanish; start retries
+# until the label is loaded.
+stop_job() { # stop_job <label>
+  local i
+  launchctl bootout "$UID_GUI/$1" 2>/dev/null || true
+  for ((i = 0; i < 30; i++)); do launchctl print "$UID_GUI/$1" >/dev/null 2>&1 || return 0; sleep 1; done
+  log "WARN: $1 is still loaded 30 s after bootout"
+}
+start_job() { # start_job <label>
+  local i
+  for ((i = 0; i < 10; i++)); do
+    launchctl print "$UID_GUI/$1" >/dev/null 2>&1 && return 0
+    launchctl bootstrap "$UID_GUI" "$HOME/Library/LaunchAgents/$1.plist" 2>/dev/null || sleep 2
+  done
+  launchctl print "$UID_GUI/$1" >/dev/null 2>&1 || { log "WARN: $1 is not loaded"; return 1; }
+}
+
 start_clients() {
   local l
   # ${a[@]+...}: macOS's bash 3.2 treats an empty array as unbound under set -u
   for l in ${STOPPED[@]+"${STOPPED[@]}"}; do
     log "start $l"
-    launchctl bootstrap "$UID_GUI" "$HOME/Library/LaunchAgents/$l.plist" 2>/dev/null || launchctl kickstart "$UID_GUI/$l" || log "WARN: $l did not start"
+    start_job "$l" || true
   done
   STOPPED=()
 }
@@ -229,7 +248,7 @@ rollback() {
   if [ "$ATHENA_STOPPED" = 1 ]; then
     log "start Athena's cluster again"
     launchctl enable "$UID_GUI/$ATHENA_LABEL"
-    launchctl bootstrap "$UID_GUI" "$HOME/Library/LaunchAgents/$ATHENA_LABEL.plist"
+    start_job "$ATHENA_LABEL"
     wait_ready "$ATHENA_SOCK" 5432 30 || log "WARN: Athena's cluster does not answer"
     ATHENA_STOPPED=0
   fi
@@ -277,22 +296,22 @@ for l in "${CLIENT_LABELS[@]}"; do
   if launchctl print "$UID_GUI/$l" >/dev/null 2>&1; then
     log "stop $l"
     STOPPED+=("$l")
-    launchctl bootout "$UID_GUI/$l"
+    stop_job "$l"
   fi
 done
 log "stop Athena's cluster (disabled so a login does not start it beside the one server)"
 ATHENA_STOPPED=1
 launchctl disable "$UID_GUI/$ATHENA_LABEL"
-launchctl bootout "$UID_GUI/$ATHENA_LABEL"
+launchctl bootout "$UID_GUI/$ATHENA_LABEL" 2>/dev/null || true
 # bootout's SIGTERM is a smart shutdown that waits for teamchat's sessions, and the lock file in
 # the socket dir the one server takes over stays until it ends (third drill). Make it fast.
 if "$PGBIN/pg_ctl" -D "$ATHENA_DATA" status >/dev/null 2>&1; then
   "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w -t 60 stop >/dev/null
 fi
+stop_job "$ATHENA_LABEL"
 [ ! -e "$ATHENA_DATA/postmaster.pid" ] || { log "Athena's server did not stop"; false; }
 
 if [ "$VERB" = cutover ]; then
-  # A client outside the stopped jobs (an agw CLI call) would write after the copy's snapshot.
   # Writers outside the stopped jobs exist (the second cutover attempt: lead sessions' hook events
   # moved two factory sequences mid-copy, and their rows would have been lost). Make the source
   # read-only, then end every session, so a stray write fails instead of vanishing.
