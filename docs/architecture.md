@@ -161,6 +161,7 @@ brain drift audit, project narratives; the agents-overview digest was paused
 | `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
 | `com.jkrumm.weatherorb.worker-ingest` | KeepAlive | durable-jobs worker: ingest (DBOS, ADR 0010) |
 | `com.jkrumm.weatherorb.worker-round` | KeepAlive | durable-jobs worker: blend rounds (DBOS, ADR 0010) |
+| `com.jkrumm.orb.corpus-obs` | 3600s | V2 corpus observation, installed by hand and unloaded since Issue 1005 moved its program out of a worktree; the plist stays on disk until that Issue removes or re-installs it, and this row leaves with it. Not in `config/mini/services.yaml` on purpose: `make mini-ps` lists it as drift |
 
 The 1200s/900s/hourly/daily/3 h timers that used to ingest, log, archive,
 backfill and run blend rounds (`obs`, `fcstlog`, `archive`, `backfill`, `round`) are
@@ -175,7 +176,10 @@ the weatherorb session workflow.
 |-|-|-|
 | `com.jkrumm.linewatch-collector-agent` | linewatch | KeepAlive |
 | `com.jkrumm.linewatch-watchdog` | linewatch | KeepAlive |
+| `com.jkrumm.linewatch-app` | linewatch | KeepAlive (:7731, loopback) — the API, dashboard, Ookla and router poller, native since Issue 1219 (was the Colima container); door `linewatch.test`; `make -C ~/SourceRoot/linewatch app-stop` stops it |
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
+| `com.jkrumm.rb` | rb | KeepAlive (127.0.0.1:4050, health `/api/health`) — rb native since Issue 1184 (was the Colima containers), from a release dir `~/.rb/releases/<sha>` through its `scripts/launch.sh`; tier core, always reachable; doors `rb.test` and `tailscale serve` on :7730; its headless Chrome runs only during a fetch run (about 0.4 GiB, stopped after 180 s idle) |
+| `com.jkrumm.kiri` | dotfiles (plan row `kiri-trial`) | KeepAlive — the kiri container-runtime daemon of the trial beside Colima, tier manual in the registry; not part of `make setup` |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |
 | `com.jkrumm.usage-tracker-prices` | usage-tracker | 04:20 daily — `prices-sync` under `jobrun`: refreshes the model price catalog behind `usage.compute_cost` |
 | `com.jkrumm.usage-tracker-report` | usage-tracker | Monday 07:00 — `report weekly` under `jobrun`: writes the weekly "where the window went" report that Hermes posts at 07:30 |
