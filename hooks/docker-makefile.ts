@@ -863,6 +863,106 @@ function getMakeTargets(dir: string): string[] {
   return [...new Set(targets)].sort();
 }
 
+// ── Long-running containers from a worktree ─────────────────────────────────
+//
+// rules/run-on-mini.md: a lead never starts a long-running compose project from a worktree. Containers a test needs run inside
+// `factory slot run`, which names the project after the slot and removes the containers when the step ends. Until now a second
+// `up` was refused only by accident (container_name and fixed 127.0.0.1 ports in the compose files; none pins the project name).
+//
+// Decided here, from the command and FACTORY_SESSION: a `make` target whose recipe (or a target it depends on, or a `$(MAKE)` it
+// calls, three levels deep, in the same Makefile) runs `docker compose up` or `docker run -d`, and a raw `docker compose up` /
+// `docker run -d`, in a git worktree. A run-and-exit container (`up --abort-on-container-exit`, `--exit-code-from`, `run --rm`
+// without -d) and everything under `factory slot run` pass.
+//
+// Not caught: a target that reaches docker through a script, a shell variable or another Makefile; a make invocation inside
+// `sh -c` with a computed target; `docker` started by a test's own code; any session outside the factory (FACTORY_SESSION unset).
+
+const LONG_UP = /\bdocker(?:-compose|\s+compose)\b[^\n]*\bup\b/;
+const RUN_AND_EXIT = /--abort-on-container-(?:exit|failure)|--exit-code-from/;
+const LONG_RUN = /\bdocker\s+run\b[^\n]*\s(?:-d|--detach)\b/;
+
+export function startsLongRunning(line: string): boolean {
+  if (LONG_UP.test(line)) return !RUN_AND_EXIT.test(line);
+  return LONG_RUN.test(line);
+}
+
+/** The recipe lines of a target, with the targets it depends on and the ones its `$(MAKE)` lines call. */
+export function recipeOf(makefile: string, target: string): { lines: string[]; next: string[] } | null {
+  const rows = makefile.replace(/\\\n/g, " ").split("\n");
+  const head = new RegExp(`^(?:[\\w./-]+\\s+)*${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+[\\w./-]+)*\\s*::?(?!=)(.*)$`);
+  const at = rows.findIndex((r) => !r.startsWith("\t") && !r.startsWith(".PHONY") && head.test(r));
+  if (at < 0) return null;
+  const lines: string[] = [];
+  for (const r of rows.slice(at + 1)) {
+    if (r.startsWith("\t")) lines.push(r.trim());
+    else if (r.trim() !== "" && !r.startsWith("#")) break;
+  }
+  const next = (rows[at].match(head)![1] ?? "").split("#")[0].split("|")[0].trim().split(/\s+/).filter(Boolean);
+  for (const l of lines) {
+    const m = l.match(/(?:\$\(MAKE\)|\bmake)(?=\s)(.*)$/);
+    if (m) next.push(...m[1].split(/\s+/).filter((t) => /^[A-Za-z][\w.-]*$/.test(t)));
+  }
+  return { lines, next };
+}
+
+export function targetStartsLongRunning(makefile: string, target: string, depth = 3, seen = new Set<string>()): boolean {
+  if (depth < 0 || seen.has(target)) return false;
+  seen.add(target);
+  const recipe = recipeOf(makefile, target);
+  if (!recipe) return false;
+  return recipe.lines.some(startsLongRunning) || recipe.next.some((t) => targetStartsLongRunning(makefile, t, depth - 1, seen));
+}
+
+export interface WorktreeProbe {
+  /** The command runs in a git worktree. */
+  isWorktree(dir: string): boolean;
+  readMakefile(dir: string): string | null;
+}
+
+export const realWorktreeProbe: WorktreeProbe = {
+  isWorktree(dir) {
+    const git = (arg: string) => Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", arg], { cwd: dir, stdout: "pipe", stderr: "pipe" });
+    const here = git("--git-dir");
+    const common = git("--git-common-dir");
+    return here.exitCode === 0 && common.exitCode === 0 && here.stdout.toString().trim() !== common.stdout.toString().trim();
+  },
+  readMakefile(dir) {
+    const r = Bun.spawnSync(["cat", `${dir}/Makefile`], { stdout: "pipe", stderr: "pipe" });
+    return r.exitCode === 0 ? r.stdout.toString() : null;
+  },
+};
+
+/** The reason to deny, or null. Only a factory session is judged: pass `factorySession` from FACTORY_SESSION. */
+export function longRunningInWorktree(command: string, sessionCwd: string, factorySession: boolean, probe: WorktreeProbe = realWorktreeProbe): string | null {
+  if (!factorySession) return null;
+  const cwd = effectiveCwd(command, sessionCwd);
+  for (const raw of splitIntoCommands(command)) {
+    const tokens = unwrapWrappers(raw);
+    if (tokens[0] === "factory" && tokens[1] === "slot") continue;
+    if (tokens[0] === "make") {
+      let dir = cwd;
+      const targets: string[] = [];
+      for (let i = 1; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t === "-C" || t === "--directory") dir = expandPath(tokens[++i] ?? ".", cwd);
+        else if (t.startsWith("-C") && t.length > 2) dir = expandPath(t.slice(2), cwd);
+        else if (t.startsWith("--directory=")) dir = expandPath(t.slice(12), cwd);
+        else if (!t.startsWith("-") && !t.includes("=")) targets.push(t);
+      }
+      const file = probe.isWorktree(dir) ? probe.readMakefile(dir) : null;
+      const hit = file && targets.find((t) => targetStartsLongRunning(file, t));
+      if (hit) return `make ${hit} starts a long-running container project from a worktree (${dir}).`;
+      continue;
+    }
+    const docker = inspectDockerCommand(raw);
+    if (docker && (docker.subcommand === "up" || (docker.subcommand === "run" && docker.args.some((a) => a === "-d" || a === "--detach"))) && probe.isWorktree(cwd)) {
+      if (docker.subcommand === "up" && docker.args.some((a) => RUN_AND_EXIT.test(a))) continue;
+      return `docker ${docker.subcommand} starts a long-running container project from a worktree (${cwd}).`;
+    }
+  }
+  return null;
+}
+
 /** Shared PreToolUse deny: print the permission decision and exit 0. */
 export function deny(reason: string): never {
   const output = JSON.stringify({
@@ -884,6 +984,19 @@ if (import.meta.main) {
   if (input.tool_name !== "Bash") process.exit(0);
 
   const command = (input.tool_input?.command ?? "").trim();
+
+  const worktreeReason = longRunningInWorktree(command, input.cwd ?? process.cwd(), Boolean(process.env.FACTORY_SESSION));
+  if (worktreeReason) {
+    deny(
+      [
+        worktreeReason,
+        "",
+        "A lead never starts a long-running compose project from a worktree (rules/run-on-mini.md). A container a test needs runs",
+        "inside `factory slot run -- <command>`: the slot names the compose project and the containers are removed when the step ends.",
+        "A project that must stay up belongs to its repo's main checkout and its own make targets, started by the owner or its deploy.",
+      ].join("\n")
+    );
+  }
 
   if (!shouldBlock(command)) process.exit(0);
 
