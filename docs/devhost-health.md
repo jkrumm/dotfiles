@@ -319,8 +319,12 @@ collie or without a seeded cache never fails the script.
 - **The factory** (`Software Factory - Push`, URL file `~/.config/uptime-kuma/factory-push-url`,
   override `FACTORY_PUSH_URL_FILE`) relays the factory's own verdict: `GET
   http://127.0.0.1:7793/health` (loopback, no token) carries `heartbeat: { ok, reason,
-  tickAt, queueMovedAt }`, `ok` meaning the tick advanced and the queue moved within 30
-  minutes. `ok` → up (`tick …, queue moved …`); no answer, a 503, no `heartbeat` or `ok:
+  tickAt, queueMovedAt, routeP95Ms, routeSamples }`, `ok` meaning the tick advanced and the queue moved within 30
+  minutes. `/health` never queries the database, so `ok` alone missed a day when every DB-backed route
+  timed out (2026-11-14): `ok` with `routeP95Ms` > 2000 and `routeSamples` ≥ 10 (the factory's own
+  `routes_slow` line; `FACTORY_ROUTE_P95_MAX_MS` / `FACTORY_ROUTE_MIN_SAMPLES`) is down (`factory routes
+  slow: p95 … ms`); either field absent or non-numeric (older server) is unknown, so up.
+  `ok` → up (`tick …, queue moved …`); no answer, a 503, no `heartbeat` or `ok:
   false` → down with the factory's `reason` (else the curl failure); the DOWN push is
   delivered and the script still exits 0. The factory deploys by bootout+bootstrap, so a
   probe can land in the restart gap (four deploys in five minutes paged on 2026-11-06): a
