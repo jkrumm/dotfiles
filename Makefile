@@ -803,7 +803,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1974,6 +1974,9 @@ colima-restart:
 	@if [ -f "$(HOME)/.colima/default/colima.yaml" ]; then \
 		sed -i '' 's/^cpu: .*/cpu: $(COLIMA_CPU)/; s/^memory: .*/memory: $(COLIMA_MEMORY)/' \
 			"$(HOME)/.colima/default/colima.yaml"; \
+		if [ "$(SECRETS_BACKEND)" != op ]; then \
+			echo "    mounts: $$(bash $(DOTFILES_DIR)/colima/apply-mounts.sh "$(HOME)/.colima/default/colima.yaml" $(DOTFILES_DIR)/colima/mounts.mini.txt) (colima/mounts.mini.txt)"; \
+		fi; \
 	fi
 	@if [ -z "$$($(BREW_SERVICE) plist colima 2>/dev/null)" ]; then \
 		brew services start colima >/dev/null 2>&1 || true; \
@@ -2651,6 +2654,11 @@ disk-sweep-run:
 disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
+
+.PHONY: colima-mounts-test
+colima-mounts-test: ## The mini VM's mounts writer (colima/apply-mounts.sh) against a temp colima.yaml
+	@shellcheck -S warning $(DOTFILES_DIR)/colima/apply-mounts.sh $(DOTFILES_DIR)/colima/apply-mounts.test.sh
+	@/bin/bash $(DOTFILES_DIR)/colima/apply-mounts.test.sh
 
 # Daily restart of a leaking fseventsd (memory > 1.5 GB, or CPU >= 150 % for 10 min): 2.1 GB at 260 % CPU after 5 days
 # put the dev host into swap thrash on 2026-11-12 (issue 870). The restart is `sudo -n killall fseventsd`, allowed by ONE

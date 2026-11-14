@@ -127,14 +127,18 @@ Done: `fresh-build` passed (all 8 databases, zero differences, declaration in sy
 restore); `rollback-drill` passed on the fourth run (switch to 5432 in 2 s, rollback with verified
 clients in 55 s); the first three runs failed on real defects (smart shutdown under `kickstart -k`,
 `unix_socket_directories` written as one element, Athena's smart shutdown holding its socket lock)
-and each rolled back for real with the clients verified. The roles exist on the bare server; the
-`/tmp/.s.PGSQL.5432` alias is in place; 122 leaked weatherorb test databases are dropped.
+and each rolled back for real with the clients verified. 122 leaked weatherorb test databases are
+dropped. The cutover ran at 13:28-13:31 on 2026-11-14 (fourth attempt; the first three rolled back
+on a leftover schema shell, a sequence moved by a writer outside the stopped jobs, and a read-only
+step that locked itself out): five databases copied with zero differences, the server on
+127.0.0.1:5432 with both sockets, `make verify` of software-factory and agent-workflows green.
+The default Colima VM then went to 4 GiB with the mounts of `colima/mounts.mini.txt`.
 
-Open, in order: weatherorb issue 1131 moves its DSNs to the socket (the cutover refuses while a TCP
-client holds 5433); vps issue 1132 points the nightly backup at whichever server is live; then
-`make pg-cutover`; then the default Colima VM shrinks to 4 GiB with narrowed mounts; the teamchat
-VM and Athena's script cleanup need Issues in the work repo epos-ai-teamchat-athena, which only
-the owner can file (drafts: `~/.local/state/pg-cutover/work-repo-drafts/`).
+Open: the teamchat VM's move into the default one and Athena's script cleanup need Issues in the
+work repo epos-ai-teamchat-athena, which only the owner can file (drafts:
+`~/.local/state/pg-cutover/work-repo-drafts/`); vps still has to remove the stopped container from
+`compose.dev.yml`; after 7 days and a proven restore from the HomeLab, the Docker volume and
+Athena's old data directory go (a dotfiles follow-up).
 
 Kept after the cutover, untouched: the Docker volume `vps_postgres-dev-data` and Athena's data
 directory `~/.local/state/athena/pg18` (its launchd job disabled, not removed). They are removed in a

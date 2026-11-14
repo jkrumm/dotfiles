@@ -1,0 +1,10 @@
+# The host paths the dev host's Colima VM mounts (virtiofs), one per line: <path> rw|ro.
+# Colima's default is the whole home directory writable, which a reported fseventsd leak
+# traces back to; the VM gets only what a container binds (measured 2026-11-14, issue 1119:
+# `docker inspect` of every running container). A new bind mount outside these paths shows an
+# EMPTY directory in the container, not an error: add its path here, then `make colima-restart`.
+# Applied by `make colima-restart` on the mini (colima/apply-mounts.sh); the MacBook keeps $HOME.
+~/IuRoot/epos-tool-athena rw
+~/IuRoot/worktrees/prometheus-dashboard ro
+~/.local/state/prometheus-scripts rw
+~/SourceRoot/basalt-ui-obsidian ro

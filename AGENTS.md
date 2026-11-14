@@ -260,7 +260,9 @@ negative-caching at two layers): `docs/remote-dev.md` §Dev-server doors.
 services restart colima`, both fight the supervised boot path.
 `colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/4/60**, MacBook
 **2/4/30**; ceilings; disk grows only via recreate; the mini's 4 GB is the Memory budget in
-`docs/devhost-health.md`, applied by the next planned `make colima-restart`, never by hand). Full model — the inverted
+`docs/devhost-health.md`, applied by the next planned `make colima-restart`, never by hand). On the mini the VM mounts
+only `colima/mounts.mini.txt` (not `$HOME`): a new bind mount elsewhere shows an empty directory, so add its path there
+first. Run `colima-restart` from the main checkout: the plist records the checkout it ran from. Full model — the inverted
 `KeepAlive` repair, brew silently regenerating the plist on every `brew
 services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,
 `kickstart -k` not re-reading the plist, `com.colima.docker-socket` for the

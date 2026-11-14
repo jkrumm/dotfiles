@@ -96,7 +96,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `sh.brew.caddy` | daemon (root) | local HTTPS + tailnet doors |
 | `sh.brew.dnsmasq` | daemon (root) | `*.test` DNS |
 | `sh.brew.tailscale` | daemon (root) | tailnet |
-| `sh.brew.postgresql@18` | KeepAlive | the mini's one Postgres (weatherorb's today; takes the Docker container's and Athena's databases at the cutover, then 127.0.0.1:5432), declared in `config/postgres/cluster.yaml` — `docs/postgres.md` |
+| `sh.brew.postgresql@18` | KeepAlive | the mini's one Postgres on 127.0.0.1:5432 and two sockets (since the cutover of 2026-11-14: shared, agent_workflows, weatherorb, athena and the rest), declared in `config/postgres/cluster.yaml` — `docs/postgres.md` |
 | `sh.brew.sleepwatcher` | KeepAlive | runs `~/.wakeup` |
 | `com.jkrumm.brain-sync` | 300s | vault reconcile via GitHub |
 | `com.jkrumm.brain-backup` | 03:30 daily | vault backup |
@@ -204,7 +204,7 @@ the weatherorb session workflow.
 | `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
 | `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
-| `com.iu.athena-postgres` | IuRoot (chat) | KeepAlive — Athena's own Postgres 18 for teamchat, Unix socket only (no TCP), data under `~/.local/state/athena`; rendered by `make -C chat pg-setup` |
+| `com.iu.athena-postgres` | IuRoot (chat) | **disabled** (`launchctl disable`) since the cutover of 2026-11-14: `athena` lives in the one Postgres on the same socket path; the old data dir under `~/.local/state/athena` is the 7-day rollback copy (`docs/postgres.md`). Was rendered by `make -C chat pg-setup` |
 | `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
 | `com.iu.teamchat-api` | IuRoot (chat) | KeepAlive — `make -C chat api` in the teamchat-runtime worktree |
 | `com.iu.teamchat-broker` | IuRoot (chat) | KeepAlive — `epx serve run --port 8790` in the teamchat-runtime worktree |
