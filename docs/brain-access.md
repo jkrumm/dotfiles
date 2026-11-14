@@ -61,17 +61,21 @@ heartbeat's obsidian component asserts the CLI answers.
 ## The read-only web door
 
 `~/SourceRoot/basalt-ui-obsidian` builds the vault into an offline-first static
-reader, served on the mini as `brain-web` (`:7733`) behind `brain.test` locally
-and `brain.mini.jkrumm.com` on the tailnet — how the iPhone reads the vault, with
+reader, served on the mini as `brain-web` by Caddy's `file_server` (loopback
+`:7733`, no container, no VM) behind `brain.test` locally and
+`brain.mini.jkrumm.com` on the tailnet — how the iPhone reads the vault, with
 no app and no copy. The ACL grant is the existing `tag:devhost` one on `tcp:443`,
 so it needs no new exposure.
 
 `com.jkrumm.brain-web-refresh` (300 s) keeps it current and is **downstream of
 brain-sync, not a replacement**: it polls the vault's git HEAD and runs
 `make refresh` only when it moved. A no-op tick is one `git rev-parse` and no log
-line. It **never touches the container** — nginx bind-mounts `dist/` read-only
-and reads it fresh per request, so a rebuild is live on the next request;
-recreating the container is `make up`'s job, for a code change.
+line. It rebuilds `dist/` in place and Caddy reads it fresh per request, so a
+rebuild is live on the next request with nothing to restart. The cache policy
+(no-cache for `/`, `/index.html`, `/vault.json`, `/search-index.json` and
+`/sw.js`; immutable `/assets/*`; SPA fallback to `/index.html`) lives in the
+`:7733` block of `config/Caddyfile`. This was an nginx container in the Colima
+VM until 2026-11-14, and a VM restart took the door down.
 
 Two constraints from that agent, both already paid for elsewhere:
 `ProgramArguments` points at the shell script and **never at a Homebrew binary**
