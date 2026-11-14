@@ -720,6 +720,33 @@ foreground, one hop) instead of hot-looping on `colima start -f`'s instant
   single resolver every caller goes through; nothing hardcodes a label. The old
   hardcoded path turned the converge step into `plist absent — nothing to
   supervise`, exit 0, over the stock plist it exists to repair.
+- **The default VM's resolver is derived at every start, never remembered.**
+  Lima's host resolver is the guest's default gateway, and the gateway moves when
+  lima renumbers the guest: the `default` and `teamchat` profiles share one lima
+  network, so whichever boots first takes `192.168.5.2` and the other gets the
+  next address. The `/etc/resolv.conf` colima wrote once at provisioning
+  (`nameserver 192.168.5.1`, 2026-06-08) went stale on 2026-11-14 18:54 CET when
+  teamchat restarted first; nothing answered DNS, the VPN container looped on
+  `could not resolve` and every container that resolves names was cut off for
+  about five minutes. The fix is `colima/vm-dns-guest.sh` (runs in the guest:
+  the default route's gateway becomes the only nameserver, prints `changed` or
+  `unchanged`), embedded in `colima.yaml` as the one `after-boot` provision step
+  by `colima/apply-provision.sh` (`colima-restart` and `_setup-colima` run it, so
+  a recreated VM has it). `after-boot` runs on every start, before the container
+  runtime, so no container reads a stale resolver on the start path.
+  `colima/vm-dns.sh apply [--restart]` does the same on a running VM and names
+  the containers that still hold the old resolver (they read it when they
+  start; `--restart` restarts them); `vm-dns.sh check` is the heartbeat's
+  `colima` probe line (a name resolves inside the VM; a failure names the
+  resolver in the file and the gateway). The teamchat VM is its repo's
+  (`scripts/vm-dns.sh` there), not this one.
+- **Order rule: never restart one colima profile while the other is booting.**
+  They share the lima network, so the address a VM gets depends on who boots
+  first. `make colima-restart` returns before the VM is down (`bootout` +
+  `bootstrap` hand the job to launchd and return), so a script that chains a
+  restart of one profile into the other starts the second while the first is
+  still booting. Wait for `colima status` (and `docker info`) of the first, then
+  touch the second.
 - `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` default per machine off the
   backend marker — mini **4 / 2 / 60**, MacBook **2 / 4 / 30** — because
   `colima-restart` writes cpu/memory back into `~/.colima/default/colima.yaml`

@@ -141,6 +141,8 @@ DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
 # plist, so anything else in there means brew regenerated it.
 COLIMA_PLIST="${COLIMA_PLIST:-$(brew_service_plist colima 2>/dev/null || brew_service_expected_plist colima)}"
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
+# Host half of the default VM's resolver (colima/vm-dns.sh): `check` resolves a name inside the VM.
+COLIMA_VM_DNS="${COLIMA_VM_DNS:-$HOME/SourceRoot/dotfiles/colima/vm-dns.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
@@ -1052,6 +1054,14 @@ probe_colima() {
     || { echo "colima boot path REVERTED — KeepAlive is '${keepalive:-unreadable}', not bare true, so a failed start is never retried (fix: make _colima-supervise)"; return 1; }
   [[ "$program" == "$COLIMA_START_WRAPPER" ]] \
     || { echo "colima boot path REVERTED — ProgramArguments:0 is '${program:-unreadable}', not the bounded-retry wrapper, so a broken image boot-loops every 10s (fix: make _colima-supervise)"; return 1; }
+
+  # Third assertion: a name RESOLVES inside the default VM. A running VM with a live docker socket says nothing
+  # about its resolver: on 2026-11-14 the file colima wrote once at provisioning went stale when the teamchat
+  # profile took its gateway address, the VPN container looped on `could not resolve` for five minutes, and
+  # everything above stayed green. The failure line names the resolver in the file and the gateway.
+  local dns
+  [[ -x "$COLIMA_VM_DNS" ]] || return 0
+  dns=$("$COLIMA_VM_DNS" check 2>&1) || { echo "${dns:-colima VM resolver check failed}"; return 1; }
 }
 
 probe_caddy() {

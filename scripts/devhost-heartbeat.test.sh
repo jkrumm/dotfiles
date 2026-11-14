@@ -34,6 +34,7 @@ case "\$*" in *api/push/*) ;; *7793*)
     if [ "\${STUB_FACTORY_DOWN}" = 1 ] || [ "\$n" -lt "\${STUB_FACTORY_DOWN}" ]; then exit 7; fi
   fi
   echo '{"heartbeat":{"ok":true,"tickAt":"t","queueMovedAt":"q"}}'; exit 0 ;; esac
+case "\$*" in *--unix-socket*_ping*) echo OK; exit 0 ;; esac
 [ "\${STUB_CURL_FAIL:-0}" = 1 ] && exit 22
 # STUB_CURL_TIMEOUT=once: the first push call times out (rc 28), later ones answer; =always: every push call does.
 case "\$*" in *api/push/*)
@@ -454,6 +455,35 @@ run_script DEVHOST_COMPONENTS="check_external_volume" VOLUME_GATE_CONFIG="$TMP/e
 assert_contains "attached and absent: a WARN line" "WARN: external volume absent" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 assert_contains "attached and absent: the monitor stays up" "status=up" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 assert_eq "attached and absent: exit 0" 0 "$RC"
+
+echo "colima probe: a name must resolve inside the default VM (seeded stale resolver)"
+mkdir -p "$TMP/home"
+printf '#!/bin/sh\ncase "$2" in *KeepAlive) echo true ;; *ProgramArguments:0) echo /x/colima-start.sh ;; esac\n' > "$TMP/plistbuddy"
+cat > "$TMP/colima-stub" <<STUB
+#!/bin/sh
+shift 4
+case "\$1" in
+  getent) ! /usr/bin/grep -q 192.168.5.1 "$TMP/guest-resolv.conf" ;;
+  awk) /usr/bin/awk '\$1=="nameserver"{printf "%s ", \$2}' "$TMP/guest-resolv.conf" ;;
+  sh) echo 192.168.5.2 ;;
+esac
+STUB
+chmod +x "$TMP/plistbuddy" "$TMP/colima-stub"
+: > "$TMP/colima.plist"
+colima_probe() {
+  run_script DEVHOST_COMPONENTS="check_services" HOME="$TMP/home" COLIMA_PLIST="$TMP/colima.plist" \
+    COLIMA_START_WRAPPER=/x/colima-start.sh PLISTBUDDY_BIN="$TMP/plistbuddy" \
+    COLIMA_VM_DNS="$HERE/../colima/vm-dns.sh" COLIMA_BIN="$TMP/colima-stub"
+}
+printf 'nameserver 192.168.5.2\n' > "$TMP/guest-resolv.conf"
+colima_probe
+case "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")" in *"no name resolves inside"*) bad "a resolving VM does not fail the probe" ;; *) ok "a resolving VM does not fail the probe" ;; esac
+printf 'nameserver 192.168.5.1\n' > "$TMP/guest-resolv.conf"
+colima_probe
+detail=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
+assert_contains "a seeded stale resolver fails the probe" "no name resolves inside the 'default' VM" "$detail"
+assert_contains "the failure names the resolver in the file" "names '192.168.5.1'" "$detail"
+assert_contains "the failure names the gateway" "default gateway is '192.168.5.2'" "$detail"
 
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')
