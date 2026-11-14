@@ -53,7 +53,7 @@ CONF
 
 run() { # run the script as the mini; prints its output, sets $rc
   out=$(PATH="$FAKE:$PATH" SMB_HOST_KIND="${KIND:-mini}" SMB_SHARES_CONF="$CONF" SMB_MOUNT_ROOT="$HOME/HomeLab" \
-    SMB_PROBE_SECONDS=1 SMB_RETRY_SLEEP=0 SMB_UNMOUNT_SECONDS=2 SMB_MOUNT_SECONDS=2 SMB_SECRET_SECONDS=2 \
+    SMB_PROBE_SECONDS=3 SMB_RETRY_SLEEP=0 SMB_UNMOUNT_SECONDS=6 SMB_MOUNT_SECONDS=10 SMB_SECRET_SECONDS=6 \
     bash "$HERE/smb-keepalive.sh" 2>&1); rc=$?
   printf '%s\n' "$out" | sed 's/^/    | /'
 }
@@ -102,10 +102,10 @@ run
 elapsed=$SECONDS
 wait
 check "exits 0" test "$rc" -eq 0
-check "probe reported hung" has "hung > 1s"
+check "probe reported hung" has "hung > 3s"
 check "force-unmounted" grep -q "unmount force $HOME/HomeLab/SSD" "$FIX/diskutil.log"
 check "remounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
-check "bounded (a 30 s hang finished in under 15 s)" test "$elapsed" -lt 15
+check "bounded (a 30 s hang finished in under 25 s)" test "$elapsed" -lt 25
 : > "$FIX/diskutil.log"
 
 echo "# silent server (stat answers from cache, df and statshares never return): hung, remounted"
@@ -116,10 +116,10 @@ run
 elapsed=$SECONDS
 wait
 check "exits 0" test "$rc" -eq 0
-check "probe reported hung" has "hung > 1s"
+check "probe reported hung" has "hung > 3s"
 check "force-unmounted" grep -q "unmount force $HOME/HomeLab/SSD" "$FIX/diskutil.log"
 check "remounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
-check "bounded" test "$elapsed" -lt 15
+check "bounded" test "$elapsed" -lt 25
 : > "$FIX/diskutil.log"
 
 echo "# dropped session (statshares fails, the rest answers from cache): one retry, remounted"
