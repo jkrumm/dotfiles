@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Content-refresh for the brain vault reader (~/SourceRoot/basalt-ui-obsidian,
-# served as `brain-web` on the mini — see its Makefile/docker-compose.yml).
+# served as `brain-web` on the mini by Caddy's file_server — see config/Caddyfile).
 # Every 5 minutes under launchd (com.jkrumm.brain-web-refresh), polls the
 # vault's git HEAD and rebuilds the reader's static site (`make refresh`) only
 # when it moved.
@@ -12,11 +12,9 @@
 # no-op tick (HEAD unchanged since the last refresh) must be cheap and
 # silent — one `git rev-parse`, nothing else, no log line.
 #
-# THIS AGENT NEVER TOUCHES THE CONTAINER. `make refresh` only rebuilds
-# apps/demo/dist — nginx bind-mounts that directory read-only and reads it
-# fresh off disk per request (see docker-compose.yml), so a new build is live
-# on its very next request with no restart. Recreating the container is
-# `make up`'s job, for a CODE change, not this agent's.
+# THERE IS NOTHING TO RESTART. `make refresh` only rebuilds apps/demo/dist —
+# Caddy's file_server (the :7733 block of config/Caddyfile) reads that directory
+# fresh off disk per request, so a new build is live on its very next request.
 set -euo pipefail
 
 # launchd hands agents a minimal PATH. `make refresh` shells out to `bun`

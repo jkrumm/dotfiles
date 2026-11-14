@@ -1172,10 +1172,10 @@ brain-backup-teardown:
 	echo "  ✓ brain-backup torn down (unloaded, plist and jobrun state removed)"
 
 # Content-refresh for the brain vault reader (~/SourceRoot/basalt-ui-obsidian,
-# served as the always-on `brain-web` container on the mini). Downstream of
+# served as `brain-web` by Caddy's file_server on the mini). Downstream of
 # brain-sync above: this polls the vault's git HEAD every 5 minutes and only
-# rebuilds the reader's static site (`make refresh`) when it moved — it never
-# touches the container, since nginx bind-mounts dist/ read-only. Self-guards
+# rebuilds the reader's static site (`make refresh`) when it moved — there is
+# nothing to restart, Caddy reads dist/ per request. Self-guards
 # on a missing vault or a missing basalt-ui-obsidian checkout.
 .PHONY: brain-web-refresh-setup brain-web-refresh-teardown
 brain-web-refresh-setup:
