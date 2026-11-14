@@ -265,9 +265,15 @@ the registry in the same commit as its plist (the doctor fails on a loaded job i
 
 | Tier | Rule |
 |-|-|
-| `core` | always on (herdr-core, factory, agw, Postgres, Caddy, hermes, home, iris, argo, finances, rb, schedules) |
-| `on-demand` | starts on the first request, stops idle (dev servers behind `.test` doors, teamchat sandbox, research-chrome) |
-| `manual` | a profile starts it: `work`, `dev-db` |
+| `core` | always on (herdr-core, factory, agw, Postgres, Caddy, hermes, home, iris, argo, finances, rb, schedules, the work stack: VPN, import dashboard, teamchat sandbox) |
+| `on-demand` | starts on the first request, stops idle (dev servers behind `.test` doors, research-chrome) |
+| `manual` | a profile starts it: `work` (student-enrolment, deploy gates), `dev-db` |
+
+**Run rules** (`rules/run-on-mini.md`, skill `mini-service`): five placement questions, a tier and a budget per entry, a never
+list (second Postgres or VM, `restart: unless-stopped` outside core, no `mem_limit`, a port off 127.0.0.1, a program in a worktree,
+a Postgres or cache image in a container). `make mini-ps` and `make doctor` FAIL on a breach with no record; a record is
+`debt: { <rule>: <plan row> }` or `exception: { <rule>: <reason> }` on the entry, FAILs once stale, and prints with
+`mini-registry debt`. The doctor never reads compose files; the factory's weekly hygiene probe does.
 
 `make mini-ps` (`FORMAT=json`) · `make mini-up NAME=` · `make mini-down NAME=` (core needs `FORCE=1`) · `make mini-profile NAME=work|dev-db UP=1|0`.
 

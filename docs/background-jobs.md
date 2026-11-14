@@ -4,6 +4,8 @@ description: How background jobs on both Macs are recorded and graded - the four
 
 # Background jobs — maturity ladder, `jobrun`, grading
 
+Where a job or service on the mini runs, what it declares and what never runs there: `rules/run-on-mini.md`; adding one: skill `mini-service`.
+
 > - **launchd stays the scheduler on both Macs.** Built-in no-overlap, catch-up on wake for calendar
 >   jobs, KeepAlive restarts. A shared daemon would add a single point of failure and fix nothing.
 > - **`jobrun` writes the run record; `jobs-grade` grades it.** A failure past the job's own

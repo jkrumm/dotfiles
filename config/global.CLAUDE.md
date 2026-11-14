@@ -144,6 +144,7 @@ Commit format and the amend rule: `rules/commit-conventions.md`.
 - **Never start dev servers** — Johannes validates running apps manually.
 - Node manager is **fnm**. `gback` = `git reset --soft HEAD~1`. Worktrees are
   Claude Code's native feature. Docker via Makefile targets only (a hook enforces it).
+- Adding a service, job, compose file, database or door on the mini: skill `mini-service` (rule `rules/run-on-mini.md`).
 - Launchers (`c`/`ch`, `cs`/`cf`, `oc`, and the
   Codex lane `cx`/`cxa`/`astra`): `AGENTS.md` §Claude Code launchers.
 

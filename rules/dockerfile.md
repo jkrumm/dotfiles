@@ -9,7 +9,9 @@ Most Dockerfile advice in training data predates BuildKit becoming the default
 (Docker Engine 23.0). The list below is the part that is unconditionally true;
 everything genuinely conditional is in **Decisions**, and must be asked, not
 defaulted. Running the containers is the `hooks/docker-makefile.ts` hook's
-business, not this file's.
+business, not this file's. A compose file that runs on the Mac mini also
+follows `rules/run-on-mini.md`: there `restart: unless-stopped` is core-only
+and `mem_limit` is required.
 
 ## Always
 
