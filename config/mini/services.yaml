@@ -43,7 +43,7 @@ services:
   - { name: brain-web-refresh, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-web-refresh, memory_mib: 50 }
   - { name: browser-reap, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.browser-reap, memory_mib: 50 }
   - { name: claude-accounts-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.claude-accounts-keepalive, memory_mib: 50 }
-  - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, memory_mib: 170 }
+  - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, memory_mib: 300 }
   - { name: devhost-health, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.devhost-health, memory_mib: 50 }
   - { name: disk-sweep, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-sweep, memory_mib: 50 }
   - { name: factory-door, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.factory-door, memory_mib: 50 }
