@@ -9,8 +9,8 @@ deploy:
   migrations: []
 ship:
   - { paths: ["**"], via: push }
-# Two leads at once; rows that restart a shared host service (Postgres, the VM, the work stack) take the `host` lane, one at a time.
-leads: 2
+# Four leads at once; rows that restart a shared host service (Postgres, the VM, the work stack) take the `host` lane, one at a time.
+leads: 4
 lanes:
   host: 1
 signals:
