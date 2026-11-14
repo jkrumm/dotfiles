@@ -46,6 +46,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `hooks/{session-env,protect-branches,docker-makefile,broad-kill-guard,review-bypass-guard,herdr-core-guard,test-slot,permission-allow,machine-role,model-discipline,iu-model-guard}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · usage adapter over `claude-account` (uv script, no API calls) — `docs/statusline.md` |
+| `scripts/shared-chrome.ts` | `~/.local/bin/shared-chrome` | `ensure`/`status`/`stop` for the one headless Chrome behind `/browse`; its supervisor is `com.jkrumm.shared-chrome` (`make shared-chrome-setup`, in `make setup`) |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
 | `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd work\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
@@ -462,7 +463,9 @@ declarations) lives in `~/SourceRoot/dotfiles-private`; full model in its
 absent, and exporting it bills API credits instead.
 
 **MCP servers**: none registered at user scope. `chrome-devtools` is declared inline in
-`agents/browser.md` and runs only while that subagent does (`/browse` forks it); a
+`agents/browser.md` and runs only while that subagent does (`/browse` forks it); it attaches to
+the **shared headless Chrome** (`shared-chrome ensure`, `127.0.0.1:9223`, on demand, one isolated context per agent, idle 15 min,
+`docs/global-reference.md` §Shared browser) and is for performance work only, `playwright-cli` drives the rest; a
 user-scope server costs an `npx` + `node` pair (~124 MiB) in every session, 24 of them
 held 2978 MiB idle on the mini. `make setup` removes any leftover registration, project-local ones too
 (`projects[<dir>].mcpServers` in every account's `.claude.json`, which the user-scope remove and

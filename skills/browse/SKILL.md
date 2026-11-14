@@ -1,31 +1,29 @@
 ---
 name: browse
-description: Chrome DevTools debugging via haiku subagent — console, network, DOM, screenshots. Isolates expensive MCP responses from main context.
+description: Browser checks on the shared headless Chrome via a haiku subagent — screenshots, DOM, console, network, performance. Keeps screenshots and page dumps out of the main context.
 context: fork
 agent: browser
 background: false
 model: haiku
 ---
 
-# Browse — Chrome DevTools Debugging
+# Browse — checks on the shared Chrome
 
-Debug frontend issues using Chrome DevTools MCP in an isolated forked context.
+Drive a page in a real browser from an isolated forked context.
 
 ## How It Works
 
-The `chrome-devtools` MCP is **not registered**. It is declared inline in `agents/browser.md`, so it starts when this skill's forked `browser` subagent starts and stops when it returns: idle sessions carry no `npx` + `node` pair (~124 MiB each). Tool schemas are deferred; load them via ToolSearch. The fork also keeps MCP responses (~5-20k tokens for screenshots, DOM, network) out of the main thread.
+One headless Chrome serves every browser agent on the machine (`shared-chrome ensure` starts it on the first use; it stops by itself 60 s after the last context). The `browser` subagent drives it with **playwright-cli**, one isolated context per run (own cookies and storage), viewport **1600x1100** by default. A task that needs another size says so (a repo's design bar names it) and the agent resizes before its first screenshot. The `chrome-devtools` MCP is declared in `agents/browser.md`, attached to the same Chrome, and used only for performance traces, Lighthouse and CSS inspection. Nothing is registered per session; the fork also keeps screenshots and DOM dumps (5-20k tokens) out of the main thread.
 
-## Available Tools
-
-Load tools on demand via ToolSearch, e.g. `ToolSearch("select:mcp__chrome-devtools__navigate_page")`: `navigate_page`, `take_screenshot`, `list_console_messages`, `list_network_requests`, `evaluate_script`, `click`, `fill`.
+Not for basalt-ui's own layout and quality suites (they start their own Chrome inside test slots) and not for the research Chrome on port 9222 (`agw web`).
 
 ## Workflow
 
 1. **Navigate** to the target URL
-2. **Check console** for errors
-3. **Check network** for failed requests
-4. **Screenshot** if visual validation needed
-5. **Evaluate** JS if DOM inspection needed
+2. **Console** and **network** for errors and failed requests
+3. **Screenshot** if visual validation is needed (size checked in the PNG)
+4. **Evaluate** JS or take a snapshot if DOM inspection is needed
+5. **Detach**: closes the agent's context
 
 ## Output Format
 
@@ -35,7 +33,7 @@ Return a concise findings report to the main agent:
 
 **Console errors:** [count] — [summary]
 **Network failures:** [count] — [summary]
-**Visual:** [description or "looks correct"]
+**Visual:** [description or "looks correct"] ([screenshot path], [WxH])
 **Action needed:** [yes/no + what]
 ```
 

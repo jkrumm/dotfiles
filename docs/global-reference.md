@@ -38,7 +38,7 @@ Everything routed through `agw` exists only on the mini.
 | Mode | Skills |
 |-|-|
 | `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`agw review prepare|submit|dispose|covered`, reviewer agent in-session) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
-| MCP · subagent | `/browse` (`browser` agent, chrome-devtools inline, haiku) · `/analyze` (fallow in a native subagent) |
+| CLI + MCP · subagent | `/browse` (`browser` agent, haiku: playwright-cli on the shared Chrome, chrome-devtools MCP inline for performance; see *Shared browser*) · `/analyze` (fallow in a native subagent) |
 | Workflow fan-out | `/lenses` (40 to 90 expert angles on one undertaking: question-first catalogue, one Opus agent per lens, source audit, gap rounds, synthesis handover; tens of millions of tokens, only on an explicit ask) |
 | inline — git | `/commit` (`--split`/`--amend`) |
 | inline — build | `/upgrade-deps` · `/archify` |
@@ -148,3 +148,18 @@ import 'basalt-ui/styles.css'            // declares @layer mantine, basalt
 One table: `AGENTS.md` §Claude Code launchers (and `docs/codex.md` for the
 non-Anthropic lane: `cx`, `cxa`, `astra`). Rationale:
 `brain/wiki/engineering/model-routing.md`.
+
+## Shared browser
+
+One headless Chrome serves every browser check (`/browse`, `agents/browser.md`), replacing a chrome-devtools-mcp plus its own Chrome
+per agent (about 135 MiB for the server, wrapper and watchdog, 0.35 to 0.45 GiB for Chrome).
+
+| | |
+|-|-|
+| Command | `shared-chrome ensure` (starts it, prints `http://127.0.0.1:9223`) · `status` · `stop`; `make shared-chrome-status` |
+| Process | Chrome headless, profile `~/.local/share/shared-chrome` (never signed in anywhere), DevTools on `127.0.0.1:9223` only. The port drives the browser for anything on the machine that can reach it |
+| Supervisor | `scripts/shared-chrome.ts run` under `com.jkrumm.shared-chrome` (loaded, not running; `ensure` kickstarts it; with no job loaded `ensure` runs it detached). Registry: `shared-chrome`, on-demand |
+| Idle | a context whose pages did not open, close, navigate or retitle for 15 min is closed (the same 15 min is `playwright-cli attach --idle-timeout`, which detaches and closes the session's context); 60 s without a context, Chrome stops and the supervisor exits. A crashed Chrome ends the supervisor and the next `ensure` restarts both |
+| Drive | `playwright-cli` 0.1.24 (`make setup`, npm global): `attach --cdp=<url>`, `tab-new --isolated-context=<name>`, `resize 1600 1100`, `detach`. A new context is 1280x720; `resize` sets the viewport and the screenshot size is the check |
+| Not covered | basalt-ui's own harness (starts its own Chrome in test slots) and the research Chrome on `:9222` (`agw web`) |
+| Log | `~/Library/Logs/shared-chrome.log` |

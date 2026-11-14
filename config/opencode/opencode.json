@@ -24,8 +24,7 @@
           "npx",
           "-y",
           "chrome-devtools-mcp@1.10.1",
-          "--isolated",
-          "--headless",
+          "--browserUrl=http://127.0.0.1:9223",
           "--usageStatistics=false"
         ]
       }

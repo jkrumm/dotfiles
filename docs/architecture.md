@@ -109,6 +109,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.smb-keepalive` | 60 s + network change | mounts and heals the HomeLab Samba shares at `~/HomeLab/<share>` (`docs/macbook.md` §HomeLab Samba); HomeLab down = skipped, exit 0 |
 | `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, stale `$TMPDIR` entries, package caches, Lima IPSW downloads |
 | `com.jkrumm.browser-reap` | 1800s | ends orphaned test-browser Chrome trees (`scripts/browser-reap.py`): temp `--user-data-dir` `playwright_chromiumdev_profile-*` / `puppeteer_dev_chrome_profile-*`, every root's parent launchd, older than 30 min; never the owner's Chrome, a persistent profile or a tree with a live launcher; kills by pid, `make browser-reap-setup`, log `~/Library/Logs/browser-reap.log` |
+| `com.jkrumm.shared-chrome` | on demand (`shared-chrome ensure`) | the supervisor of the one headless Chrome the browse path shares (`scripts/shared-chrome.ts`): DevTools on `127.0.0.1:9223`, own profile under `~/.local/share/shared-chrome`, one isolated context per agent; closes a context idle 15 min and stops Chrome 60 s after the last; loaded, not running, until the first `ensure` (`make shared-chrome-status`) |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → ntfy chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.hc-events` | KeepAlive | the herdr-core event record: `events.subscribe` via `hc connect` (only while `lib/core-up.sh` says a launchd-born core answers: `hc connect` would start a core) into the same `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.snapshot` lines carry the terminal roster, `recorder.gap` lines (stream ended, `missed`, unparseable line, silence) mark holes; records only; `make hc-events-setup`, log `~/Library/Logs/hc-events.log` |
 | `com.jkrumm.hc-resume` | KeepAlive | Claude session resume on herdr-core: subscribes via `hc connect` (only while `lib/core-up.sh` says a launchd-born core answers: `hc connect` would start a core) and types `claude --resume <id>` into the login shell of a kept terminal whose program was lost, from the `jk.claude.*` labels `hooks/hc-session-label.ts` sets; `make hc-resume-setup`, log `~/Library/Logs/hc-resume.log`, `docs/herdr-core.md` §Resume |
@@ -257,7 +258,7 @@ verbs and grading: [`mini-registry.md`](mini-registry.md).
 | Tier | Rule | Members |
 |-|-|-|
 | `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules |
-| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors, the teamchat sandbox, `research-chrome` |
+| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors, the teamchat sandbox, `research-chrome`, `shared-chrome` |
 | `manual` | started and stopped as a profile | `work` (VPN, dashboard, token minters), `dev-db` (mariadb, redis, clickstack) |
 
 The tier is recorded here and enforced by nothing yet; the rows that make `on-demand` and `manual` real are in
