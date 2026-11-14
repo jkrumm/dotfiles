@@ -98,7 +98,7 @@ services:
   - { name: weatherorb-worker-round, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.worker-round, memory_mib: 200 }
   - { name: colima, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.colima, memory_mib: 50 }
   - { name: sleepwatcher, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.sleepwatcher, memory_mib: 50 }
-  - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, note: "budget 1536 once row pg-buffers has shipped shared_buffers 512MB", memory_mib: 3584 }
+  - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, memory_mib: 1536 }
   - { name: caddy, repo: dotfiles, kind: launchd, tier: core, label: sh.brew.caddy, daemon: true, process: caddy, memory_mib: 100, note: "root daemon; needs sudo to stop, no verb registered" }
   - { name: dnsmasq, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.dnsmasq, daemon: true, process: dnsmasq, memory_mib: 20, note: "root daemon; *.test DNS" }
   - { name: tailscale, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.tailscale, daemon: true, process: tailscaled, memory_mib: 150, note: "root daemon" }

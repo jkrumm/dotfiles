@@ -93,4 +93,4 @@ fix), so both FAIL lines name it until that job is installed from a release dir 
 
 Budgets start at 1.5 times what each job used on 2026-11-14 (50 MiB for a timer between runs). They exist to make a
 leak visible, not to cap anything. A budget that keeps warning is a number to raise, with the reason in the commit.
-Postgres carries 3.5 GiB now and drops to 1.5 GiB with row `pg-buffers`.
+Postgres carries 1.5 GiB since row `pg-buffers` set `shared_buffers` to 512 MB (it was 3.5 GiB).

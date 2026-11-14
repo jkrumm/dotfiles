@@ -383,7 +383,7 @@ working set that fills it.
 |-|-|-|-|-|
 | VM guests (Virtualization.framework) | 2 | 8.1 GB | **6.1 GB** | Colima 6.1 GB resident, teamchat VM 2.0 GB; compressor holds ~11.6 GB of their pages |
 | weatherorb python | 14 | 5.6 GB | 3.6 GB | steady ~0.9 GB; the `round` worker's two pool processes burst to 2–2.8 GB each for minutes |
-| host postgres@18 | 47 | 5.1 GB | 5.1 GB | `shared_buffers = 4GB` (weatherorb, deliberate), counted on the io worker and checkpointer |
+| host postgres@18 | 47 | 5.1 GB | 5.1 GB | `shared_buffers = 4GB` (weatherorb, deliberate), counted on the io worker and checkpointer; since 2026-11-14 512 MB (`docs/postgres.md`) |
 | claude sessions | 18 | 4.1 GB | 7 GB | ~0.23 GB each (idle resumed ones 0.19, working leads 0.4); 30 terminals = 7 GB |
 | node / bun / opencode | 57 | 3.6 GB | 3.6 GB | dev servers, MCP servers, opencode |
 | system daemons + launchd | 263 | 2.3 GB | 2.3 GB | plus 2.3 GB wired |
@@ -432,7 +432,7 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
 |-|-|-|
 | teamchat VM 4 GiB → 2 GiB (0.7 GB used) | 2 GiB | profile lives in the IuRoot teamchat repo; its restart is already owner-timed (after MR !296) |
 | weatherorb `round` pool: cap concurrent processes at one | one | another repo; filed as a signal there |
-| postgres `shared_buffers` 4 GB → 2 GB | keep 4 GB | trades 31–38 ms p95 for ~2 GB; a measured product choice |
+| postgres `shared_buffers` 4 GB → 2 GB | keep 4 GB | trades 31–38 ms p95 for ~2 GB; a measured product choice. Later: 2 GB, then 512 MB on 2026-11-14 while weatherorb's jobs are disabled (revert signal in `docs/postgres.md`) |
 | Chrome / Obsidian | no limit | 0.5 GB, not a driver |
 
 ## Upstream drift
