@@ -75,6 +75,7 @@ services:
   - { name: modelpick-refresh, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-refresh, memory_mib: 50 }
   - { name: modelpick-web, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-web, door: modelpick, memory_mib: 60 }
   - { name: obsidian-autostart, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.obsidian-autostart, memory_mib: 50 }
+  - { name: rb, repo: rb, kind: launchd, tier: core, label: com.jkrumm.rb, door: rb, stop: "make -C ~/SourceRoot/rb down", note: "native since Issue 1184, always reachable (owner); 127.0.0.1:4050, health /api/health; the budget covers its headless Chrome during a fetch run (about 0.4 GiB, stopped after 180 s idle); start is launchctl bootstrap of the plist", memory_mib: 600 }
   - { name: research-chrome, repo: agent-workflows, kind: launchd, tier: on-demand, label: com.jkrumm.research-chrome, memory_mib: 700 }
   - { name: smb-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.smb-keepalive, memory_mib: 50 }
   - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, memory_mib: 250 }
@@ -105,8 +106,6 @@ services:
   - { name: external-volume-unlock, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.external-volume-unlock, memory_mib: 50, note: "installed by its own target, not make setup (docs/external-ssd.md); 120 s, StartOnMount" }
   - { name: colima-default, repo: dotfiles, kind: vm, tier: core, vm: default, start: "make -C ~/SourceRoot/dotfiles colima-start", stop: "make -C ~/SourceRoot/dotfiles colima-stop", memory_mib: 4608, note: "core until row mini-docker-idle makes the VM start on demand" }
   - { name: colima-teamchat, repo: epos-ai-teamchat-athena, kind: vm, tier: on-demand, vm: teamchat, memory_mib: 4608, note: "kept up by teamchat-vm-watch; no verb until row teamchat-on-demand" }
-  - { name: rb-api, repo: rb, kind: compose, tier: core, container: rb-api, project: rb, needs: [vm], door: rb, memory_mib: 160, note: "always reachable (owner); no verb: rb's make up/down act on its whole compose project (rb-chromium too); native under row rb-native" }
-  - { name: rb-chromium, repo: rb, kind: compose, tier: core, container: rb-chromium, project: rb, needs: [vm], memory_mib: 160, note: "no verb, see rb-api" }
   - { name: brain-web, repo: basalt-ui-obsidian, kind: compose, tier: core, container: brain-web, project: basalt-ui-obsidian, needs: [vm], door: brain, start: "make -C ~/SourceRoot/basalt-ui-obsidian up", stop: "make -C ~/SourceRoot/basalt-ui-obsidian down", memory_mib: 32, note: "nginx on a static dist; Caddy takes it over under row mini-docker-idle" }
   - { name: dashboard-api, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: dashboard-api, project: dashboard, needs: [vm], memory_mib: 500, note: "no verb until row mini-work-profile" }
   - { name: dashboard-ui, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: dashboard-ui, project: dashboard, needs: [vm], memory_mib: 32 }

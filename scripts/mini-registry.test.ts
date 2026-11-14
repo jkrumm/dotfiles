@@ -117,7 +117,7 @@ describe("registry parsing", () => {
     expect(real.errors).toEqual([])
     expect(real.services.length).toBeGreaterThan(100)
     expect(real.services.filter((s) => s.tier === "manual" && s.profile === "dev-db").map((s) => s.name)).toContain("mariadb")
-    expect(real.services.find((s) => s.name === "rb-api")?.tier).toBe("core")
+    expect(real.services.find((s) => s.name === "rb")?.tier).toBe("core")
     const doors = real.services.flatMap((s) => s.doors)
     for (const d of ["argo-live", "brain", "rb", "linewatch", "fpp", "rollhook", "weatherorb-tiles"]) expect(doors).toContain(d)
   })
