@@ -72,6 +72,7 @@ PLAYWRIGHT_CLI_VERSION := 0.1.24
 # core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
 # xcodes (Xcode manager) ships from scripts/install-xcodes.sh (pinned, sha256 + signature).
 PYMOBILEDEVICE3_VERSION := 11.50.0
+OSXPHOTOS_VERSION := 0.78.1
 
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
@@ -118,6 +119,7 @@ setup:
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
+	@$(MAKE) --no-print-directory icloud-photos-export-setup
 	@$(MAKE) --no-print-directory shared-chrome-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
@@ -822,7 +824,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -3038,6 +3040,37 @@ hc-reap-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.hc-reap.json"; \
 	echo "  ✓ hc-reap torn down (unloaded, plist and jobrun state removed)"
 
+# Nightly iCloud Photos archive on the HomeLab (scripts/icloud-photos-export.py), mini only: osxphotos (pinned) reads the
+# signed-in library, `hl` uploads new and changed assets to Bilder/iCloud, nothing is deleted. docs/storage.md §iCloud Photos export.
+.PHONY: icloud-photos-export-setup icloud-photos-export-teardown icloud-photos-export-run icloud-photos-export-status icloud-photos-export-test
+icloud-photos-export-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — icloud-photos-export skipped"; exit 0; fi; \
+	if [ "$$(uv tool list 2>/dev/null | awk '$$1=="osxphotos"{print $$2}')" = "v$(OSXPHOTOS_VERSION)" ]; then \
+		echo "    · osxphotos $(OSXPHOTOS_VERSION) (ok)"; \
+	else \
+		uv tool install --force "osxphotos==$(OSXPHOTOS_VERSION)" >/dev/null 2>&1 \
+			&& echo "    ✓ osxphotos $(OSXPHOTOS_VERSION) installed" \
+			|| { echo "    ✗ osxphotos install failed — uv tool install osxphotos==$(OSXPHOTOS_VERSION)"; exit 1; }; \
+	fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/icloud-photos-export.py"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.icloud-photos-export" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ 01:30 daily → new and changed Photos assets to homelab:ssd/Bilder/iCloud (hl); log: ~/Library/Logs/icloud-photos-export.log"
+icloud-photos-export-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.icloud-photos-export.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.icloud-photos-export.json"; \
+	echo "  ✓ icloud-photos-export torn down (unloaded, plist and jobrun state removed; the export and its ledger stay)"
+icloud-photos-export-run: ## Run the iCloud Photos export once now (the nightly job's own run, foreground)
+	@python3 $(DOTFILES_DIR)/scripts/icloud-photos-export.py
+icloud-photos-export-status: ## Last iCloud Photos export: the status file with counts, then the jobs-grade row
+	@python3 $(DOTFILES_DIR)/scripts/icloud-photos-export.py --status; \
+	jobs-grade 2>/dev/null | jq -r '.[] | select(.label=="com.jkrumm.icloud-photos-export") | "grade: \(.grade)"' 2>/dev/null || true
+icloud-photos-export-test: ## Hermetic suite for icloud-photos-export.py (fake osxphotos and hl, no Photos, no network)
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/icloud-photos-export.test.py
+
 # The shared headless Chrome for UI checks (scripts/shared-chrome.ts): one Chrome, DevTools on 127.0.0.1:9223,
 # its own profile, one isolated context per agent. The job is loaded but not running; `shared-chrome ensure`
 # starts it and its supervisor stops it when no context is left. Any machine. Log: ~/Library/Logs/shared-chrome.log.
@@ -3784,6 +3817,7 @@ help:
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
 	@echo "  make shared-chrome-status        The shared headless Chrome behind /browse: up/down, supervisor, contexts (shared-chrome-setup, shared-chrome-teardown)"
 	@echo "  make browser-reap-setup         Load the 30-min reaper for orphaned Playwright/puppeteer Chrome trees (browser-reap-run ARGS=--dry-run, browser-reap-teardown)"
+	@echo "  make icloud-photos-export-setup Load the 01:30 iCloud Photos archive to the HomeLab (mini; -run, -status, -test, -teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make storage-status             Shares, mounts, free space, mirror and backup age (ARGS=--json; docs/storage.md §Status)"

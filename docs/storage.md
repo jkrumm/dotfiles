@@ -24,7 +24,7 @@ with one exception: the Shutterflow library, which syncs its finals to B2 itself
 |-|-|-|-|
 | Documents (tax, finance, studies, CV, sailing) | `SSD/Dokumente` | EXT mirror | restic |
 | Fuji finals | the Shutterflow library on the MacBook | none | B2, by Shutterflow's own sync |
-| Phone photos since 2021 (35,540 assets, 96 GiB) | iCloud Photos | **none yet**: a nightly export to `SSD/Bilder/iCloud` (plan row `icloud-photos-export`) | restic, once exported |
+| Phone photos since 2021 (20,981 library assets, 78 GiB of originals) | iCloud Photos | nightly export to `SSD/Bilder/iCloud` by `com.jkrumm.icloud-photos-export` (§iCloud Photos export); complete once Photos has downloaded the originals | restic |
 | Other photos: phone archives to 2020, old libraries to 2019 | `SSD/Bilder` | EXT mirror | restic |
 | Books, dev archive, small personal videos, public files | `SSD/{Bücher,Dev,Videos,Public}` | EXT mirror | restic |
 | Fuji RAWs | `HDD/fuji/RAWs` | EXT mirror | restic |
@@ -60,6 +60,7 @@ SSD/                      HDD/                       EXT/
 |-|-|-|-|
 | restic (`homelab` repo, `docs/backups.md`) | SSD share, `HDD/fuji/RAWs`, `HDD/backups`, service state → B2 | daily 03:30 | Uptime Kuma push monitor, 25 h |
 | EXT mirror (plan row `ext-mirror`, not built yet) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror` | nightly, pulled by the mini over S3 (`hl`) | `jobrun` grade and a status file on EXT |
+| iCloud Photos export (`com.jkrumm.icloud-photos-export`, dotfiles) | the mini's Photos library → `SSD/Bilder/iCloud/<year>/<month>/` | nightly 01:30, over S3 (`hl`) | `jobrun` grade, `Bilder/iCloud/.status.json` |
 | Shutterflow sync (its own app) | finals on the MacBook → B2 | on demand | the app's pipeline view |
 
 The mirror pulls over S3 because the mini's S3 key cannot delete on the HomeLab, and because a
@@ -73,6 +74,34 @@ exclude rule (build output, caches, macOS metadata), among them one 1.3 GiB phon
 name ends in `.tmp`. Open gaps (homelab row `restic-verify`): no scheduled `restic check`, no
 restore drill since 2026-05-04, and the 1Password vault export (`~/backups/1password` on the
 HomeLab, age-encrypted, the recovery root for everything else) is not a source.
+
+## iCloud Photos export
+
+`scripts/icloud-photos-export.py` (`make icloud-photos-export-setup`, mini only) archives the phone photos, which have iCloud and
+the phone as their only copies. Nothing in it talks to Apple or to Photos: the mini is signed in to iCloud Photos with
+**Download Originals to this Mac**, Photos itself pulls the originals, and the job reads the library files.
+
+| Piece | How |
+|-|-|
+| Reader | `osxphotos` 0.78.1 (`uv tool install`, pinned as `OSXPHOTOS_VERSION` in the Makefile), read-only against `~/Pictures/Photos Library.photoslibrary`. No AppleScript, no PhotoKit, no Automation prompt |
+| Permission | the two osxphotos steps run as `hc exec` children of the herdr core, so they read the library under `Herdr Core.app`'s Full Disk Access (`docs/tcc.md`); the job's own program holds no grant. The job checks `scripts/lib/core-up.sh` before any `hc` call (a call starts a stray core, which has no grant): core not up at 01:30 is one `FAILED` line, exit 1, graded `failing`, and no core is started |
+| Scope | library assets that are not trashed and not in a shared album (`--not-shared`): 20,981 on 2026-11-14, 2020 to today. The 14,478 shared-album assets (2017 to 2026, other people's photos at reduced size, 1,456 with a local file) are named in the status as `shared_album_assets_excluded` and not exported. The plan row's 35,540 counted both, plus the trash |
+| Target | `homelab:ssd/Bilder/iCloud/<year>/<month>/<YYYY-MM-DD_HHMMSS>_<original name>`; an edit is `…_edited.<ext>` beside the original, a Live Photo's `.mov` beside its still. Written with `hl` (S3), never through `~/HomeLab/SSD` |
+| Incremental | the ledger (`~/.local/state/icloud-photos-export/ledger.json`, a copy at `Bilder/iCloud/.ledger.json`, restored from it when the state is lost) records each asset's stamp (modified or added date, edit flag, size). Unchanged assets are not touched; a changed one is exported again over its own names |
+| Archive, not a mirror | no `--cleanup`, no delete anywhere (the mini's S3 key cannot delete either): an asset removed or trashed in Photos stays, counted as `kept_after_removal`. A second asset that would land on an archive name already taken fails loudly instead of overwriting it |
+| Bounds | batches of 1,000 assets or 10 GiB staged under `~/.local/state/icloud-photos-export/stage`, uploaded with `hl copy`, size-checked with `hl check --one-way`, then emptied; each osxphotos step ends at 600 s; no new batch after 6,000 s (`jobrun --timeout 7200`); nothing starts below 40 GiB free on the Data volume. An asset whose original, edit render or Live video is not on disk yet is `pending_local` and waits for the next night |
+| Away | HomeLab unreachable: one `skipped` line, exit 0. A missing `hl` secret or a failed asset: exit 1 |
+| Status | `Bilder/iCloud/.status.json` and a local copy: `library_assets`, `exported_assets`, `pending_local`, `new_this_run`, `changed_this_run`, `failed`, `kept_after_removal`, `shared_album_assets_excluded`, `bytes_uploaded_this_run`, `free_gib`, `last_ok`. `make icloud-photos-export-status` prints it and the job's grade |
+
+Measured on 2026-11-14 against the live library from a core terminal, with a local stand-in for `hl`: 1,052 of the 1,068 originals then on disk
+(a Live Photo or edit whose second file was missing waited) exported in 227 s (query about 60 s), 2.5 GB, three batches' worth of
+staging at most; the second run exported 0 and took 69 s. The export of everything waits on Photos: **Download Originals to
+this Mac** (Photos > Settings > iCloud) is the owner's one click, and the job exports whatever is on disk each night until the
+download ends. Switching Photos back to Optimize Mac Storage later frees the space but new photos then stop arriving as originals,
+so the export would miss them.
+
+Restic's 03:30 run covers `SSD/Bilder`, and the EXT mirror pulls it from there, so the archive reaches the offsite copy the
+night after it is written.
 
 ## Mounts
 
@@ -164,7 +193,7 @@ keepalive `unloaded` with 378 failures in a row (issue 1106 owns that).
 | Immich | retired (homelab issue 1201). It only showed the pre-Shutterflow copy of the finals in `SSD/Bilder/Fuji`; that copy and the old staging folder go once B2 is proven to hold every file |
 
 The mini's Photos library (`~/Pictures`, 19 GiB) stays: it is the signed-in iCloud client, with
-1,093 of the originals on disk, and the machine the export reads from.
+1,093 of the originals on disk, and the machine the export reads from. Once Photos holds all originals (**Download Originals**, §iCloud Photos export) it grows by about 75 GiB, then about 15 GiB a year (`docs/disk.md`).
 
 ## Found on 2026-11-14
 
@@ -177,7 +206,7 @@ Content hashes over the SSD share, `HDD/fuji` and the personal folders on EXT.
 | Second film copy on the HDD's other partition, frozen since 2025-01 | 2.0 TiB | stale: delete after approval |
 | Old Shutterflow staging folder overlaps the finals folder | 13 GiB of 27 | stale: the library on the MacBook superseded both |
 | Byte-identical duplicates elsewhere in the SSD share | under 3 GiB | not worth a pass |
-| iCloud Photos is the only copy of the phone photos from 2021 on. The library on the SSD share ends in 2019, the phone folders in 2020, and none of the mini's local originals exist on the HomeLab | 96 GiB | **one copy, at a sync service**: plan row `icloud-photos-export` |
+| iCloud Photos is the only copy of the phone photos from 2021 on. The library on the SSD share ends in 2019, the phone folders in 2020, and none of the mini's local originals exist on the HomeLab | 78 GiB of originals (96 GiB with shared albums) | **one copy, at a sync service**, until the nightly export has caught up with Photos' download: §iCloud Photos export |
 
 The duplication the many iterations were suspected of is small. The real gap was the opposite:
 data with one copy.
