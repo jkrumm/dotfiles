@@ -369,7 +369,7 @@ section_jobs() {
 
 # --- Service registry (mini) --------------------------------------------------
 # config/mini/services.yaml + the repos' mini-services.yaml (docs/mini-registry.md): FAIL on a loaded job the registry does
-# not know and on a job whose program is inside a worktree; a budget breach is a WARN. The same check feeds the heartbeat.
+# not know, on a job whose program is inside a worktree and on a service below its declared process_type (or whose plist lost it); a budget breach is a WARN. The same check feeds the heartbeat.
 section_registry() {
   hdr "Service registry (make mini-ps)"
   local bun_dir out summary rc=0

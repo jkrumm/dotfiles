@@ -340,7 +340,7 @@ describe("process type", () => {
     expect(f.lines.join("\n")).toContain("FAIL plist has no ProcessType interactive: pg (key missing")
   })
 
-  test("a stopped service is not graded, and an entry without the field is never graded", () => {
+  test("a stopped service has no priority to grade, and an entry without the field is never graded", () => {
     const services = reg(pg()).services
     const stopped = grade(services, snap({ procs, pri: parsePri("10 20\n"), loaded: [{ pid: null, status: 0, label: "sh.brew.postgresql@18" }], plists: [plist("sh.brew.postgresql@18")] }))
     expect(stopped.rows[0]).toMatchObject({ state: "stopped", pri: null, below_band: false })

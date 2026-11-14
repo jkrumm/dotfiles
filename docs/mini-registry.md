@@ -101,7 +101,7 @@ its stop took 27.9 s on Postgres lock timeouts and a read of Postgres timed out 
   has no ProcessType`. This is what a brew rewrite looks like while the process still runs at 31.
 
 `make mini-ps` shows the priority in a `PRI` column (`BELOW-BAND` marks a miss); `FORMAT=json` carries `pri`, `process_type` and
-`below_band`. A stopped service is not graded. Both findings are FAIL in `make doctor` and the heartbeat's `check_registry`.
+`below_band`. A stopped service has no priority to grade, but its plist file is still checked: the next start would lose the band. Both findings are FAIL in `make doctor` and the heartbeat's `check_registry`.
 
 A repo declares it in its own `mini-services.yaml` and puts the key in the plist it renders; the registry never writes a plist.
 Postgres is the exception that proves why the check exists: brew writes its plist, so the key has a converge step

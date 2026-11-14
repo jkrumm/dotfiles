@@ -1330,7 +1330,7 @@ check_spotlight() {
 }
 
 # The service registry (config/mini/services.yaml, docs/mini-registry.md): a loaded job the registry does not know and a
-# job whose program lives in a worktree FAIL (the detail monitor goes DOWN and the factory door files an Issue); a memory
+# job whose program lives in a worktree, a service running below its declared process_type and a plist that lost it FAIL (the detail monitor goes DOWN and the factory door files an Issue); a memory
 # budget breach is a WARN. `make doctor` runs the same check on demand; this is what makes it reach the factory on its own.
 check_registry() {
   local bun_dir out rc=0
