@@ -3,7 +3,8 @@
 // the Mac mini with its tier, memory budget and start/stop verbs. docs/mini-registry.md.
 //
 //   mini-registry ps    [--format table|json]    tier, state, footprint against budget, drift
-//   mini-registry check                          drift and budget findings only; exit 1 on drift, 2 on a budget breach
+//   mini-registry check                          drift, run-rule and budget findings only; exit 1 on drift or a rule breach, 2 on a budget breach
+//   mini-registry debt                           the recorded breaches (debt and exceptions), one per line
 //   mini-registry up    NAME                     start what NAME needs first, then NAME
 //   mini-registry down  NAME [--force]           stop NAME; a core service needs --force
 //   mini-registry profile NAME --up|--down       every manual service of a profile (work, dev-db)
@@ -34,6 +35,13 @@ export type Kind = (typeof KINDS)[number]
 export type Tier = (typeof TIERS)[number]
 export type ProcessType = (typeof PROCESS_TYPES)[number]
 
+// The run rules (rules/run-on-mini.md). A DETECTED rule is judged from the registry and the probes, so a debt field for it
+// can go stale; a DECLARED one cannot be seen from here (a KeepAlive agent that polls in a loop looks like a server).
+export const RULES = ["restart-policy", "no-memory-limit", "port-binding", "second-vm", "shared-infrastructure", "no-budget", "worktree-program"] as const
+export const DECLARED_RULES = ["keepalive-poll", "docker-build-tool"] as const
+export type Rule = (typeof RULES)[number]
+const ALL_RULES: readonly string[] = [...RULES, ...DECLARED_RULES]
+
 export type Service = {
   name: string
   repo: string
@@ -60,9 +68,17 @@ export type Service = {
   stop?: string
   status?: string
   note?: string
+  // a breach of a run rule that is known and has a plan row (debt), or is allowed for a stated reason (exception); rule -> row | reason
+  debt: Record<string, string>
+  exception: Record<string, string>
+  // a root one-shot at boot: no process to budget
+  oneshot?: boolean
 }
 
-export type Loaded = { services: Service[]; errors: string[] }
+// A breach that belongs to no service of the registry (a make target that runs docker): recorded in the host file's top-level `debt:` list.
+export type ListedDebt = { repo: string; target: string; rule: string; plan: string }
+
+export type Loaded = { services: Service[]; errors: string[]; listed: ListedDebt[] }
 
 const FAMILY = /^(com\.jkrumm\.|com\.iu\.|ai\.hermes\.|homebrew\.mxcl\.|sh\.brew\.|com\.colima\.)/
 const NAME = /^[a-z0-9][a-z0-9.-]*$/
@@ -76,16 +92,36 @@ export function expand(text: string, home = HOME): string {
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined)
 
+function ruleMap(raw: unknown, field: string, err: (m: string) => void): Record<string, string> {
+  if (raw == null) return {}
+  if (typeof raw !== "object" || Array.isArray(raw)) { err(`${field} must map a rule to a ${field === "debt" ? "plan row" : "reason"}`); return {} }
+  const out: Record<string, string> = {}
+  for (const [rule, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!ALL_RULES.includes(rule)) err(`${field}: unknown rule ${rule} (${ALL_RULES.join(", ")})`)
+    else if (!str(v)) err(`${field}.${rule} must name ${field === "debt" ? "the plan row that fixes it" : "the reason it is allowed"}`)
+    else out[rule] = str(v)!
+  }
+  return out
+}
+
 export function parseRegistry(text: string, source: string, repoDefault?: string, home = HOME): Loaded {
   const errors: string[] = []
   let doc: unknown
   try {
     doc = Bun.YAML.parse(text)
   } catch (e) {
-    return { services: [], errors: [`${source}: ${(e as Error).message}`] }
+    return { services: [], errors: [`${source}: ${(e as Error).message}`], listed: [] }
   }
   const rows = (doc as { services?: unknown })?.services
-  if (!Array.isArray(rows)) return { services: [], errors: [`${source}: no services list`] }
+  if (!Array.isArray(rows)) return { services: [], errors: [`${source}: no services list`], listed: [] }
+  const listed: ListedDebt[] = []
+  const rawListed = (doc as { debt?: unknown }).debt
+  if (rawListed != null && !Array.isArray(rawListed)) errors.push(`${source}: debt must be a list of { repo, target, rule, plan }`)
+  for (const d of Array.isArray(rawListed) ? (rawListed as Record<string, unknown>[]) : []) {
+    const at = `${source}: debt ${JSON.stringify(d)}`
+    if (!str(d?.repo) || !str(d?.target) || !str(d?.plan) || !ALL_RULES.includes(String(d?.rule))) { errors.push(`${at}: needs repo, target, plan and a known rule`); continue }
+    listed.push({ repo: str(d.repo)!, target: str(d.target)!, rule: String(d.rule), plan: str(d.plan)! })
+  }
   const services: Service[] = []
   for (const raw of rows as Record<string, unknown>[]) {
     const name = str(raw?.name)
@@ -112,6 +148,7 @@ export function parseRegistry(text: string, source: string, repoDefault?: string
       vm: str(raw.vm), process: str(raw.process), shared_memory: raw.shared_memory === true,
       start: str(raw.start) && expand(str(raw.start)!, home), stop: str(raw.stop) && expand(str(raw.stop)!, home),
       status: str(raw.status) && expand(str(raw.status)!, home), note: str(raw.note),
+      debt: ruleMap(raw.debt, "debt", err), exception: ruleMap(raw.exception, "exception", err), oneshot: raw.oneshot === true,
     }
     if (raw.process_type != null) {
       if (!PROCESS_TYPES.includes(raw.process_type as ProcessType)) err(`process_type must be one of ${PROCESS_TYPES.join(", ")}`)
@@ -124,7 +161,7 @@ export function parseRegistry(text: string, source: string, repoDefault?: string
     if (kind === "vm" && !s.process && !s.vm) err("a vm service needs vm: <colima profile>")
     services.push(s)
   }
-  return { services, errors }
+  return { services, errors, listed }
 }
 
 export function validate(services: Service[]): string[] {
@@ -165,7 +202,7 @@ export function validate(services: Service[]): string[] {
 }
 
 export function loadAll(roots = defaultRoots(), hostFile = HOST_FILE, home = HOME): Loaded {
-  const out: Loaded = { services: [], errors: [] }
+  const out: Loaded = { services: [], errors: [], listed: [] }
   const files: [string, string | undefined][] = [[hostFile, undefined]]
   for (const root of roots) {
     if (!existsSync(root)) continue
@@ -178,6 +215,7 @@ export function loadAll(roots = defaultRoots(), hostFile = HOST_FILE, home = HOM
     const r = parseRegistry(readFileSync(file, "utf8"), file.replace(`${home}/`, "~/"), repo, home)
     out.services.push(...r.services)
     out.errors.push(...r.errors)
+    out.listed.push(...r.listed)
   }
   out.errors.push(...validate(out.services))
   return out
@@ -257,7 +295,25 @@ export function parseDisabled(out: string): Set<string> {
   return set
 }
 
-export type Container = { name: string; project: string; state: string; mib: number | null }
+export type Container = {
+  name: string; project: string; state: string; mib: number | null
+  // docker inspect: absent when the inspect pass did not run
+  image?: string; restart?: string; limit_mib?: number; bind_hosts?: string[]
+}
+
+// `docker inspect --format '{{.Name}}|{{.Config.Image}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.Memory}}|{{range $p, $b := .HostConfig.PortBindings}}{{range $b}}[{{.HostIp}}]{{end}}{{end}}'`
+export function parseInspect(out: string): Map<string, Pick<Container, "image" | "restart" | "limit_mib" | "bind_hosts">> {
+  const map = new Map<string, Pick<Container, "image" | "restart" | "limit_mib" | "bind_hosts">>()
+  for (const line of out.split("\n")) {
+    const [name, image, restart, mem, binds = ""] = line.split("|")
+    if (!name || image === undefined) continue
+    map.set(name.replace(/^\//, ""), {
+      image, restart: restart || "no", limit_mib: Math.round(Number(mem || 0) / 1048576),
+      bind_hosts: [...binds.matchAll(/\[([^\]]*)\]/g)].map((m) => m[1]),
+    })
+  }
+  return map
+}
 
 export function parseContainers(ps: string, stats: string): Container[] {
   const mem = new Map<string, number>()
@@ -422,21 +478,121 @@ export function grade(services: Service[], snap: Snapshot): { rows: Row[]; drift
   return { rows, drift }
 }
 
-// check: 1 = fail (an unregistered loaded job, a program inside a worktree, a service below its declared band or whose
+// ---------------------------------------------------------------- run rules
+
+export type Breach = { service: string; rule: Rule; detail: string }
+export type RuleReport = {
+  failures: Breach[] // breaches with no debt field and no exception
+  debt: (Breach & { plan: string })[]
+  allowed: (Breach & { reason: string })[]
+  stale: { service: string; rule: string }[] // a debt or exception field whose breach is gone
+  declared: { service: string; rule: string; plan: string }[] // debt on a rule the registry cannot see
+  listed: ListedDebt[]
+  warnings: string[] // the limits of a VM's core services add up to more than the VM
+  worktreeLabels: Set<string> // worktree programs this report already judges
+}
+
+const SHARED_IMAGE = /(^|\/)(postgres(ql)?|redis|valkey|keydb|memcached)(:|@|$)/
+// the last label segment names the software: com.iu.athena-postgres, sh.brew.postgresql@18, com.jkrumm.valkey
+const SHARED_LABEL = /(^|[.-])(postgres(ql)?|redis|valkey|keydb|memcached)(@[\d.]+)?$/
+const family = (word: string) => (/^postgres/.test(word) ? "postgres" : "cache")
+
+// Breaches of rules/run-on-mini.md among what the registry lists. Container rules need the inspect pass: a container that is not there
+// (a manual project that is down, a VM that is off) is not judged, which is also why its debt field is not judged stale.
+export function ruleBreaches(services: Service[], snap: Snapshot): Breach[] {
+  const out: Breach[] = []
+  const add = (s: Service, rule: Rule, detail: string) => out.push({ service: s.name, rule, detail })
+  for (const s of services) {
+    if (s.memory_mib === 0 && s.kind !== "static" && !s.oneshot) add(s, "no-budget", "memory_mib is 0 (set 1.5 times the footprint after an hour of use)")
+    if (s.kind === "vm" && (s.vm ?? "default") !== "default") add(s, "second-vm", `Colima profile ${s.vm}: the mini runs one VM, the default`)
+    if (s.kind === "compose") {
+      const c = containerFor(s, snap)
+      if (c?.restart !== undefined) {
+        if (/^(always|unless-stopped)$/.test(c.restart) && s.tier !== "core") add(s, "restart-policy", `restart ${c.restart} on a ${s.tier} service: only a core service restarts itself`)
+        if (c.limit_mib === 0) add(s, "no-memory-limit", "no mem_limit")
+        const open = (c.bind_hosts ?? []).filter((h) => h !== "127.0.0.1" && h !== "::1")
+        if (open.length) add(s, "port-binding", `published on ${[...new Set(open.map((h) => h || "0.0.0.0"))].join(", ")}, not 127.0.0.1`)
+      }
+      if (c?.image && SHARED_IMAGE.test(c.image)) add(s, "shared-infrastructure", `image ${c.image}: Postgres and a cache are one native instance under launchd, not a container per app`)
+    }
+  }
+  // native instances: the one Postgres is a brew service; a cache is allowed once, when a service needs it
+  const native = services.filter((s) => s.kind === "launchd" && s.label && SHARED_LABEL.test(s.label!))
+  for (const [fam, list] of Object.entries(Object.groupBy(native, (s) => family(s.label!.match(SHARED_LABEL)![2])))) {
+    const keep = fam === "postgres" ? list!.find((s) => /^(sh\.brew|homebrew\.mxcl)\./.test(s.label!)) : list![0]
+    for (const s of list!) if (s !== keep) add(s, "shared-infrastructure", `a second native ${fam === "postgres" ? "Postgres" : "cache"} instance beside ${keep?.name ?? "the one"}`)
+  }
+  const loaded = new Set(snap.loaded.map((r) => r.label))
+  for (const s of services) {
+    const key = s.label && normalizeLabel(s.label)
+    const p = key ? snap.plists.find((x) => normalizeLabel(x.label) === key) : undefined
+    if (p && p.program.includes("/.claude/worktrees/") && (loaded.has(p.label) || p.domain === "system")) add(s, "worktree-program", p.program)
+  }
+  return out
+}
+
+// A breach is a failure unless its service carries a debt field (a plan row fixes it) or an exception (a reason it is allowed).
+// A field whose breach is gone is stale: it must go, or the next breach hides behind it.
+export function gradeRules(services: Service[], snap: Snapshot, listed: ListedDebt[] = []): RuleReport {
+  const breaches = ruleBreaches(services, snap)
+  const r: RuleReport = { failures: [], debt: [], allowed: [], stale: [], declared: [], listed, warnings: [], worktreeLabels: new Set() }
+  for (const b of breaches) {
+    const s = services.find((x) => x.name === b.service)!
+    if (b.rule === "worktree-program" && s.label) r.worktreeLabels.add(s.label)
+    if (s.debt[b.rule]) r.debt.push({ ...b, plan: s.debt[b.rule] })
+    else if (s.exception[b.rule]) r.allowed.push({ ...b, reason: s.exception[b.rule] })
+    else r.failures.push(b)
+  }
+  for (const s of services) {
+    for (const [rule, plan] of Object.entries(s.debt)) {
+      if (!(RULES as readonly string[]).includes(rule)) r.declared.push({ service: s.name, rule, plan })
+      else if (!breaches.some((b) => b.service === s.name && b.rule === rule) && judgeable(s, rule as Rule, snap)) r.stale.push({ service: s.name, rule })
+    }
+    for (const rule of Object.keys(s.exception)) {
+      if ((RULES as readonly string[]).includes(rule) && !breaches.some((b) => b.service === s.name && b.rule === rule) && judgeable(s, rule as Rule, snap)) r.stale.push({ service: s.name, rule })
+    }
+  }
+  for (const vm of services.filter((x) => x.kind === "vm")) {
+    const limits = services.filter((x) => x.kind === "compose" && x.tier === "core" && (x.vm ?? "default") === vm.vm).reduce((a, x) => a + (containerFor(x, snap)?.limit_mib ?? 0), 0)
+    if (vm.memory_mib > 0 && limits > vm.memory_mib) r.warnings.push(`core services of VM ${vm.vm} are limited to ${limits} MiB in total, the VM has ${vm.memory_mib}`)
+  }
+  return r
+}
+
+// Whether the probes could have seen the breach: a container rule needs the container inspected.
+function judgeable(s: Service, rule: Rule, snap: Snapshot): boolean {
+  if (["restart-policy", "no-memory-limit", "port-binding"].includes(rule)) return containerFor(s, snap)?.restart !== undefined
+  if (rule === "shared-infrastructure" && s.kind === "compose") return containerFor(s, snap)?.image !== undefined
+  return true
+}
+
+export function debtLines(r: RuleReport): string[] {
+  return [
+    ...r.debt.map((d) => `${d.service}: ${d.rule} -> ${d.plan} (${d.detail})`),
+    ...r.declared.map((d) => `${d.service}: ${d.rule} -> ${d.plan} (declared; the registry cannot see it)`),
+    ...r.listed.map((d) => `${d.repo} make ${d.target}: ${d.rule} -> ${d.plan}`),
+    ...r.allowed.map((d) => `${d.service}: ${d.rule} allowed: ${d.reason}`),
+  ]
+}
+
+// check: 1 = fail (an unregistered loaded job, a run-rule breach with no debt, a stale debt field, a service below its declared band or whose
 // plist lost its ProcessType), 2 = warn (budget breach), 0 = clean
-export function findings(rows: Row[], drift: Drift): { lines: string[]; rc: number } {
+export function findings(rows: Row[], drift: Drift, rules?: RuleReport): { lines: string[]; rc: number } {
   const lines: string[] = []
   for (const l of drift.unknown_jobs) lines.push(`FAIL loaded job not in the registry: ${l}`)
-  for (const l of drift.worktree_jobs) lines.push(`FAIL job program inside a worktree: ${l}`)
+  const worktree = drift.worktree_jobs.filter((l) => !rules?.worktreeLabels.has(l.split(" ")[0]))
+  for (const l of worktree) lines.push(`FAIL job program inside a worktree: ${l}`)
+  for (const b of rules?.failures ?? []) lines.push(`FAIL ${b.service} breaks rule ${b.rule}: ${b.detail}`)
+  for (const s of rules?.stale ?? []) lines.push(`FAIL ${s.service}: the ${s.rule} breach is gone, remove its debt/exception field`)
   for (const r of rows.filter((r) => r.below_band)) lines.push(`FAIL runs below its declared process type: ${r.name} at priority ${r.pri}, ${r.process_type} is ${INTERACTIVE_PRI} (reload the job; docs/mini-registry.md §Process type)`)
   // the running process can still be fine while the file launchd reads at the next boot is not: brew rewrites its plists on a restart
   for (const r of rows.filter((r) => r.process_type && r.plist_process_type !== undefined && r.plist_process_type?.toLowerCase() !== r.process_type)) {
     lines.push(`FAIL plist has no ProcessType ${r.process_type}: ${r.name} (${r.plist_process_type ?? "key missing"}; the next start loses the band)`)
   }
+  for (const w of rules?.warnings ?? []) lines.push(`WARN ${w}`)
   for (const r of rows.filter((r) => r.over)) lines.push(`WARN over budget: ${r.name} ${r.footprint_mib} MiB of ${r.budget_mib}`)
   const failed = lines.some((l) => l.startsWith("FAIL"))
-  const rc = failed ? 1 : rows.some((r) => r.over) ? 2 : 0
-  return { lines, rc }
+  return { lines, rc: failed ? 1 : rows.some((r) => r.over) || rules?.warnings.length ? 2 : 0 }
 }
 
 // ---------------------------------------------------------------- verbs
@@ -529,6 +685,8 @@ async function readPlists(): Promise<Plist[]> {
   }))
 }
 
+const INSPECT_FORMAT = "{{.Name}}|{{.Config.Image}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.Memory}}|{{range $p, $b := .HostConfig.PortBindings}}{{range $b}}[{{.HostIp}}]{{end}}{{end}}"
+
 const COLIMA_VMS: Record<string, string> = { default: "colima", teamchat: "colima-teamchat" }
 
 async function readVms(procs: Proc[], vmNames: string[]): Promise<Map<string, { running: boolean; mib: number }>> {
@@ -570,11 +728,19 @@ export async function snapshot(services: Service[], { withDoors }: { withDoors: 
   const containers = new Map<string, Container[]>()
   await Promise.all([...vms].filter(([, v]) => v.running).map(async ([name]) => {
     const env = { DOCKER_HOST: `unix://${HOME}/.colima/${name}/docker.sock` }
-    const [ps, stats] = await Promise.all([
+    const [ps, stats, ids] = await Promise.all([
       run([docker, "ps", "-a", "--format", '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.State}}'], env),
       run([docker, "stats", "--no-stream", "--format", "{{.Name}}|{{.MemUsage}}"], env),
+      run([docker, "ps", "-aq"], env),
     ])
-    containers.set(name, parseContainers(ps.out, stats.out))
+    const list = parseContainers(ps.out, stats.out)
+    const idList = ids.out.split("\n").filter(Boolean)
+    if (idList.length) {
+      const inspect = await run([docker, "inspect", "--format", INSPECT_FORMAT, ...idList], env)
+      const by = parseInspect(inspect.out)
+      for (const c of list) Object.assign(c, by.get(c.name))
+    }
+    containers.set(name, list)
   }))
   return {
     uid, procs, pri: parsePri(pri.out), loaded: parseLaunchctlList(list.out), disabled: parseDisabled(disabled.out), plists, systemRunning, vms, containers,
@@ -586,7 +752,7 @@ export async function snapshot(services: Service[], { withDoors }: { withDoors: 
 
 const MIB = (n: number | null) => (n === null ? "-" : n >= 1024 ? `${(n / 1024).toFixed(1)}G` : `${n}M`)
 
-export function renderTable(rows: Row[], drift: Drift, services: Service[]): string {
+export function renderTable(rows: Row[], drift: Drift, services: Service[], rules?: RuleReport): string {
   const out: string[] = []
   for (const tier of TIERS) {
     const part = rows.filter((r) => r.tier === tier)
@@ -616,6 +782,14 @@ export function renderTable(rows: Row[], drift: Drift, services: Service[]): str
   section("doors no service claims", drift.unclaimed_doors)
   section("disabled leftovers (plist still installed)", drift.disabled)
   if (Object.values(drift).every((l) => l.length === 0)) out.push("  none")
+  if (rules) {
+    out.push("", "RUN RULES (rules/run-on-mini.md)")
+    for (const b of rules.failures) out.push(`  FAIL ${b.service}: ${b.rule}: ${b.detail}`)
+    for (const s of rules.stale) out.push(`  FAIL ${s.service}: the ${s.rule} field is stale`)
+    const debt = debtLines(rules)
+    out.push(...debt.map((l) => `  debt  ${l}`))
+    if (!rules.failures.length && !rules.stale.length && !debt.length) out.push("  none")
+  }
   return out.join("\n")
 }
 
@@ -626,8 +800,8 @@ async function main(argv: string[]) {
   const flag = (n: string) => rest.includes(n)
   const arg = rest.find((a) => !a.startsWith("--"))
   const fmt = rest.includes("--format") ? rest[rest.indexOf("--format") + 1] : "table"
-  if (!verb || !["ps", "check", "up", "down", "profile", "list"].includes(verb)) {
-    console.error("usage: mini-registry ps [--format table|json] | check | up NAME | down NAME [--force] | profile NAME --up|--down")
+  if (!verb || !["ps", "check", "debt", "up", "down", "profile", "list"].includes(verb)) {
+    console.error("usage: mini-registry ps [--format table|json] | check | debt | up NAME | down NAME [--force] | profile NAME --up|--down")
     return 2
   }
   const backend = (() => {
@@ -640,7 +814,7 @@ async function main(argv: string[]) {
     console.error(`FAIL registry invalid:\n  ${loaded.errors.join("\n  ")}`)
     return 1
   }
-  const { services } = loaded
+  const { services, listed } = loaded
   if (verb === "list") { console.log(services.map((s) => s.name).join("\n")); return 0 }
   if (verb === "up" || verb === "down") {
     const refused = refusal(services, verb, arg, flag("--force"))
@@ -653,14 +827,20 @@ async function main(argv: string[]) {
     : await probe
   if (!snap) { console.log(`registry: probes did not finish in ${CHECK_DEADLINE_MS / 1000} s, not graded`); return 2 }
   const { rows, drift } = grade(services, snap)
+  const rules = gradeRules(services, snap, listed)
 
   if (verb === "ps") {
-    if (fmt === "json") console.log(JSON.stringify({ at: new Date().toISOString(), services: rows, drift }, null, 2))
-    else console.log(renderTable(rows, drift, services))
+    if (fmt === "json") console.log(JSON.stringify({ at: new Date().toISOString(), services: rows, drift, rules: { ...rules, worktreeLabels: undefined } }, null, 2))
+    else console.log(renderTable(rows, drift, services, rules))
+    return 0
+  }
+  if (verb === "debt") {
+    const lines = debtLines(rules)
+    console.log(lines.length ? lines.join("\n") : "no recorded breaches")
     return 0
   }
   if (verb === "check") {
-    const f = findings(rows, drift)
+    const f = findings(rows, drift, rules)
     for (const l of f.lines) console.log(l)
     console.log(f.rc === 0 ? `registry: ${rows.length} services, no drift, within budget` : `registry: ${f.lines.length} finding(s) over ${rows.length} services (make mini-ps)`)
     return f.rc
