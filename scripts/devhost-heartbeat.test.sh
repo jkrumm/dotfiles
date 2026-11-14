@@ -400,6 +400,49 @@ run_script DEVHOST_COMPONENTS="check_kernel_panics" DEVHOST_TEST_UPTIME_S=120
 assert_eq "no report: no push" 0 "$(/usr/bin/grep -c 'ntfy.invalid' "$TMP/curl.log")"
 assert_contains "no report: says so" "no kernel panic on record" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 
+echo "recovery: the core component carries the measured line, a WARN (never a FAIL) and the snapshot counts"
+mkdir -p "$TMP/config"
+printf '#!/bin/sh\n[ -z "${STUB_SOCK_DOWN:-}" ]\n' > "$TMP/bin/nc"
+printf '#!/bin/sh\nprintf "    0 /sbin/launchd\\n    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/ready\\n"\n' > "$TMP/ps-core"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/resp"
+cat > "$TMP/hc" <<'STUB'
+#!/bin/sh
+echo "$*" >> "$HC_CALLED"
+case "$1 $2" in
+  "server status") echo '{"version":"0.1.18","uptime_ms":5000}'; exit 0 ;;
+  "machine ls") echo '{"machines":[{"version":"0.1.18"}]}'; exit 0 ;;
+esac
+[ "$1" = connect ] || exit 1
+cat > /dev/null
+printf '{"jsonrpc":"2.0","id":1,"result":{"terminals":[{"address":"t1","state":"live","keep":true,"labels":{"jk.claude.session":"aaaaaaaa-1"},"foreground":{"argv":["/x/claude"]}},{"address":"t2","state":"live","keep":true,"labels":{"jk.claude.session":"aaaaaaaa-2"},"foreground":{"argv":["/bin/zsh","-l"]}},{"address":"t3","state":"live","keep":false,"labels":{},"foreground":{"argv":["/bin/zsh","-l"]}}]}}\n'
+STUB
+chmod +x "$TMP/bin/nc" "$TMP/ps-core" "$TMP/resp" "$TMP/hc"
+core_env=(NC_BIN="$TMP/bin/nc" PS_BIN="$TMP/ps-core" HC_BIN="$TMP/hc" HC_RESPONSIBLE_BIN="$TMP/resp" HC_SOCKET="$TMP/sock" HC_CALLED="$TMP/hc-called"
+  CORE_PEER_SSH_HOST= XDG_CONFIG_HOME="$TMP/config" RECOVERY_RESUME_LOG="$TMP/none-resume.log")
+detail_line() { /usr/bin/grep 'push/detail' "$TMP/curl.log"; }
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/tailnet-up-at" "$TMP/hc-called"
+run_script DEVHOST_COMPONENTS="check_core" DEVHOST_TEST_UPTIME_S=1500 "${core_env[@]}"
+assert_contains "booted 25 min ago: the line is in the core detail" "recovery: 2 resumable, 1 running claude, 1 waiting, 0 skipped" "$(detail_line)"
+assert_eq "tailnet stub down, no stamp: not a WARN" 0 "$(detail_line | /usr/bin/grep -c 'WARN: ')"
+assert_eq "snapshot carries the counts" '{"resumable":2,"running":1,"waiting":1,"skipped":0,"sent":0}' "$(/usr/bin/jq -c 'select(.recovery) | .recovery' "$TMP/snapshots.jsonl")"
+echo $(( $(date +%s) - 700 )) > "$TMP/state/tailnet-up-at"
+run_script DEVHOST_COMPONENTS="check_core" DEVHOST_TEST_UPTIME_S=1500 "${core_env[@]}"
+assert_contains "11 min after tailnet-up: WARN" "WARN: core 0.1.18, up 5s" "$(detail_line)"
+assert_contains "...naming the shortfall" "WARN: fewer running than resumable" "$(detail_line)"
+assert_eq "a WARN is no FAIL: exit 0" 0 "$RC"
+assert_contains "a WARN keeps the monitor up" "status=up" "$(detail_line)"
+rm -f "$TMP/hc-called"
+run_script DEVHOST_COMPONENTS="check_core" DEVHOST_TEST_UPTIME_S=2800 "${core_env[@]}"
+assert_eq "booted 46 min ago: no recovery line" 0 "$(detail_line | /usr/bin/grep -c 'recovery:')"
+run_script DEVHOST_COMPONENTS="check_core" DEVHOST_TEST_UPTIME_S=1500 DEVHOST_RECOVERY=0 "${core_env[@]}"
+assert_eq "DEVHOST_RECOVERY=0: no recovery line" 0 "$(detail_line | /usr/bin/grep -c 'recovery:')"
+assert_eq "...and no terminal.list" 0 "$(/usr/bin/grep -c '^connect' "$TMP/hc-called")"
+rm -f "$TMP/hc-called"
+run_script DEVHOST_COMPONENTS="check_core" DEVHOST_TEST_UPTIME_S=1500 STUB_SOCK_DOWN=1 "${core_env[@]}"
+assert_contains "no core: the core check FAILs as before" "FAIL: no core answers" "$(detail_line)"
+assert_eq "...and no hc call, no recovery line" "0 0" "$([[ -e "$TMP/hc-called" ]] && echo 1 || echo 0) $(detail_line | /usr/bin/grep -c 'recovery:')"
+rm -f "$TMP/state/tailnet-up-at" "$TMP/snapshots.jsonl"
+
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')
 [[ -n "$list" ]] && ok "default list found" || bad "default list found"

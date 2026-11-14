@@ -92,6 +92,43 @@ culprit, nothing had recorded what ran, and nobody was told (`docs/incident-2026
   (autorestart) is exactly that. The reboot push is the alert for it. The monitor intervals live in the homelab repo and are
   unchanged here.
 
+### Recovery after a boot (issue 1126)
+
+After the 2026-11-13 panic reboot hc-resume typed 25 resumes and five minutes later only 10 terminals showed as
+`claude-code`; nothing computed "resumable versus running". `scripts/recovery-check.sh` does, read-only:
+`make recovery-check` prints one line, `make recovery-check ARGS=--json` the per-terminal rows.
+
+```
+recovery: 25 resumable, 10 running claude, 12 waiting, 3 skipped
+```
+
+| Number | Counts |
+|-|-|
+| resumable | live terminals, kept, labelled `jk.claude.session`: what hc-resume may bring back |
+| running claude | resumable whose foreground is `claude` (or whose agent reported itself, hc-resume's own live-agent rule) |
+| waiting | resumable, not running, foreground positively a login shell: not typed into yet, or typed and Claude is still loading |
+| skipped | the rest: foreground unknown or another program, which hc-resume never types into |
+
+running + waiting + skipped = resumable. The JSON adds, per terminal, hc-resume's last verdict since boot from
+`~/Library/Logs/hc-resume.log`: `sent` (at), `skipped` or `failed` (with the reason). A waiting terminal with verdict
+`sent` was typed and Claude has not started yet; one with no verdict is still in hc-resume's queue.
+
+**Expected curve** (defaults, `docs/herdr-core.md` §Resume pacing): tailnet up at T; `waiting` falls by one every 3 s (three
+in flight), the last send is typed about T + 75 s for 25 sessions, `running` follows each send by Claude's own start time,
+so `running = resumable` about 2 to 3 minutes after tailnet-up. Still short at 10 minutes: read the `failed` and `skipped`
+reasons, then the pacing lines in the log.
+
+**In the heartbeat.** `check_core` runs the sub-check only while the host booted less than 45 minutes ago
+(`DEVHOST_RECOVERY_WINDOW_S`, 2700): the line is appended to the core detail, and the counts go to
+`~/Library/Logs/devhost-snapshots.jsonl` as `{ts, up_s, tailnet_up_s, recovery: {resumable, running, waiting, skipped, sent}}`
+(`jq -c 'select(.recovery) | [.ts,.recovery]' ~/Library/Logs/devhost-snapshots.jsonl`: the curve per 5-minute run). From 10
+minutes after the heartbeat first saw the tailnet Running (`DEVHOST_RECOVERY_WARN_AFTER_S`, stamp
+`~/.local/state/devhost-health/tailnet-up-at`) it adds a **WARN** when running is below resumable: never a FAIL, never a
+DOWN. A terminal someone closed on purpose stays labelled and counts as waiting, so the WARN can outlast a real recovery;
+the window ends it. `DEVHOST_RECOVERY=0` turns the sub-check off. It never runs when no launchd-born core answers
+(`lib/core-up.sh` first, so `hc` never starts a core) and its one `terminal.list` over `hc connect` is bounded at 5 s.
+Rollback: revert the commit; nothing else depends on it.
+
 ### Job failures reach a lead, not the owner (`jobs-grade --report`)
 
 `jobs-grade --summary --report` (run in the `jobs` component) replaced `--ntfy`. A job not ok for **2 consecutive grades**

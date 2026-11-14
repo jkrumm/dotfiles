@@ -107,6 +107,8 @@ export HC_BIN="${HC_BIN:-$HOME/.local/bin/hc}"
 export LAUNCHCTL_BIN="${LAUNCHCTL_BIN:-/bin/launchctl}"
 # shellcheck source=lib/core-health.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/core-health.sh"
+# shellcheck source=recovery-check.sh
+source "$(dirname "${BASH_SOURCE[0]}")/recovery-check.sh"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
@@ -527,8 +529,22 @@ check_sshd() {
 # `hc server status` does not answer; WARN (rc 2) when the core or a holder is not attributed to Herdr Core.app
 # or the other machine runs a different version. The peer version is
 # cached 30 min in STATE_DIR so a 300 s heartbeat does not ssh to a laptop every run.
+#
+# Recovery sub-check (issue 1126): only in the first 45 minutes after a boot, read-only, one bounded `terminal.list`
+# (scripts/recovery-check.sh): "recovery: 25 resumable, 10 running claude, 12 waiting, 3 skipped" is appended to the core
+# line and to the snapshot log. WARN (rc 2, never a FAIL) when fewer run claude than are resumable, from 10 minutes after
+# the tailnet came up. DEVHOST_RECOVERY=0 turns it off. Nothing here runs when the core check itself FAILs.
 check_core() {
-  CORE_PEER_CACHE_FILE="$STATE_DIR/core-peer-version" core_health_check
+  local out rc=0 rec rrc=0 ts_running=0
+  out=$(CORE_PEER_CACHE_FILE="$STATE_DIR/core-peer-version" core_health_check) || rc=$?
+  if (( rc != 1 )); then
+    [[ "${_TS_SELF%%|*}" != "Running" ]] || ts_running=1
+    rec=$(recovery_heartbeat "$uptime_s" "$STATE_DIR/tailnet-up-at" "$ts_running") || rrc=$?
+    [[ -z "$rec" ]] || out="$out; $rec"
+    if (( rc == 0 && rrc == 2 )); then rc=2; fi
+  fi
+  echo "$out"
+  return "$rc"
 }
 
 check_agents_md_flag() {
