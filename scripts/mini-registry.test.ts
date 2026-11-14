@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Plist, type Snapshot, footprint, findings, grade, loadAll, normalizeLabel, parseContainers, parseDisabled,
-  parseLaunchctlList, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
+  hostRefusal, parseLaunchctlList, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
 } from "./mini-registry.ts"
 
 const HOME = "/home/u"
@@ -89,6 +89,27 @@ describe("registry parsing", () => {
     expect(ok.services.map((s) => [s.name, s.repo])).toEqual([["web", "dotfiles"], ["extra", "myrepo"]])
     writeFileSync(join(dir, "src", "myrepo", "mini-services.yaml"), "services:\n  - { name: web, kind: launchd, tier: core, label: com.jkrumm.other, memory_mib: 1 }")
     expect(loadAll([join(dir, "src")], join(dir, "host.yaml"), dir).errors.join()).toContain("duplicate name web")
+  })
+
+  test("two services of one compose project can not share a start or stop command", () => {
+    const rows = parseRegistry(
+      `services:
+  - { name: a, repo: r, kind: compose, tier: core, container: a, project: p, start: "make up", stop: "make down", memory_mib: 1 }
+  - { name: b, repo: r, kind: compose, tier: core, container: b, project: p, start: "make up", stop: "make down", memory_mib: 1 }
+  - { name: c, repo: r, kind: compose, tier: core, container: c, project: q, start: "make up", memory_mib: 1 }`,
+      "t", undefined, HOME,
+    ).services
+    const e = validate(rows).join("\n")
+    expect(e).toContain("b and a share the start command")
+    expect(e).toContain("b and a share the stop command")
+    expect(e).not.toContain("c and")
+  })
+
+  test("the registry runs on the mini only", () => {
+    expect(hostRefusal("cache")).toBeNull()
+    expect(hostRefusal("op")).toContain("Mac mini")
+    expect(hostRefusal("")).toContain("unset")
+    expect(hostRefusal("op", true)).toBeNull()
   })
 
   test("the tracked registry is valid, names every door of the Caddyfile and gives every manual profile a member", () => {

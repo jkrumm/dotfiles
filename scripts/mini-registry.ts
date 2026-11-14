@@ -21,6 +21,7 @@ const HOME = homedir()
 const DOTFILES = join(import.meta.dir, "..")
 const HOST_FILE = join(DOTFILES, "config", "mini", "services.yaml")
 const REPO_FILE = "mini-services.yaml"
+const CHECK_DEADLINE_MS = 30000
 
 export const KINDS = ["launchd", "compose", "vm", "static", "dev-server"] as const
 export const TIERS = ["core", "on-demand", "manual"] as const
@@ -131,6 +132,15 @@ export function validate(services: Service[]): string[] {
       const key = `${s.vm}/${s.container}`
       if (containers.has(key)) errors.push(`container ${key} registered by ${containers.get(key)} and ${s.name}`)
       containers.set(key, s.name)
+    }
+  }
+  // a command shared by two services of one project acts on both: a single-service verb would start or stop its neighbour
+  for (const verb of ["start", "stop"] as const) {
+    const seen = new Map<string, string>()
+    for (const s of services.filter((x) => x.kind === "compose" && x[verb])) {
+      const key = `${s.vm}/${s.project ?? ""}/${s[verb]}`
+      if (seen.has(key)) errors.push(`${s.name} and ${seen.get(key)} share the ${verb} command of one compose project (${s[verb]}); it acts on both, so register a per-service command or none`)
+      else seen.set(key, s.name)
     }
   }
   for (const s of services) {
@@ -393,6 +403,12 @@ export function startOrder(s: Service, all: Service[], running: (n: string) => b
   return out
 }
 
+// The registry describes the mini: on another machine its labels and commands would act on the wrong host.
+export function hostRefusal(backend: string, override = false): string | null {
+  if (override || backend === "cache") return null
+  return `the registry describes the Mac mini (secrets backend 'cache'); this machine reports '${backend || "unset"}'. Run it on the mini: ssh mini 'make -C ~/SourceRoot/dotfiles mini-ps'`
+}
+
 // What stops a verb before anything runs: an unknown name, or a core service without --force.
 export function refusal(services: Service[], verb: "up" | "down", name: string | undefined, force: boolean): string | null {
   const s = services.find((x) => x.name === name)
@@ -478,7 +494,7 @@ export async function snapshot(services: Service[], { withDoors }: { withDoors: 
   const uid = process.getuid?.() ?? 501
   const docker = process.env.DOCKER_BIN ?? "/opt/homebrew/bin/docker"
   const [top, list, disabled, plists, doors] = await Promise.all([
-    run(["/usr/bin/top", "-l", "1", "-stats", "pid,ppid,mem,command"], {}, 60000),
+    run(["/usr/bin/top", "-l", "1", "-stats", "pid,ppid,mem,command"], {}, 25000),
     run(["/bin/launchctl", "list"]),
     run(["/bin/launchctl", "print-disabled", `gui/${uid}`]),
     readPlists(),
@@ -556,6 +572,11 @@ async function main(argv: string[]) {
     console.error("usage: mini-registry ps [--format table|json] | check | up NAME | down NAME [--force] | profile NAME --up|--down")
     return 2
   }
+  const backend = (() => {
+    try { return readFileSync(join(process.env.XDG_CONFIG_HOME ?? join(HOME, ".config"), "secrets", "backend"), "utf8").trim() } catch { return "" }
+  })()
+  const wrongHost = hostRefusal(backend, process.env.MINI_REGISTRY_ANY_HOST === "1")
+  if (wrongHost) { console.error(wrongHost); return 2 }
   const loaded = loadAll()
   if (loaded.errors.length) {
     console.error(`FAIL registry invalid:\n  ${loaded.errors.join("\n  ")}`)
@@ -567,7 +588,12 @@ async function main(argv: string[]) {
     const refused = refusal(services, verb, arg, flag("--force"))
     if (refused) { console.error(refused); return 2 }
   }
-  const snap = await snapshot(services, { withDoors: verb === "ps" })
+  // the heartbeat bounds `check` at 40 s and grades a timeout FAIL: a slow probe is a WARN here, never a finding
+  const probe = snapshot(services, { withDoors: verb === "ps" })
+  const snap = verb === "check"
+    ? await Promise.race([probe, new Promise<null>((r) => setTimeout(() => r(null), CHECK_DEADLINE_MS))])
+    : await probe
+  if (!snap) { console.log(`registry: probes did not finish in ${CHECK_DEADLINE_MS / 1000} s, not graded`); return 2 }
   const { rows, drift } = grade(services, snap)
 
   if (verb === "ps") {

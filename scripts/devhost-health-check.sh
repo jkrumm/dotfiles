@@ -1321,7 +1321,7 @@ check_registry() {
   out=$("$bun_dir/bun" "${MINI_REGISTRY_TS:-$(dirname "${BASH_SOURCE[0]}")/mini-registry.ts}" check 2>&1) || rc=$?
   case "$rc" in
     0|1|2) printf '%s\n' "$out" | tr '\n' ';' | sed 's/;$//; s/;/; /g'; return "$rc" ;;
-    *)     echo "registry: check crashed (rc=$rc), not graded"; return 2 ;;
+    *)     echo "registry: check did not finish (rc=$rc), not graded"; return 2 ;;
   esac
 }
 

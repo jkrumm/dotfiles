@@ -8,7 +8,7 @@ one-line gotchas live in `AGENTS.md`.
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent, wrapped in `jobrun` (below), and pushes **three** Uptime Kuma
 monitors. `MacMini Dev Host - Push` is the **liveness** monitor: it says the mini is reachable and its core is alive,
-never "healthy" and never "slow" (next section). The **nineteen** components below (sshd moved to the liveness phase) grade the host's health and ride
+never "healthy" and never "slow" (next section). The **twenty** components below (sshd moved to the liveness phase) grade the host's health and ride
 a second push:
 
 | Component | Checks |
@@ -32,6 +32,7 @@ a second push:
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
 | jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL. A job not ok for 2 consecutive grades is filed as a **signal on its owner repo** through the factory (`jobs-grade --report`, below), not posted to ntfy; a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |
+| registry | `scripts/mini-registry.ts check` (`docs/mini-registry.md`): a loaded job of our label families the registry does not know, a job whose program is inside `/.claude/worktrees/`, or a registry that does not validate is a **FAIL** (the detail monitor goes DOWN and the factory door files an Issue); a footprint above its budget, a check that timed out or cannot run is a **WARN** |
 | quota | both Claude accounts from the picker's cache (`claude-account usage --json`; falls back to `agw quota`), appended (`quota iu 5h 8% · 7d 88% \| me 5h 3% · 7d 12%`); **WARN** at 5 h ≥ 90 % on the interactive account, or a sample older than 6 h |
 
 A component exits 0 (healthy), 2 (WARN — named in the msg, no streak, never a
@@ -58,7 +59,7 @@ now means *the mini is unreachable or its core is dead*. The run is ordered:
    merely **timed out** is "slow, not proven dead": it stays `up` as WARN text until `DEVHOST_LIVENESS_TIMEOUT_STREAK` (6)
    timeouts in a row. Measured by the test suite: the liveness push lands about 1 s after the start while a component
    hangs for 6 s.
-3. **Side monitors**, then the **slow components** (the nineteen), unchanged and still bounded and budgeted.
+3. **Side monitors**, then the **slow components** (the twenty), unchanged and still bounded and budgeted.
 4. **The detail push.** The main monitor gets a second `up` with the full summary: a component FAIL is WARN text there and
    never turns it DOWN, and a liveness DOWN is never overwritten. The component verdict goes to the optional **detail
    monitor** (`MacMini Dev Host Detail - Push`, URL file `~/.config/uptime-kuma/devhost-detail-push-url`, opt-in like collie:

@@ -851,7 +851,7 @@ mini-up: ## Start a registered service, what it needs first (NAME=<service>)
 
 mini-down: ## Stop a registered service (NAME=<service>; a core service needs FORCE=1)
 	@[ -n "$(NAME)" ] || { echo "usage: make mini-down NAME=<service> [FORCE=1]"; exit 2; }
-	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts down "$(NAME)" $(if $(FORCE),--force)
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts down "$(NAME)" $(if $(filter 1,$(FORCE)),--force)
 
 mini-profile: ## Start or stop every manual service of a profile (NAME=work|dev-db UP=1|0)
 	@[ -n "$(NAME)" ] && { [ "$(UP)" = 1 ] || [ "$(UP)" = 0 ]; } || { echo "usage: make mini-profile NAME=<work|dev-db> UP=1|0"; exit 2; }
