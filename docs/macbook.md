@@ -134,7 +134,7 @@ smb-keepalive-teardown` unloads the agent, removes the plist, the jobrun state a
 
 `ssh iumac` from the mini lands on a userland sshd on the MacBook's `:2222`
 (MDM owns the system `:22`), a forced-command key that runs fixed verbs only, no agent forwarding.
-Full setup, the verb list, the identity model (`ssh iumac` carries none; git pulls on the MacBook go through `ask-human --cmd`) and the ACL grant: `docs/remote-dev.md` §mini → iumac.
+Full setup, the verb list, the identity model (`ssh iumac` carries none; a dotfiles pull is the fixed verb `dotfiles-sync`; every other git pull goes through `ask-human --cmd`) and the ACL grant: `docs/remote-dev.md` §mini → iumac.
 
 ---
 

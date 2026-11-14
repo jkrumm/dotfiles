@@ -383,13 +383,14 @@ macOS ships no Tailscale SSH server.
   | `account-snapshot` | `scripts/claude-account-snapshot.sh` (plain-ssh fallback) |
   | `account-snapshot-core` | the same through the MacBook's own core; exit 99 = core not up |
   | `hc-version` | `hc --version` |
+  | `dotfiles-sync` | `scripts/macbook-sync.sh`: fast-forward `~/SourceRoot/dotfiles` from the public repo over https (no identity), then run the `make` targets of `config/macbook-sync.tsv` whose path prefix the pulled range touched (first row: `herdr-app-setup`, with the jk-glance copy off because it needs `ssh mini`). Refuses a dirty tree, a branch other than master and a diverged master; exit 1 on a refusal or a failed target |
 
   The gate serves `rsync` pulls of the four usage-tracker stats dirs only; the
   forced command overrides `sftp` and `scp`, so no other path is readable.
-  Anything else MacBook-side goes through `ask-human.sh ask '…' --cmd '…'`: the human
+  `dotfiles-sync` means whatever the mini pushes to dotfiles master runs on the MacBook on the next call, with no human pull between; the fixed verb, ff-only and the closed target list stop an accident, not a compromised mini that can push dotfiles. A new target is a row in `config/macbook-sync.tsv`, and it must need no 1Password, sudo or SSH identity. The first call needs the MacBook to have pulled once by hand (the verb lives in the pulled gate). The factory's `place` Errands (a MacBook command with no secret) are the caller. Anything else MacBook-side goes through `ask-human.sh ask '…' --cmd '…'`: the human
   sees the exact string and approves it. Installers that write to the MacBook
-  (ntfy-mac's `make install-macbook`-style rsync push, usage-tracker's
-  `iu-portal-setup`) are not served by this key; run them from the MacBook's own
+  (ntfy-mac's `make install-macbook` push of a development build, usage-tracker's
+  `iu-portal-setup`) are not served by this key (ntfy-mac releases update themselves through Sparkle); run them from the MacBook's own
   terminal or via `ask-human --cmd`.
 - **The door is our own userland sshd on :2222.** iumac's MDM pins the Remote
   Login SACL (`com.apple.access_ssh`) to `IT-Admin` and re-drops the account

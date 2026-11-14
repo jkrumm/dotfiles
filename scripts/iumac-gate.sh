@@ -5,7 +5,7 @@
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
 # (reachability probe, human-queue dialogs, notifications, claude re-login,
-# account snapshots, usage-tracker pulls); this gate maps each verb to its one
+# account snapshots, a dotfiles pull with its link targets, usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
 # outbound credential can do what the mini needs and no more.
 #
@@ -168,6 +168,14 @@ end run' | exec osascript - "$title" "$text"
     export PATH="$H/.local/bin:/opt/homebrew/bin:$H/.bun/bin:$PATH"
     bash "$H/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 99
     exec hc exec --timeout 30 bash "$H/SourceRoot/dotfiles/scripts/claude-account-snapshot.sh"
+    ;;
+
+  dotfiles-sync)
+    # Fast-forward the MacBook's dotfiles checkout from the public repo and run the make targets the pulled range
+    # touched (config/macbook-sync.tsv). No arguments; refuses a dirty tree, another branch, a diverged master.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    exec bash "$H/SourceRoot/dotfiles/scripts/macbook-sync.sh"
     ;;
 
   hc-version)

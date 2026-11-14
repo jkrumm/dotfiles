@@ -1,0 +1,6 @@
+# The closed list behind `ssh iumac dotfiles-sync` (scripts/macbook-sync.sh, run on the MacBook after a fast-forward pull).
+# One row per path prefix: <prefix><TAB><make target>. A target runs once, only when a pulled file starts with one of
+# its prefixes. Add a row here; nothing else makes the key run a target. Targets must need no 1Password, no sudo and no
+# SSH identity (the key carries none).
+config/herdr-app/	herdr-app-setup
+scripts/herdr-app-	herdr-app-setup

@@ -55,6 +55,7 @@ mkstub "$SC/ask-human.sh" ask-human
 mkstub "$SC/claude-relogin.sh" relogin
 mkstub "$SC/claude-account-snapshot.sh" snapshot
 mkstub "$SC/lib/core-up.sh" core-up
+mkstub "$SC/macbook-sync.sh" macbook-sync
 mkstub "$H/.local/bin/claude-account" claude-account
 mkstub "$H/.local/bin/hc" hc
 mkstub "$H/.bun/bin/bun" bun
@@ -118,6 +119,8 @@ expect_allowed "account-snapshot" "account-snapshot" "snapshot"
 expect_allowed "account-snapshot-core" "account-snapshot-core" "core-up
 hc|exec|--timeout|30|bash|$SC/claude-account-snapshot.sh"
 expect_allowed "hc-version" "hc-version" "hc|--version"
+expect_allowed "dotfiles-sync" "dotfiles-sync" "macbook-sync"
+assert_eq "dotfiles-sync: SSH_AUTH_SOCK empty inside" "unset" "$(cat "$REC/macbook-sync.sock")"
 
 expect_allowed "iu-portal scrape" 'cd ~/.local/share/iu-portal/tool && bun scrape.ts daily monthly' "bun|scrape.ts|daily|monthly" "in-scrape"
 assert_eq "iu scrape: cwd" "$H/.local/share/iu-portal/tool" "$(cat "$REC/bun.cwd")"
@@ -166,6 +169,9 @@ expect_refused "relogin upper-case id" "relogin ABC"
 expect_refused "relogin path id" "relogin ../x"
 expect_refused "account-usage extra" "account-usage --raw"
 expect_refused "hc-version extra" "hc-version x"
+expect_refused "dotfiles-sync argument" "dotfiles-sync --run"
+expect_refused "dotfiles-sync branch argument" "dotfiles-sync main"
+expect_refused "dotfiles-sync chained" "dotfiles-sync; id"
 expect_refused "bash -c" "bash -c id"
 expect_refused "sh" "sh"
 expect_refused "op read" "op read x"
