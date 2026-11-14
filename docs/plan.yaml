@@ -57,8 +57,9 @@ rows:
     kind: chore
     checkpoint: spec
     title: External SSD on the mini - the volume contract (mount order, absent tolerance, TCC, what stays off it, disk budget), path-agnostic
-    after: [core-restart-audit]
     facts:
+      placement: |-
+        Owner decision of 2026-11-14 (dotfiles issue 1119): the drive is attached and mounted (about 572 GiB free). What moves to it first is weatherorb's raw data: its V1 data/ and products/ directories and ~/orb, about 184 GB together. Postgres (data dir on the internal disk, so an unplugged drive never stops the factory), Docker and the Colima VM disk, swap, and everything the factory and the boot path need stay on the internal SSD. The drive's weatherorb data keeps whatever backup it had before the move. docs/postgres.md and docs/disk.md name the split.
       why: |-
         The owner is attaching a 1 TB external SSD to the mini for bulk data, first the weatherorb data (weatherorb's own plan row v2-host names the data root and needs about 228 GB while the internal disk has about 131 GiB free), maybe more later. Owner verdict on the first plan: the drive (volume name "HDD USB EXT") already holds data he does not want to lose, it is encrypted and its secret exists, so it is kept and unlocked, never reformatted by a lead; if its format turns out unsuitable that is a Decision, and cleaning it up is his call. It is not attached yet and no mount path is known. A volume that can be absent, locked or half-mounted at boot or after a USB hiccup, read by launchd jobs that today assume their paths exist, is a new failure class on the box that just panicked; the contract has to exist before the first byte moves.
       what: |-
@@ -73,6 +74,8 @@ rows:
     title: Adopt the external SSD once the owner has attached it - mount, grants, exclusions, budget, hand the data root to weatherorb
     after: [ssd-prep]
     facts:
+      attached: |-
+        The owner attached the drive before 2026-11-14 (issue 1119's inventory saw it mounted with about 572 GiB free and his folders on it): the attach Errand is moot, start from the read-only findings. First data to move is weatherorb's (data/, products/, ~/orb, about 184 GB); see ssd-prep's placement fact.
       why: |-
         ssd-prep delivers the contract with no volume attached. The first real volume needs the device facts (name, format, mount point as macOS shows it), the TCC grant given to the actual programs, and the budget numbers measured. Done once, with the contract's checks turned on, before weatherorb moves any data.
       what: |-

@@ -21,7 +21,7 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | `/private/var` | 20 | `$TMPDIR` 17 (Chrome code-sign clones, test-suite tmp dirs), system | swept |
 | `~/Pictures/Photos Library` | 19 | personal photos | ask owner |
 | `~/.claude` | 16 | Claude Code transcripts (`projects/`; argo 6.8) | needed (Claude Code prunes by `cleanupPeriodDays`) |
-| `/opt/homebrew` | 16 | Cellar 8.6, postgresql@18 data 6.0 (:5433, weatherorb and others) | needed |
+| `/opt/homebrew` | 16 | Cellar 8.6, postgresql@18 data 6.0: the mini's one Postgres (`docs/postgres.md`), stays on this disk; grows by about 4 GB with the Docker and Athena databases at the cutover, and lost 1 GB of leaked weatherorb test databases on 2026-11-14 | needed |
 | `~/IuRoot` | 13 | IU repos. `prometheus-scripts/analysis` 4.6 (`kafka-snapshots` 3.4) | ask owner (IU data, below) |
 | `/private/tmp` | 12 | agent scratch (`basalt-briefs`, `pytest-of-root`, wave logs) | macOS periodic cleanup |
 | `/Applications` | 11 | apps | needed |
@@ -81,7 +81,7 @@ of the volume grew since 2026-10-20 (re-measured the same day, `du -xk`, GiB):
 |-|-|-|-|
 | `~/.colima/_lima/_disks/colima` | 91 | 78 (whole `~/.colima`) | main docker VM, swept daily |
 | `~/.colima/_lima/_disks/colima-teamchat` | 30 | n/a | teamchat VM data disk, running, owner-timed restart pending |
-| `~/.colima/_lima/_disks/colima-athena-poc` | 4.7 | n/a | no `in_use_by`, last written 2026-10-31: orphan PoC disk, ask owner before `colima delete --data` |
+| `~/.colima/_lima/_disks/colima-athena-poc` | 4.7 | n/a | no `in_use_by`, last written 2026-10-31: orphan PoC disk. Its profile was deleted on 2026-11-14 (issue 1119, nothing referenced it) without `--data`; the disk itself is the owner's call |
 | `~/Library` | 66 | 36 | `Application Support` 20 (Chrome 9.8), `Developer` 18 (CoreSimulator 11, Xcode 6.6), `Caches` 14 |
 | `~/.claude` | 27 | 16 | transcripts (`projects/`) |
 | `$TMPDIR` / `/private/tmp` | 23 / 21 | 17 / 12 | |
@@ -130,6 +130,14 @@ factory worktrees (basalt-ui 14 GB), and the signal to issue 1115 to `limactl de
 result. `disk-sweep` now carries a `lima-cache` step for the IPSWs. The VM disks themselves are the matrix's:
 `limactl list` and `du -sk ~/.lima/*/disk` name them; a stopped `cm-*` whose result is recorded is safe to
 `limactl delete -f`.
+
+## What goes to the external SSD
+
+Owner decision of 2026-11-14 (issue 1119): the attached external SSD takes bulk data only. First,
+weatherorb's raw data: its V1 `data/` and `products/` directories (about 140 GB) and `~/orb` (about
+44 GB), moved by weatherorb behind the volume contract of the plan rows `ssd-prep` and `ssd-adopt`.
+Never on it: Postgres's data directory (`docs/postgres.md`), Docker and the Colima VM disk, swap,
+anything the factory or the boot path needs.
 
 ## What lives on the HomeLab
 
