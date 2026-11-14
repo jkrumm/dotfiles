@@ -50,64 +50,21 @@ rows:
       limits: |-
         No company container, image, volume or bind mount of ~/IuRoot runs under kiri in this row: with the fixed shares the VM sees all of /Users, and whether company code and the VPN may live under that is the owner's call after the Report. No sudo, no certificate trust, no automatic update.
 
-  - key: mini-docker-idle
-    lane: host
-    prio: 50
-    title: Docker off by default on the mini - brain-web from Caddy, dev databases as a profile, one 2 GiB VM that runs only while a service needs it
-    after: [linewatch-native, rb-native]
-    after_needs: shipped
-    facts:
-      why: |-
-        A vz VM never returns memory while it runs: the Colima VM's host footprint climbs to its configured size and stays (5.6 GiB average on 2026-11-14 at a 6 GiB cap, for containers using 0.6 GiB). Only a stop returns it. With linewatch and rb native (the rows before this one), what is left in the VM is brain-web, the dev databases and the company's work services, none of which has to run all day. The program is the Spec of Issue 1177 (section 3); the container runtime is its open choice 2 (the verdict left the default, Colima). The row kiri-trial measures kiri as a replacement: read its Report first (factory artifact list); if it recommends kiri for these containers, points 3 and 4 below become kiri's own sleep and memory ceiling, and the Colima profile is kept stopped for a week as the rollback.
-      what: |-
-        config/Caddyfile (the brain door), colima/colima-start.sh and the homebrew.mxcl.colima job, the Makefile's COLIMA_MEMORY for the mini and the colima targets, the registry (needs vm, the dev-db profile), an idle check under jobrun, the devhost-health checks that expect Colima up, AGENTS.md, docs/remote-dev.md, docs/devhost-health.md, docs/brain-access.md. Other repos' compose files are theirs: file a signal where one should change.
-      change: |-
-        1. brain-web is nginx serving the static dist of ~/SourceRoot/basalt-ui-obsidian (apps/demo/dist, rebuilt every five minutes by com.jkrumm.brain-web-refresh). The brain door serves that directory with Caddy's file_server and reproduces what the repo's nginx.conf does (fallbacks, headers); the container is brought down through its repo's make target. 2. The dev databases of ~/SourceRoot/vps (mariadb is the only one running, about 100 MiB) become the manual profile dev-db: stopped now, started by make mini-profile NAME=dev-db UP=1. 3. The VM no longer starts at boot. make mini-up of a service with needs vm starts it first; an idle check stops it once no registered service that needs it has been up for 15 minutes. 4. COLIMA_MEMORY on the mini 4 to 2. The revert signal is the one docs/devhost-health.md names: a guest OOM kill or available under 1 GB, then 3. 5. The health checks treat a VM that is stopped because nothing needs it as healthy, and a VM that is down while a registered service needs it as a failure. 6. The stop is the easy half: the idle check stops the VM only when no container at all is running (so a docker run of a check or a test counts) and no registered service that needs it has been up for 15 minutes; colima stop then shuts the guest down cleanly and volumes stay on its disk. The start is where things break: with the VM down every docker command fails with no daemon. So one ensure step (a script, used by make mini-up and callable on its own) starts the VM and waits for the socket, and everything that calls docker goes through it. Before the VM stops starting at boot, list every make target on the mini that calls docker outside a registered service, among them the check and test targets of rollhook (Issue 1212 moves its Go steps to the native toolchain), shutterflow (e2e, test-integration) and vps (check, verify), and the company repos' test targets; for each either the repo's target calls the ensure step first (file a signal to that repo with the one line it needs) or it no longer needs Docker. A lead's check that fails on a missing daemon is the regression this row must not ship. 7. Roll out in two steps. The memory comes with the first, so ship it at once: one VM at 2 GiB, the idle stop and the ensure step, with the VM still starting at boot. The second step, the boot start off, follows after six hours of leads' checks with no failure that names the daemon (read the leads' slot results, factory read throughput tests).
-      acceptance: |-
-        With no registered service that needs the VM up, no com.apple.Virtualization.VirtualMachine process of the default profile exists for 30 minutes and make doctor is green. The brain door answers from Caddy with the same page as before (status and a content hash of the index, and the iPhone path of docs/brain-access.md). make mini-up of one compose service brings the VM and the service up; the ship states the seconds it took. launchctl shows the Colima job does not start the VM at load. With the VM stopped, one target from the list of point 6 is run and passes, the ship naming it and the seconds the ensure step took. The ship lists every target of point 6 with how it was settled. make check passes and /review is clean.
-
-  - key: mini-work-profile
-    lane: host
-    prio: 50
-    title: The company's work services on the mini as one profile - down by default, one verb up and down
-    after: [mini-docker-idle]
-    facts:
-      why: |-
-        The company dashboard, the VPN container with its watcher, the token minters and the deploy gates run on the mini all day and are used a few times on a workday. They keep the VM up and hold launchd jobs that poll every 5 to 10 minutes. The owner wants them off unless he works with them. The program is the Spec of Issue 1177 (section 4). The teamchat sandbox is not part of this profile: it is on-demand and has its own row in its repo.
-      what: |-
-        The registry entries of the com.iu.* jobs and of the dashboard and VPN compose projects, the profile verb, docs/architecture.md and docs/remote-dev.md. The jobs and compose files belong to the company repos under ~/IuRoot: use their existing make targets and launchd labels, change none of their files, and file a signal to the owning repo where a stop target is missing.
-      change: |-
-        The profile work holds the dashboard, the VPN container and its watcher, the token minters, the deploy gates and the stack dashboard. make mini-profile NAME=work UP=0 stops the containers and boots the jobs out, and disables them so a boot does not bring them back; UP=1 enables and starts them in order (VM, VPN, minters, dashboard). A stale single sign-on session on the way up becomes an Errand through the existing ask-human path, not a silent failure. No page fires because the profile is down: list the monitors that watch these services in the ship, and file one signal to the repo that owns them if they cannot tell a planned stop from an outage. The profile is down after this row ships.
-      acceptance: |-
-        After UP=0 no process or container of the profile is left and, with nothing else needing it, the VM stops within its idle window. After UP=1 the dashboard door answers 200 given a valid session, and a stale session produces the Errand. launchctl print-disabled lists the profile's jobs while it is down. No monitor paged during a down period of an hour. make check passes and /review is clean.
-
-  - key: teamchat-on-demand
-    prio: 50
-    repo: epos-ai-teamchat-athena
-    title: The sandbox runs in the mini's one VM and only while a run needs it
-    after: [mini-docker-idle]
-    facts:
-      why: |-
-        The sandbox has its own Colima profile on the mini: a 4 GiB VM that held 3.9 GiB of host memory on 2026-11-14 for three containers using 0.15 GiB, idle most of the day. A vz VM never returns memory while it runs; only a stop does. The owner decided against the separate VM (his annotation on the Spec of Issue 1050: the isolation costs more than it brings). The program is the Spec of Issue 1177 (section 4).
-      what: |-
-        The sandbox compose project (sandbox/), the scripts that keep the profile up (scripts/teamchat-vm-watch.sh, vm_watch.py, the autostart script) and their launchd jobs, the Makefile, the docs, and a registry file at the repo root in the format the dotfiles row mini-registry documented. The api, the broker and the funnel stay as they are.
-      change: |-
-        1. The sandbox compose project runs in the mini's default Colima profile. Name in the ship what it needs mounted; the VM's mounts are written by dotfiles (colima/apply-mounts.sh), so file a signal there for a mount. 2. On demand: the api starts the sandbox when a run needs it, through make -C ~/SourceRoot/dotfiles mini-up NAME=<the sandbox's registry name>, which starts the VM first; the run waits for readiness and the user sees that the sandbox is starting. The api stops it through make mini-down after 30 minutes without a run. 3. The watcher no longer keeps a VM up. The teamchat profile is stopped; say which of its volumes are caches and which hold state, move the state, and delete the profile seven days after the move if nothing was rolled back. 4. Lower the agent container's memory limit from 3 GiB to what it needs (it used 84 to 294 MiB when measured), so the 2 GiB VM holds it beside the dashboard.
-      acceptance: |-
-        A message that needs the sandbox while it is down gets its answer; the ship states the extra seconds. Thirty minutes after the last run the sandbox is down, and the VM too when nothing else needs it. colima list shows no running teamchat profile. The repo's own check and verify are green.
+  - key: teamchat-one-vm
+    issue: 1239
 
   - key: throughput-rebaseline
     repo: software-factory
     kind: chore
     title: Move the throughput epoch - the mini's lean setup has shipped, count from here
-    after: [mini-docker-idle, mini-work-profile, teamchat-on-demand]
+    after: [teamchat-one-vm]
     facts:
       why: |-
-        The owner wants the factory's throughput figures to start from zero once the mini's setup has changed, because readings from before are not comparable. Issue 1211 gives the factory an epoch (a tracked config/throughput.json with one ISO time; reads, the daily ranking and its medians ignore samples before it) and sets it at its own deploy. The rows this one waits for change the host again: Docker off by default with one small VM, the work services as a profile, the sandbox on demand.
+        The owner wants the factory's throughput figures to start from zero once the mini's setup has changed, because readings from before are not comparable. Issue 1211 gives the factory an epoch (a tracked config/throughput.json with one ISO time; reads, the daily ranking and its medians ignore samples before it) and sets it at its own deploy. The row this one waits for changes the host again: the sandbox moves into the default VM, so one 2 GiB VM runs always and the second one goes (the owner's decision of 2026-11-14: the VPN, the dashboard and the sandbox are reached by colleagues and stay up, so nothing is switched off by default).
       what: |-
         config/throughput.json, or whatever Issue 1211 shipped as the epoch (read docs/architecture.md, The throughput loop). Nothing else.
       change: |-
-        Set the epoch to the close time of the latest of the dotfiles Issues of the plan rows mini-docker-idle, mini-work-profile and teamchat-on-demand (factory issue show gives closedAt). If Issue 1211 has not shipped, wait for it with a dependency wait. If one of the three rows was dropped, use the latest close among those that shipped and say so.
+        Set the epoch to the close time of the Issue of the plan row teamchat-one-vm (factory issue show gives closedAt). If Issue 1211 has not shipped, wait for it with a dependency wait. If that Issue closed without shipping, leave the epoch where it is and say so.
       acceptance: |-
         factory read throughput reports the new start of its counting, and the next daily pass files no finding whose before was read across the epoch. make check-fast is green.
 
