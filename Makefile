@@ -128,6 +128,7 @@ setup:
 	@$(MAKE) --no-print-directory hc-reap-setup
 	@$(MAKE) --no-print-directory drift-check-setup
 	@$(MAKE) --no-print-directory _setup-colima
+	@$(MAKE) --no-print-directory _setup-external-volume
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
 	@echo ""
@@ -2718,9 +2719,16 @@ disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 
-# The external volume contract (docs/external-ssd.md). The unlock job is NOT part of `make setup`: it is installed
-# when the volume is adopted (config/external-volume.json attached=true), and a no-op until then.
+# The external volume contract (docs/external-ssd.md). The unlock job is installed by `make setup` (step
+# `_setup-external-volume`) on the mini once config/external-volume.json says attached=true, and is a no-op until then.
 .PHONY: external-volume-unlock-setup external-volume-unlock-teardown external-volume-check volume-gate-test
+.PHONY: _setup-external-volume
+# `make setup` converges the unlock job on the mini once the volume is adopted (attached=true), so a pull of the
+# architecture row never leaves doctor red for want of the agent. Elsewhere, or while unattached: nothing.
+_setup-external-volume:
+	@if [ "$(SECRETS_BACKEND)" = "cache" ] && [ "$$(jq -r '.attached' "$(DOTFILES_DIR)/config/external-volume.json" 2>/dev/null)" = "true" ]; then \
+		$(MAKE) --no-print-directory external-volume-unlock-setup; \
+	fi
 external-volume-unlock-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.external-volume-unlock" PLIST_DIR="$(DOTFILES_DIR)/scripts"

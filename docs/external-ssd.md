@@ -61,7 +61,7 @@ reboot that the login keychain does not cover needs the owner. Do not repeat the
 
 ## Unlock
 
-`scripts/external-volume-unlock.sh`, a LaunchAgent (`make external-volume-unlock-setup`, installed by `ssd-adopt`, not by `make setup`):
+`scripts/external-volume-unlock.sh`, a LaunchAgent (`make external-volume-unlock-setup`, run by `make setup` on the mini once `attached` is `true`):
 at load, on mount and every 120 s (a locked APFS volume never mounts, so on-mount alone cannot see it), through jobrun, log
 `~/Library/Logs/external-volume-unlock.log`. It reads `diskutil` state only, never a file on the volume (no TCC grant). Mounted, absent
 or not attached: silent exit. Locked: `secrets-run read <passphraseRef>` piped into `diskutil apfs unlockVolume <device> -stdinpassphrase`
