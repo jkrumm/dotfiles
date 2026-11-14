@@ -11,7 +11,8 @@ ship:
   - { paths: ["**"], via: push }
 # Not a throttle: the host's memory and load and the `after` edges decide how many run. Rows that restart a shared host
 # service (Postgres, the VM, the work stack) take the `host` lane, one at a time.
-leads: 12
+# 8 is the most the factory's project schema takes today.
+leads: 8
 lanes:
   host: 1
 signals:
