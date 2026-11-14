@@ -133,11 +133,13 @@ result. `disk-sweep` now carries a `lima-cache` step for the IPSWs. The VM disks
 
 ## What goes to the external SSD
 
-Owner decision of 2026-11-14 (issue 1119): the attached external SSD takes bulk data only. First,
-weatherorb's raw data: its V1 `data/` and `products/` directories (about 140 GB) and `~/orb` (about
-44 GB), moved by weatherorb behind the volume contract of the plan rows `ssd-prep` and `ssd-adopt`.
-Never on it: Postgres's data directory (`docs/postgres.md`), Docker and the Colima VM disk, swap,
-anything the factory or the boot path needs.
+Two things, and nothing else (`docs/storage.md` is the map of every disk): weatherorb's working
+data under `weatherorb/` (owner decision of 2026-11-14, issue 1119; moved the same day, 167 GiB),
+and `mirror/`, the nightly pulled copy of the HomeLab's SSD share and of `HDD/fuji` (plan row
+`ext-mirror`). Never on it: Postgres's data directory (`docs/postgres.md`), Docker and the Colima
+VM disk, swap, anything the factory or the boot path needs. Budget of the 931 GiB: weatherorb 167
+now and about 228 with V2, the mirror about 445, which leaves roughly 250 GiB while the Fuji
+archive grows by about 15 GiB a month.
 
 ## What lives on the HomeLab
 

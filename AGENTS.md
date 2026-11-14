@@ -551,6 +551,9 @@ disk-sweep-run` runs it once), what moved to the HomeLab and how to
 restore it: `docs/disk.md`. **Agents cannot see `~/.Trash`** (no Full Disk Access; it held
 246 GiB unnoticed) — measure it through `ask-human` over `ssh mini`.
 
+**Storage** — which disk is the home of which data, every copy and the job that makes it, the mounts per
+Mac: `docs/storage.md`. One home per class; a second copy is made by a job, never by hand.
+
 **HomeLab files** — agents on the mini use **`hl`** (S3 against the HomeLab
 VersityGW, buckets `ssd` and `hdd` = the same roots as SMB: `hl lsd homelab:hdd/fuji`,
 `hl copy ./x homelab:hdd/inbox/…`, `hl presign <bucket>/<key> [ttl]`) for anything an
@@ -559,7 +562,7 @@ copy to or from the shares the mini has a self-healing SMB mount, `~/HomeLab/SSD
 `com.jkrumm.smb-keepalive` (`docs/macbook.md` §HomeLab Samba; password from the cache, can delete: use it
 for copies, not as a scratch disk; absent while the HomeLab is down). The MacBook's `hl` resolves `s3-admin`
 (full access) through live `op`. Humans use
-Finder SMB, kept alive by the same agent (`SSD` automounts), or
+Finder SMB, kept alive by the same agent (`SSD` and `HDD` automount), or
 Cyberduck (manual install — not in the Brewfile); `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
 nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
 **Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not
