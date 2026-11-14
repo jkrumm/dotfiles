@@ -63,7 +63,7 @@ footprint against its budget. A loaded interval job between runs is `stopped`; a
   process plus the others' private part, each capped at 32 MiB: an estimate, not a measurement.
 - **Drift** lists loaded jobs of the label families the registry does not know, jobs whose program path contains
   `/.claude/worktrees/`, plists installed but neither loaded nor registered, registry entries with no plist or
-  container, containers the registry does not know, doors no service claims, and disabled leftovers whose plist is still installed.
+  container (a manual compose service whose project is down is normal, not drift), containers the registry does not know, doors no service claims, and disabled leftovers whose plist is still installed.
 - `FORMAT=json make mini-ps` is the same data for the apps page.
 
 The label families are `com.jkrumm.*`, `com.iu.*`, `ai.hermes.*`, `homebrew.mxcl.*`, `sh.brew.*` and `com.colima.*`.

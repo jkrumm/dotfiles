@@ -232,6 +232,8 @@ describe("grade", () => {
     expect(g.drift.unknown_containers).toEqual(["default/stray"])
     expect(g.drift.unclaimed_doors).toEqual(["ghost-door"])
     expect(g.drift.missing).toContain("web")
+    // db is a manual compose service with no container: its project is down, which is normal
+    expect(g.drift.missing).not.toContain("db")
     // a stopped VM means its containers are stopped, not absent
     expect(grade(services, snap()).rows.find((r) => r.name === "db")?.state).toBe("stopped")
   })

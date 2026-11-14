@@ -364,7 +364,8 @@ export function grade(services: Service[], snap: Snapshot): { rows: Row[]; drift
     unknown_jobs: snap.loaded.map((r) => r.label).filter((l) => inFamily(l) && !known.has(normalizeLabel(l))).sort(),
     worktree_jobs: snap.plists.filter((p) => inFamily(p.label) && worktree(p.program) && (snap.loaded.some((r) => r.label === p.label) || p.domain === "system")).map((p) => `${p.label} (${p.program})`).sort(),
     unknown_installed: snap.plists.filter((p) => inFamily(p.label) && !known.has(normalizeLabel(p.label)) && !snap.loaded.some((r) => r.label === p.label)).map((p) => p.label).sort(),
-    missing: rows.filter((r, i) => ["not installed", "absent"].includes(r.state) && services[i].kind !== "vm").map((r) => r.name),
+    // a manual compose service has no container while its project is down: that is its normal state, not drift
+    missing: rows.filter((r, i) => ["not installed", "absent"].includes(r.state) && services[i].kind !== "vm" && !(services[i].kind === "compose" && services[i].tier === "manual")).map((r) => r.name),
     unknown_containers: [],
     unclaimed_doors: snap.doors.filter((d) => !services.some((s) => s.doors.includes(d))).sort(),
     disabled: rows.filter((r) => r.state === "disabled").map((r) => r.name),
