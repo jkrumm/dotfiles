@@ -137,7 +137,6 @@ setup:
 	@$(MAKE) --no-print-directory shared-chrome-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
-	@$(MAKE) --no-print-directory spotlight-fence
 	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
 	@$(MAKE) --no-print-directory hc-reap-setup
@@ -2807,29 +2806,16 @@ fseventsd-watch-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fseventsd-watch.sh $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh $(DOTFILES_DIR)/scripts/lib/fseventsd-mem.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh
 
-# Spotlight off the dev host's CPU (issue 1273, docs/spotlight.md): the Data volume's file index is switched off (root,
-# through ONE sudoers rule the owner installs once: `ask-human.sh ask 'install the spotlight index rule' --cmd 'cd
-# ~/SourceRoot/dotfiles && make spotlight-sudoers'`). `spotlight-check` is the heartbeat's component. Dev host only;
-# converged by `make setup`. Rollback: `sudo mdutil -i on /System/Volumes/Data` (and remove /etc/sudoers.d/spotlight-index).
-.PHONY: spotlight-fence spotlight-check spotlight-load spotlight-sudoers spotlight-test
-spotlight-fence: ## Switch the Data volume's Spotlight file index off (dev host; idempotent)
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then echo "    · not the dev host (backend=$${BACKEND:-unset}) — spotlight-fence skipped"; exit 0; fi; \
-	bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh apply || echo "    ! spotlight not fully fenced yet (see above); make spotlight-check"
-spotlight-check: ## Is Spotlight fenced? Read-only; exit 2 = something is still on
-	@bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh check
-spotlight-load: ## The Spotlight and file-event daemons' CPU as a share of one core over SECS (default 60): the before/after reading
-	@bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh load $(SECS)
-spotlight-sudoers: ## Install the one NOPASSWD rule (`mdutil -i off` on the Data volume) into /etc/sudoers.d (needs sudo: run through ask-human)
-	@SRC="$(DOTFILES_DIR)/scripts/sudoers.d/spotlight-index"; TMP=$$(mktemp); trap 'rm -f "$$TMP"' EXIT; \
-	sed "s/__USER__/$$(id -un)/" "$$SRC" > "$$TMP"; \
-	sudo /usr/sbin/visudo -cf "$$TMP" >/dev/null || { echo "  ✗ sudoers syntax check failed — nothing installed"; exit 1; }; \
-	sudo /usr/bin/install -m 0440 -o root -g wheel "$$TMP" /etc/sudoers.d/spotlight-index; \
-	echo "  ✓ /etc/sudoers.d/spotlight-index installed"; \
-	bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh apply || { echo "  ✗ the rule is installed but the index is not off (the line above says why)"; exit 1; }
+# Spotlight is off on the mini altogether (issue 1273, docs/spotlight.md; the owner ran `sudo mdutil -a -i off`).
+# `spotlight-check` is the heartbeat's component: FAIL when indexing is on again on any volume (a macOS update can do it).
+.PHONY: spotlight-check spotlight-load spotlight-test
+spotlight-check: ## Is Spotlight indexing off on every volume? Read-only; exit 1 = a volume has it on
+	@bash $(DOTFILES_DIR)/scripts/spotlight-check.sh check
+spotlight-load: ## The Spotlight and file-event daemons' CPU as a share of one core over SECS (default 60)
+	@bash $(DOTFILES_DIR)/scripts/spotlight-check.sh load $(SECS)
 spotlight-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/spotlight-fence.sh $(DOTFILES_DIR)/scripts/spotlight-fence.test.sh
-	@/bin/bash $(DOTFILES_DIR)/scripts/spotlight-fence.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/spotlight-check.sh $(DOTFILES_DIR)/scripts/spotlight-check.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/spotlight-check.test.sh
 
 # kern.maxvnodes trial (issue 1059): the vnode table sat at its ceiling (263168 of 263168) on the dev host, so every new
 # file open recycled a vnode and the kernel burned CPU in class `system`. A root LaunchDaemon sets MAXVNODES (2x the
