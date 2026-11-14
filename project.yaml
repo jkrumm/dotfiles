@@ -10,11 +10,13 @@ deploy:
 ship:
   - { paths: ["**"], via: push }
 # Not a throttle: the host's memory and load and the `after` edges decide how many run. Rows that restart a shared host
-# service (Postgres, the VM, the work stack) take the `host` lane, one at a time.
+# service (Postgres, the VM, the work stack) take the `host` lane. Two at a time: a lane holds an Issue for its whole
+# build, not only for its restart, and at one a row waited hours behind another service's drained restart. Rows that
+# restart the same service are chained with `after`.
 # 8 is the most the factory's project schema takes today.
 leads: 8
 lanes:
-  host: 1
+  host: 2
 signals:
   github:
     author: jkrumm
