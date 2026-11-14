@@ -25,7 +25,7 @@ The owner has been burned by changes around the core and its auto-update. Every 
 3. **No live proof by breaking it:** no reboot, kill, panic or core restart to verify a change. Proof is a test plus reading the code path; a live check happens only in an owner-chosen quiet window.
 4. **Scope:** `hc-resume` changes alter pacing and order only, never which terminals are resumed or which account is chosen. Anything touching the core's plist, launcher or `make herdr-core-*` gets `/review` and a one-line rollback in its Issue.
 
-Detail of how the core runs: `docs/herdr-core.md` §How the core runs now.
+Detail of how the core runs: `docs/herdr-core.md` §How the core runs now. How to read recovery after a reboot, and the owner's quiet-window drill that proves it: `docs/recovery-drill.md`.
 
 ## Open work (factory, repo dotfiles)
 

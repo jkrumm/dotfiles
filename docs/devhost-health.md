@@ -89,8 +89,12 @@ culprit, nothing had recorded what ran, and nobody was told (`docs/incident-2026
   `DEVHOST_TEST_UPTIME_S`; never panic the host to test.
 - **Why a push at all.** The Dev Host monitor (interval 600 s, 1 retry, ntfy on DOWN) is PENDING after one missed push and
   DOWN only after a second: **an outage shorter than 10 minutes never reaches DOWN**, and a panic that recovers by itself
-  (autorestart) is exactly that. The reboot push is the alert for it. The monitor intervals live in the homelab repo and are
-  unchanged here.
+  (autorestart) is exactly that. Two alerts cover it now. `MacMini Door - HTTP` (homelab `uptime-kuma/monitors.yaml`, a
+  watcher, so straight to ntfy) pulls the Kuma door's `/healthz` every 60 s and is DOWN after 3 to 4 minutes unreachable:
+  it says "unreachable", and a planned reboot pages it once. An outage shorter than that still reaches nobody there, so the
+  reboot push (this section) stays the alert for a quick self-recovery: it arrives once the mini is back and says
+  "rebooted". The push monitors' own intervals live in the homelab repo and are unchanged here. How to read all of it after
+  a reboot: `docs/recovery-drill.md`.
 
 ### Recovery after a boot (issue 1126)
 
