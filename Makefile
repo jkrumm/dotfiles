@@ -137,6 +137,7 @@ setup:
 	@$(MAKE) --no-print-directory shared-chrome-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
+	@$(MAKE) --no-print-directory spotlight-fence
 	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
 	@$(MAKE) --no-print-directory hc-reap-setup
@@ -839,7 +840,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2805,6 +2806,31 @@ fseventsd-sudoers: ## Install the one NOPASSWD rule (`killall fseventsd`) into /
 fseventsd-watch-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fseventsd-watch.sh $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh $(DOTFILES_DIR)/scripts/lib/fseventsd-mem.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh
+
+# Spotlight off the dev host's CPU (issue 1273, docs/spotlight.md): the Data volume's file index is switched off (root,
+# through ONE sudoers rule the owner installs once: `ask-human.sh ask 'install the spotlight index rule' --cmd 'cd
+# ~/SourceRoot/dotfiles && make spotlight-sudoers'`). `spotlight-check` is the heartbeat's component. Dev host only;
+# converged by `make setup`. Rollback: `sudo mdutil -i on /System/Volumes/Data` (and remove /etc/sudoers.d/spotlight-index).
+.PHONY: spotlight-fence spotlight-check spotlight-load spotlight-sudoers spotlight-test
+spotlight-fence: ## Switch the Data volume's Spotlight file index off (dev host; idempotent)
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then echo "    · not the dev host (backend=$${BACKEND:-unset}) — spotlight-fence skipped"; exit 0; fi; \
+	bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh apply || echo "    ! spotlight not fully fenced yet (see above); make spotlight-check"
+spotlight-check: ## Is Spotlight fenced? Read-only; exit 2 = something is still on
+	@bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh check
+spotlight-load: ## The Spotlight and file-event daemons' CPU as a share of one core over SECS (default 60): the before/after reading
+	@bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh load $(SECS)
+spotlight-sudoers: ## Install the one NOPASSWD rule (`mdutil -i off` on the Data volume) into /etc/sudoers.d (needs sudo: run through ask-human)
+	@SRC="$(DOTFILES_DIR)/scripts/sudoers.d/spotlight-index"; TMP=$$(mktemp); trap 'rm -f "$$TMP"' EXIT; \
+	sed "s/__USER__/$$(id -un)/" "$$SRC" > "$$TMP"; \
+	sudo /usr/sbin/visudo -cf "$$TMP" >/dev/null || { echo "  ✗ sudoers syntax check failed — nothing installed"; exit 1; }; \
+	sudo /usr/bin/install -m 0440 -o root -g wheel "$$TMP" /etc/sudoers.d/spotlight-index; \
+	sudo -n -l /usr/bin/mdutil -i off /System/Volumes/Data >/dev/null 2>&1 \
+		&& { echo "  ✓ /etc/sudoers.d/spotlight-index installed"; $(MAKE) --no-print-directory spotlight-fence; } \
+		|| { echo "  ✗ installed but sudo -n -l does not list the rule"; exit 1; }
+spotlight-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/spotlight-fence.sh $(DOTFILES_DIR)/scripts/spotlight-fence.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/spotlight-fence.test.sh
 
 # kern.maxvnodes trial (issue 1059): the vnode table sat at its ceiling (263168 of 263168) on the dev host, so every new
 # file open recycled a vnode and the kernel burned CPU in class `system`. A root LaunchDaemon sets MAXVNODES (2x the

@@ -1,0 +1,3 @@
+# Installed by `make spotlight-sudoers` as /etc/sudoers.d/spotlight-index (root:wheel 0440). One command, exact arguments:
+# `make spotlight-fence` switches the Data volume's Spotlight file index off without a password. Rollback: `sudo mdutil -i on /System/Volumes/Data`.
+__USER__ ALL=(root) NOPASSWD: /usr/bin/mdutil -i off /System/Volumes/Data
