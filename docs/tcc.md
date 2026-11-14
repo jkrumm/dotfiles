@@ -1,5 +1,5 @@
 ---
-description: How macOS TCC (Full Disk Access, Files and Folders, AppData) bites our headless and unattended programs, the three patterns that make a grant durable, the per-binary classification of both machines, and the one-time grants. Read before touching a LaunchAgent program, a core update or a 1Password dialog.
+description: How macOS TCC (Full Disk Access, Files and Folders, AppData) bites our headless and unattended programs, the patterns that make a grant durable, the per-binary classification of both machines, and the one-time grants. Read before touching a LaunchAgent program, a core update or a 1Password dialog.
 ---
 
 # TCC — durable file-access grants
@@ -14,12 +14,13 @@ description: How macOS TCC (Full Disk Access, Files and Folders, AppData) bites 
 >   another app's data raises a dialog on a screen nobody looks at, and the calling process stops at 0 % CPU.
 >   `sample <pid>` shows `openat`; `log show --predicate 'process == "tccd"'` shows `AUTHREQ_PROMPTING … responsible_path=…`.
 
-## The three patterns
+## The patterns
 
 | Pattern | Use when | How |
 |-|-|-|
 | **Signed bundle** | a long-lived program with its own identity that spawns many others (the herdr-core and every terminal in it) | Upstream's `Herdr Core.app` (Developer ID team `2W9652Q7QR`, `dev.herdr.core`, notarized) at the fixed path `~/.local/share/herdr-core/active/Herdr Core.app`. The core, each holder and the terminal programs are attributed to the bundle; Full Disk Access is granted to that path once and survives updates. We build nothing |
 | **Launcher** | a LaunchAgent whose programs call `op` (or touch protected folders) and whose own program is ad-hoc or on a versioned path | A tiny native Mach-O at a stable path is the LaunchAgent's `Program`; it `posix_spawn`s the real program as a child (no disclaim). The grant goes to the launcher once. Used: `~/.local/libexec/herdr-core-launcher` for `com.jkrumm.opbackup` only (the name is historical; the grant is keyed on it) |
+| **Removable** | the program reads or writes the external volume | `"class": "removable"` in `config/tcc-programs.json`; the Removable Volumes prompt is answered once at the screen, per program. Steps and proof: `docs/external-ssd.md` §TCC |
 | **No grant** | the job only touches `~/SourceRoot`, `~/IuRoot`, `/opt/homebrew`, `~/.local`, `/tmp` | Nothing to do. Listed in `config/tcc-programs.json` so the check stays quiet on purpose |
 
 A stable path or a signature whose designated requirement does not carry the cdhash (`--identifier` plus an explicit

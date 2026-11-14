@@ -1247,6 +1247,12 @@ check_disk() {
   echo "disk ok (${pct}% used, ${free_gb}G free)"
 }
 
+check_external_volume() {
+  # The external volume (docs/external-ssd.md): absent from the output while attached=false; WARN (rc 2, never a page)
+  # when it is absent, locked or unreadable. Its own script, so doctor shows the same line.
+  bash "$(dirname "${BASH_SOURCE[0]}")/external-volume-check.sh"
+}
+
 check_runaways() {
   # A leaked agent-spawned process burned 1001 CPU-minutes on this machine
   # before anyone noticed. It REPORTS ONLY — nothing running unattended every
@@ -1545,7 +1551,7 @@ failure=""
 # and budget paths can be driven hermetically (scripts/devhost-heartbeat.test.sh).
 components="${DEVHOST_COMPONENTS:-check_tailscale check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
-                 check_obsidian check_disk check_runaways \
+                 check_obsidian check_disk check_external_volume check_runaways \
                  check_jobs check_quota}"
 # Word-splitting is the point: $components is a list of function names.
 # shellcheck disable=SC2086
@@ -1581,7 +1587,7 @@ for component in $components; do
     fi
   fi
   if (( rc == 0 )); then
-    details+=("$detail")
+    [[ -z "$detail" ]] || details+=("$detail")   # a check that does not exist yet (external volume, attached=false) says nothing
     rm -f "$streak_file" 2>/dev/null || true
     continue
   fi

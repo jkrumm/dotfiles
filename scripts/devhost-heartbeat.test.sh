@@ -443,6 +443,18 @@ assert_contains "no core: the core check FAILs as before" "FAIL: no core answers
 assert_eq "...and no hc call, no recovery line" "0 0" "$([[ -e "$TMP/hc-called" ]] && echo 1 || echo 0) $(detail_line | /usr/bin/grep -c 'recovery:')"
 rm -f "$TMP/state/tailnet-up-at" "$TMP/snapshots.jsonl"
 
+echo "external volume: silent while attached=false, a WARN (never a FAIL or a DOWN) when attached and gone"
+printf '{"name":"EXT","sentinel":".volume-gate","attached":false}\n' > "$TMP/ev-off.json"
+printf '{"name":"EXT","sentinel":".volume-gate","attached":true}\n' > "$TMP/ev-on.json"
+run_script DEVHOST_COMPONENTS="check_obsidian check_external_volume" VOLUME_GATE_CONFIG="$TMP/ev-off.json" VOLUME_GATE_DISKUTIL=/usr/bin/false
+assert_eq "attached=false: the composite says nothing about the volume" 0 "$(/usr/bin/grep 'push/detail' "$TMP/curl.log" | /usr/bin/grep -c -i 'external volume')"
+assert_contains "attached=false: the other component still reports" "obsidian cli ok" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+assert_eq "attached=false: no stray separator" 0 "$(/usr/bin/grep 'push/detail' "$TMP/curl.log" | /usr/bin/grep -c ';;\|; $')"
+run_script DEVHOST_COMPONENTS="check_external_volume" VOLUME_GATE_CONFIG="$TMP/ev-on.json" VOLUME_GATE_DISKUTIL=/usr/bin/false
+assert_contains "attached and absent: a WARN line" "WARN: external volume absent" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+assert_contains "attached and absent: the monitor stays up" "status=up" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+assert_eq "attached and absent: exit 0" 0 "$RC"
+
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')
 [[ -n "$list" ]] && ok "default list found" || bad "default list found"

@@ -4,7 +4,7 @@ set -u -o pipefail
 # docs/tcc.md. A Full Disk Access / Files-and-Folders grant is keyed on the program's resolved path plus its
 # code requirement; an ad-hoc signature's requirement is its cdhash, so every new build silently loses the
 # grant, and a versioned path (Cellar, Caskroom, claude/versions, releases/<sha>) moves on every upgrade.
-# A flagged program must be classified in config/tcc-programs.json (launcher | no-grant) or the check fails.
+# A flagged program must be classified in config/tcc-programs.json (launcher | no-grant | removable) or the check fails.
 # The launcher (~/.local/libexec/herdr-core-launcher, name kept for its Full Disk Access grant) is only the FDA umbrella
 # for LaunchAgent programs that call `op`; the herdr-core runs as Herdr Core.app and is not this script's business.
 # BASH 3.2 (doctor runs it on the system bash).
@@ -47,6 +47,16 @@ for plist in "$LA_DIR"/*.plist; do
   fi
 done
 
+# A class the check does not know is a typo that would silently classify nothing. `removable` = the program reads or
+# writes the external volume (docs/external-ssd.md §TCC), behind scripts/lib/volume-gate.sh; its Removable Volumes grant
+# is a per-program prompt answered once at the screen, so the check can only list them: the proof is the job's own gate line.
+unknown=$(jq -r '.programs | to_entries[] | select(.value.class | IN("launcher","no-grant","removable") | not) | .key' "$LIST" 2>/dev/null)
+for label in $unknown; do
+  printf '  ✗ %s: unknown class in config/tcc-programs.json (launcher | no-grant | removable)\n' "$label"
+  fail=$((fail + 1))
+done
+removable=$(jq -r '[.programs | to_entries[] | select(.value.class == "removable")] | length' "$LIST" 2>/dev/null || echo 0)
+
 # Jobs that run `op` must go through the launcher (its Full Disk Access supersedes the AppData prompt op raises).
 OP_JOBS="com.jkrumm.opbackup"   # extend when another LaunchAgent starts calling op
 for opjob in $OP_JOBS; do
@@ -73,7 +83,9 @@ if [ -x "$LAUNCHER" ]; then
 fi
 
 if [ "$fail" -eq 0 ]; then
-  printf '  ✓ tcc: %s LaunchAgent programs checked, %s flagged and all classified%s\n' "$checked" "$flagged" "$warn"
+  rem=""
+  [ "${removable:-0}" -eq 0 ] || rem=", ${removable} removable-volume program(s) listed"
+  printf '  ✓ tcc: %s LaunchAgent programs checked, %s flagged and all classified%s%s\n' "$checked" "$flagged" "$rem" "$warn"
   exit 0
 fi
 exit 1

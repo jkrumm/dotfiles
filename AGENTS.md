@@ -313,9 +313,9 @@ never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/ho
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
 `scripts/devhost-health-check.sh` (`jobrun --timeout 270`) pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **18 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
+`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **19 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
 core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
-services (6), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
+services (6), claude auth, claude version, AGENTS.md flag, obsidian, disk, external volume (WARN-only, silent until `config/external-volume.json` says attached), runaways,
 jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
 the jobs push (no ACL grant runs `tag:homelab → tag:mac`); service health is pulled
 through the Kuma door (below). Every watcher in one table: `docs/architecture.md` §Watchers.
@@ -557,6 +557,12 @@ brain-sync; anything an agent reads must live on the mini). **A running `smbd` i
 disk-sweep-run` runs it once), what moved to the HomeLab and how to
 restore it: `docs/disk.md`. **Agents cannot see `~/.Trash`** (no Full Disk Access; it held
 246 GiB unnoticed) — measure it through `ask-human` over `ssh mini`.
+
+**External volume** — the mini's USB SSD can be absent, locked or half-mounted and launchd has no mount
+dependency, so every dependent gates itself (`scripts/lib/volume-gate.sh run -- <cmd>`: present = unlocked and the sentinel
+reads, else one `skipped: volume <state>` line and exit 0, nothing created, no fallback to the internal disk). Never
+format, erase or convert the drive. The mount point is read at run time, never written down. Check, unlock job, TCC class,
+keep-off list: `docs/external-ssd.md`.
 
 **Storage** — which disk is the home of which data, every copy and the job that makes it, the mounts per
 Mac: `docs/storage.md`. One home per class; a second copy is made by a job, never by hand.

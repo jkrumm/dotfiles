@@ -378,11 +378,22 @@ section_tcc() {
   bad "tcc" "unclassified LaunchAgent program(s) above (docs/tcc.md)"
 }
 
+# External volume (docs/external-ssd.md): silent while config/external-volume.json says attached=false; with it true,
+# OK when present, a yellow WARN (never a failure) when absent, locked or unreadable.
+section_external_volume() {
+  local out rc=0
+  out=$(bash "$DOTFILES_DIR/scripts/external-volume-check.sh" 2>&1) || rc=$?
+  [ -n "$out" ] || return 0
+  hdr "External volume"
+  if [ "$rc" -eq 0 ]; then ok "external volume" "$out"; else skip "external volume" "WARN: $out"; fi
+}
+
 # --- Run -----------------------------------------------------------------------
 
 section_launchagents
 section_core
 section_tcc
+section_external_volume
 section_architecture
 section_jobs
 section_brew

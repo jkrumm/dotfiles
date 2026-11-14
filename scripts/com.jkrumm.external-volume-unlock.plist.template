@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.external-volume-unlock</string>
+  <!-- Unlocks the encrypted external volume when it is present but locked (docs/external-ssd.md §Unlock).
+       A no-op while config/external-volume.json says attached=false, while the volume is mounted, and while it is absent.
+       It never touches a file on the volume and never formats, erases or converts anything. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.external-volume-unlock</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>120</string>
+    <string>--timeout</string><string>90</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/external-volume-unlock.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- A locked APFS volume never mounts, so StartOnMount alone cannot see it: the 120 s interval is what finds a
+       volume that was plugged in locked. StartOnMount is the quick path for one that mounts unlocked. RunAtLoad
+       covers login. The job is idempotent and off the boot path. -->
+  <key>StartInterval</key><integer>120</integer>
+  <key>StartOnMount</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/external-volume-unlock.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/external-volume-unlock.log</string>
+</dict>
+</plist>

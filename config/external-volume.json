@@ -1,0 +1,7 @@
+{
+  "_doc": "The external volume contract (docs/external-ssd.md). The mount point is never written here: scripts/lib/volume-gate.sh reads it from diskutil at run time. attached=false makes every gate, check and unlock job a silent no-op. sentinel = a file name at the volume's root that the owner's adoption step writes; a gate reports 'present' only when it reads. passphraseRef = an op:// ref in dotfiles-private/headless.refs (null until it is there).",
+  "name": "EXT",
+  "sentinel": ".volume-gate",
+  "attached": false,
+  "passphraseRef": null
+}

@@ -804,7 +804,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2664,6 +2664,24 @@ disk-sweep-run:
 disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
+
+# The external volume contract (docs/external-ssd.md). The unlock job is NOT part of `make setup`: it is installed
+# when the volume is adopted (config/external-volume.json attached=true), and a no-op until then.
+.PHONY: external-volume-unlock-setup external-volume-unlock-teardown external-volume-check volume-gate-test
+external-volume-unlock-setup:
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.external-volume-unlock" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ at load, on mount and every 120 s → unlock the external volume if it is present but locked; log: ~/Library/Logs/external-volume-unlock.log"
+external-volume-unlock-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.external-volume-unlock.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.external-volume-unlock.json"; \
+	echo "  ✓ external-volume-unlock torn down (unloaded, plist and jobrun state removed)"
+external-volume-check: ## Read-only: the external volume's state (silent while config/external-volume.json says attached=false)
+	@bash $(DOTFILES_DIR)/scripts/external-volume-check.sh; rc=$$?; [ $$rc -le 2 ] || exit $$rc
+volume-gate-test: ## Hermetic test for the volume gate, the unlock job and the check (a stub diskutil, a temp dir as the volume)
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/volume-gate.sh $(DOTFILES_DIR)/scripts/external-volume-unlock.sh $(DOTFILES_DIR)/scripts/external-volume-check.sh $(DOTFILES_DIR)/scripts/volume-gate.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/volume-gate.test.sh
 
 .PHONY: colima-mounts-test
 colima-mounts-test: ## The mini VM's mounts writer (colima/apply-mounts.sh) against a temp colima.yaml

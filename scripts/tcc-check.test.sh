@@ -39,4 +39,11 @@ case "$out" in *"WARN launcher is still ad-hoc"*"re-sign pending"*) ;; *) fail "
 codesign -f -s - --identifier com.jkrumm.herdr-core-launcher -r='designated => identifier "com.jkrumm.herdr-core-launcher"' "$T/bin/launcher" 2>/dev/null
 out=$(run) || fail "stable-DR launcher must pass"
 case "$out" in *WARN*) fail "stable-DR launcher must not WARN: $out" ;; esac
+# the removable class (programs that touch the external volume) classifies a flagged program and is counted; an unknown class fails
+echo '{"programs":{"com.test.adhoc":{"class":"removable","why":"t"}}}' > "$T/list.json"
+out=$(run) || fail "a removable-class program must pass"
+case "$out" in *"1 removable-volume program(s) listed"*) ;; *) fail "removable is counted: $out" ;; esac
+echo '{"programs":{"com.test.adhoc":{"class":"no-grant","why":"t"},"com.test.typo":{"class":"removeable","why":"t"}}}' > "$T/list.json"
+if out=$(run); then fail "an unknown class must fail"; fi
+case "$out" in *"com.test.typo"*"unknown class"*) ;; *) fail "unknown class message: $out" ;; esac
 echo "tcc-check.test.sh: ok"

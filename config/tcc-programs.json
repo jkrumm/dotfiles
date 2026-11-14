@@ -1,5 +1,5 @@
 {
-  "_doc": "LaunchAgents whose program is ad-hoc signed or sits on a versioned path, and why that is fine. docs/tcc.md. A label not listed here makes `make tcc-check` fail. class: launcher = file access is covered by herdr-core-launcher's Full Disk Access (the umbrella for LaunchAgents that call `op`; the herdr-core itself is Developer-ID signed Herdr Core.app and never listed); no-grant = the job touches no TCC-protected folder (Desktop, Documents, Downloads, iCloud, other apps' data).",
+  "_doc": "LaunchAgents whose program is ad-hoc signed or sits on a versioned path, and why that is fine. docs/tcc.md. A label not listed here makes `make tcc-check` fail. class: removable = the program reads or writes the external volume (docs/external-ssd.md), only behind scripts/lib/volume-gate.sh, and needs the Removable Volumes grant, answered once at the screen; launcher = file access is covered by herdr-core-launcher's Full Disk Access (the umbrella for LaunchAgents that call `op`; the herdr-core itself is Developer-ID signed Herdr Core.app and never listed); no-grant = the job touches no TCC-protected folder (Desktop, Documents, Downloads, iCloud, other apps' data).",
   "programs": {
     "com.iu.athena-postgres": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
     "sh.brew.postgresql@18": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
@@ -14,6 +14,7 @@
     "com.jkrumm.weatherorb.worker-round": { "class": "no-grant", "why": "uv python; ~/SourceRoot only" },
     "com.jkrumm.collie": { "class": "no-grant", "why": "compiled bridge under ~/.local/share/collie; touches only its own config, state and log" },
     "homebrew.mxcl.sleepwatcher": { "class": "no-grant", "why": "runs ~/.sleep and ~/.wakeup, which touch nothing protected" },
+    "com.jkrumm.devhost-health": { "class": "removable", "why": "the heartbeat reads the volume sentinel (external volume check); a missing grant shows as WARN unreadable, never a failure" },
     "sh.brew.ntfy-mac": { "class": "no-grant", "why": "notification relay; no file access outside its own state" }
   }
 }
