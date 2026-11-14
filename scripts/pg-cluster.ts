@@ -567,7 +567,13 @@ async function main() {
     for (const st of plan.statements) console.log(`${cmd === "plan" ? "would run" : "run"} [${st.db}] ${st.shown ?? st.sql}`)
     for (const f of plan.files) console.log(`${cmd === "plan" ? "would write" : "write"} ${f.path}`)
     for (const dr of plan.drift) console.log(`drift: ${dr}`)
-    if (cmd === "plan") { console.log(plan.statements.length + plan.files.length === 0 ? "plan: in sync" : `plan: ${plan.statements.length} statements, ${plan.files.length} files`); return }
+    // a role whose secret is missing would be left without its password: never "in sync", and apply fails
+    const missing = plan.drift.filter((d) => d.includes("is not in the secrets cache")).length
+    if (cmd === "plan") {
+      const pending = plan.statements.length + plan.files.length + missing
+      console.log(pending === 0 ? "plan: in sync" : `plan: ${plan.statements.length} statements, ${plan.files.length} files, ${missing} missing secrets`)
+      return
+    }
 
     let failed = 0
     const byDb = new Map<string, SQL>()
@@ -595,7 +601,8 @@ async function main() {
       for (const s of byDb.values()) await s.close()
     }
     console.log(failed ? `apply: ${failed} statements failed` : `apply: ${plan.statements.length} statements, ${plan.files.length} files`)
-    process.exit(failed ? 1 : 0)
+    if (missing) console.error(`apply: ${missing} role passwords are not in the secrets cache (drift above; make secrets-reseal-request)`)
+    process.exit(failed || missing ? 1 : 0)
   }
 
   if (cmd === "snapshot") {

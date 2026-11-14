@@ -34,6 +34,7 @@ BARE_DATA=/opt/homebrew/var/postgresql@18
 OLD_PORT=5433
 NEW_PORT=5432
 ATHENA_SOCK="$HOME/.local/state/athena/pgsock"
+ATHENA_DATA="$HOME/.local/state/athena/pg18"
 ATHENA_LABEL=com.iu.athena-postgres
 # The launchd jobs that hold connections to the Docker server (lsof on 2026-11-14).
 CLIENT_LABELS=(com.jkrumm.software-factory com.jkrumm.argo com.jkrumm.agent-workflows-host com.jkrumm.agent-workflows-audio com.jkrumm.agent-workflows-gateway)
@@ -135,6 +136,7 @@ fi
 # --------------------------------------------------------------- cutover and rollback-drill
 STOPPED=()
 ATHENA_STOPPED=0
+ATHENA_READONLY=0
 DOCKER_STOPPED=0
 SWITCHED=0
 COPIED=()
@@ -142,7 +144,8 @@ DONE=0
 
 start_clients() {
   local l
-  for l in "${STOPPED[@]}"; do
+  # ${a[@]+...}: macOS's bash 3.2 treats an empty array as unbound under set -u
+  for l in ${STOPPED[@]+"${STOPPED[@]}"}; do
     log "start $l"
     launchctl bootstrap "$UID_GUI" "$HOME/Library/LaunchAgents/$l.plist" 2>/dev/null || launchctl kickstart "$UID_GUI/$l" || log "WARN: $l did not start"
   done
@@ -173,7 +176,7 @@ rollback() {
     wait_ready /tmp "$OLD_PORT" 60 || log "WARN: the bare server does not answer on $OLD_PORT"
     SWITCHED=0
   fi
-  for db in "${COPIED[@]}"; do
+  for db in ${COPIED[@]+"${COPIED[@]}"}; do
     log "drop the copy $db from the bare server (its source is untouched)"
     "$PGBIN/dropdb" -h /tmp -p "$OLD_PORT" --if-exists --force "$db"
     # the maintenance database was empty before the copy (preflight checks it): recreate it empty
@@ -184,6 +187,12 @@ rollback() {
     docker start postgres
     for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' postgres)" = healthy ] && break; sleep 2; done
     DOCKER_STOPPED=0
+  fi
+  if [ "$ATHENA_READONLY" = 1 ]; then
+    # the read-only instance started for the copy holds the data dir; launchd's would crash-loop beside it
+    log "stop Athena's read-only copy instance"
+    "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w stop >/dev/null
+    ATHENA_READONLY=0
   fi
   if [ "$ATHENA_STOPPED" = 1 ]; then
     log "start Athena's cluster again"
@@ -249,10 +258,12 @@ if [ "$VERB" = cutover ]; then
     "${PGC[@]}" copy --port "$OLD_PORT" --db "$db" --from-host 127.0.0.1 --from-port "$NEW_PORT" --from-user "$DU" --from-password-ref "$DOCKER_PW_REF" --keep-dir "$RUN/dumps" | tee "$RUN/copy-$db.json"
   done
   log "start Athena's cluster read-only for its copy"
-  "$PGBIN/pg_ctl" -D "$HOME/.local/state/athena/pg18" -l "$RUN/athena-copy.log" -w -o "-c default_transaction_read_only=on" start >/dev/null
+  ATHENA_READONLY=1
+  "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -l "$RUN/athena-copy.log" -w -o "-c default_transaction_read_only=on" start >/dev/null
   COPIED+=(athena)
   "${PGC[@]}" copy --port "$OLD_PORT" --db athena --from-host "$ATHENA_SOCK" --from-port 5432 --from-user postgres --keep-dir "$RUN/dumps" | tee "$RUN/copy-athena.json"
-  "$PGBIN/pg_ctl" -D "$HOME/.local/state/athena/pg18" -m fast -w stop >/dev/null
+  "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w stop >/dev/null
+  ATHENA_READONLY=0
   log "full apply: schemas and default privileges must already hold"
   "${PGC[@]}" plan --port "$OLD_PORT" | tee "$RUN/plan-after-restore.txt"
   grep -q '^plan: in sync' "$RUN/plan-after-restore.txt" || { log "the restored databases differ from the declaration"; false; }
