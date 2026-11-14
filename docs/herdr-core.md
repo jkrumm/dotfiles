@@ -247,7 +247,8 @@ A missing or invalid value falls back to the default. To change one, add it to `
 boot allows, because hc-resume adds at most 3 starting Claudes at any moment; the last send is typed about 25 × 3 s ≈ 75 s
 after the tailnet is up (a start is the typing of the line, Claude itself then takes its own time to load), so all agents are
 back about 2 to 3 minutes after tailnet-up. The startup line `pacing: …` in `~/Library/Logs/hc-resume.log` shows the values
-in force; each `resume <addr>` line is stamped, so the real curve reads straight from the log after the next reboot.
+in force; each `resume <addr>` line is stamped, so the real curve reads straight from the log after the next reboot. How to
+read it, and the owner's drill that measures it without a reboot: `docs/recovery-drill.md`.
 
 ## Removal
 
