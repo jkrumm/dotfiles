@@ -1116,7 +1116,7 @@ smb-keepalive-setup:
 	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.smb-keepalive" PLIST_DIR="$(DOTFILES_DIR)/smb" || exit 1; \
 	echo "    ↳ shares: $(SECRETS_PRIVATE_REPO)/smb-shares.conf · log: ~/Library/Logs/smb-keepalive.log"
 smb-keepalive-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/smb/smb-keepalive.sh $(DOTFILES_DIR)/smb/smb-keepalive.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/smb/smb-keepalive.sh $(DOTFILES_DIR)/smb/smb-mount.sh $(DOTFILES_DIR)/smb/smb-keepalive.test.sh
 	@/bin/bash $(DOTFILES_DIR)/smb/smb-keepalive.test.sh
 smb-keepalive-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.smb-keepalive" 2>/dev/null | grep -E '^\s+(state|last exit code|runs) =' \
@@ -1125,6 +1125,7 @@ smb-keepalive-status:
 smb-keepalive-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.smb-keepalive.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	launchctl remove com.jkrumm.smb-keepalive.mount 2>/dev/null || true; \
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.smb-keepalive.json"; \
 	[ -L "$(HOME)/Library/Preferences/nsmb.conf" ] && rm -f "$(HOME)/Library/Preferences/nsmb.conf"; \
 	echo "  ✓ smb-keepalive torn down (unloaded, plist, jobrun state + nsmb.conf link removed)"

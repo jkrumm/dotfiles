@@ -90,7 +90,7 @@ or on the next network change (`docs/macbook.md` §HomeLab Samba). Shares are de
 Agents on the mini read and write HomeLab files with `hl` (S3). The SMB mounts are for bulk
 copies and for people. **A launchd job cannot read an SMB mount**: macOS answers `Operation not
 permitted`, or hangs on a prompt nobody sees, unless its program holds the Network Volumes grant,
-and that grant is keyed on a versioned binary path. Jobs use `hl`; terminals in the Herdr core
+and that grant is keyed on a versioned binary path. Jobs use `hl`; the keepalive itself reads nothing from a mount (`stat` of a name that cannot exist, `docs/macbook.md`) and mounts through a transient job outside `jobrun`'s chain; terminals in the Herdr core
 read the mounts through its Full Disk Access.
 
 ## Status
