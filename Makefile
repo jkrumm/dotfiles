@@ -48,6 +48,20 @@ COLLIE_SOURCE  := AltanS/collie
 COLLIE_REF     := fa7b22758dd2a921f90818be2104f6445e8e60aa
 COLLIE_VERSION := 1.28.1
 
+# kiri — the container-runtime trial beside Colima (docs/kiri-trial.md). Pinned release, its
+# tarball's sha256 (from the release's SHA256SUMS) and the Developer ID team that signs it.
+KIRI_VERSION    := 0.2.0
+KIRI_SHA256     := f37a497c2c0d6da586bb5f5a74cafd2f320bbe8de9a4dc25b94ff56f961859ba
+KIRI_TEAM       := Z44N5GDT9Q
+KIRI_MEMORY_MIB ?= 2048
+KIRI_IDLE_SECS  ?= 60
+# Apple's container, the trial's second candidate: the signed installer pkg, expanded and never installed.
+CONTAINER_VERSION := 1.7.1
+CONTAINER_SHA256  := b6739caf3d47ca53a78f1a7edf32521420a75c7941838c3cefa75f30b80f5a97
+CONTAINER_TEAM    := UPBK2H6LZM
+CONTAINER_ENV     := CONTAINER_VERSION=$(CONTAINER_VERSION) CONTAINER_SHA256=$(CONTAINER_SHA256) CONTAINER_TEAM=$(CONTAINER_TEAM)
+KIRI_ENV        := KIRI_VERSION=$(KIRI_VERSION) KIRI_SHA256=$(KIRI_SHA256) KIRI_TEAM=$(KIRI_TEAM) KIRI_MEMORY_MIB=$(KIRI_MEMORY_MIB) KIRI_IDLE_SECS=$(KIRI_IDLE_SECS)
+
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
 # zero DNS provider modules). Same pinning discipline as COLLIE_REF: xcaddy fetches and compiles arbitrary Go modules on every
@@ -3336,6 +3350,52 @@ collie-pair:
 collie-hc-proof:
 	@bash $(DOTFILES_DIR)/scripts/collie-hc-proof.sh
 
+# kiri trial (docs/kiri-trial.md). Colima and the default docker context are never touched:
+# every docker command here names --context kiri. `kiri setup` is never run.
+.PHONY: kiri-sample-on kiri-sample-off kiri-install kiri-up kiri-down kiri-status kiri-teardown kiri-docker kiri-compose kiri-trial
+kiri-install: ## Install the pinned kiri release (sha256, signature, team, notarization checked); no sudo
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh install
+
+kiri-up: ## Create the kiri docker context, bootstrap com.jkrumm.kiri, wait for the socket
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh up
+
+kiri-down: ## Boot com.jkrumm.kiri out (daemon and VM stop; files stay)
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh down
+
+kiri-sample-on: ## Start the 15-minute footprint/health sampler of the trial's 48-hour reading
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh sample-on
+
+kiri-sample-off: ## Stop the sampler
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh sample-off
+
+kiri-status: ## Agent, daemon, socket, installed versions (read-only)
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh status
+
+kiri-teardown: ## Remove the kiri install, context, plist and ~/.kiri
+	@$(KIRI_ENV) bash $(DOTFILES_DIR)/kiri/kiri-setup.sh teardown
+
+kiri-docker: ## docker --context kiri $(ARGS)
+	@docker --context kiri $(ARGS)
+
+kiri-compose: ## docker --context kiri compose $(ARGS)
+	@docker --context kiri compose $(ARGS)
+
+.PHONY: container-install container-measure container-stop container-teardown
+container-install: ## Expand Apple's signed container pkg under ~/.local/share/apple-container (checked, never installed)
+	@$(CONTAINER_ENV) bash $(DOTFILES_DIR)/kiri/container-trial.sh install
+
+container-measure: ## Start Apple's container service, take the seven readings of the trial, stop it (~15 min)
+	@$(CONTAINER_ENV) bash $(DOTFILES_DIR)/kiri/container-trial.sh measure
+
+container-stop: ## Stop Apple's container service and every container with it
+	@$(CONTAINER_ENV) bash $(DOTFILES_DIR)/kiri/container-trial.sh stop
+
+container-teardown: ## Stop it and remove the expanded install and its data
+	@$(CONTAINER_ENV) bash $(DOTFILES_DIR)/kiri/container-trial.sh teardown
+
+kiri-trial: ## One measurement of docs/kiri-trial.md: make kiri-trial STEP=a|b|c-mariadb|c-linewatch|c-internal|c-tun|c-restart|d|e|sample
+	@bash $(DOTFILES_DIR)/kiri/kiri-trial.sh $(STEP) $(ARGS)
+
 # The look: one command, both machines. Three programs paint one screen and none
 # of them can see the other two — the terminal paints pane content from its ANSI
 # palette, the Herdr app paints its own chrome, starship paints the prompt inside that.
@@ -3757,6 +3817,9 @@ help:
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
+	@echo "  make kiri-install|kiri-up|kiri-down|kiri-status|kiri-teardown   The kiri trial (docs/kiri-trial.md): pinned install, daemon, remove; kiri-sample-on|off = the 48-hour sampler"
+	@echo "  make kiri-docker|kiri-compose ARGS=...   docker --context kiri ...;  make kiri-trial STEP=a|b|c-*|d|e|sample   one measurement"
+	@echo "  make container-install|container-measure|container-stop|container-teardown   Apple's container, the trial's second candidate (expanded, never installed)"
 	@echo "  make colima-restart  Apply COLIMA_CPU/MEMORY, converge the plist, bootout+bootstrap (restarts the VM)"
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make pg-plan         What pg-apply would change on the one Postgres (PG_ARGS passes flags)"

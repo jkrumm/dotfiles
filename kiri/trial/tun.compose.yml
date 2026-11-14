@@ -1,0 +1,7 @@
+# NET_ADMIN and /dev/net/tun: the shape of the company VPN container. Creates a tun device.
+services:
+  tun:
+    image: alpine:3.20
+    command: sh -c "apk add --no-cache iproute2 >/dev/null && ip tuntap add dev tun0 mode tun && ip link set tun0 up && ip -br link show tun0 && echo TUN_OK && sleep 3600"
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]

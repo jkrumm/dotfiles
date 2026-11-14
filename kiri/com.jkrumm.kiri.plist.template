@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>__LABEL__</string>
+  <!-- The kiri trial's daemon (docs/kiri-trial.md), rendered by kiri/kiri-setup.sh. The daemon only:
+       never `kiri setup` (it edits the shell profiles, ~/.docker/config.json and /usr/local/bin) and
+       never the Kiri UI (the only place that updates the app). The VM sleeps by itself after
+       KIRI_IDLE_SECS without a container or an API request, so KeepAlive costs a 15 MB process, not
+       a VM. Booted out by `make kiri-down`; removed by `make kiri-teardown`. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__APP__/Contents/MacOS/kiri</string>
+    <string>daemon</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>KIRI_MEMORY_MIB</key><string>__MEMORY_MIB__</string>
+    <key>KIRI_IDLE_SECS</key><string>__IDLE_SECS__</string>
+    <!-- The daemon starts its *.kiri.localhost routers on the wildcard ports 80 and 443 and an NFS
+         mount at ~/Kiri unless told otherwise; there is no off switch for the routers, only ports.
+         Moved off 80/443 (Caddy's) and the Finder mount skipped. -->
+    <key>KIRI_HTTP_PORT</key><string>47080</string>
+    <key>KIRI_HTTPS_PORT</key><string>47443</string>
+    <key>KIRI_NO_FINDER</key><string>1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__LOG__.out.log</string>
+  <key>StandardErrorPath</key><string>__LOG__.err.log</string>
+</dict>
+</plist>
