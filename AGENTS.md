@@ -254,6 +254,21 @@ Gotchas (opt-out ports file, `caddy adapt` registry reads, `localhost` vs
 `127.0.0.1` upstreams, one site block per app, 502-vs-403, HTTP/3 off, DNS
 negative-caching at two layers): `docs/remote-dev.md` §Dev-server doors.
 
+## Service registry (mini)
+
+`config/mini/services.yaml` (+ a `mini-services.yaml` at any repo's root) lists every launchd job, container, VM and
+dev-server door with owner repo, tier, memory budget and start/stop verbs — `docs/mini-registry.md`. A new job goes in
+the registry in the same commit as its plist (the doctor fails on a loaded job it does not know and on a program inside
+`/.claude/worktrees/`; the heartbeat component `check_registry` files the same finding as an Issue).
+
+| Tier | Rule |
+|-|-|
+| `core` | always on (herdr-core, factory, agw, Postgres, Caddy, hermes, home, iris, argo, finances, rb, schedules) |
+| `on-demand` | starts on the first request, stops idle (dev servers behind `.test` doors, teamchat sandbox, research-chrome) |
+| `manual` | a profile starts it: `work`, `dev-db` |
+
+`make mini-ps` (`FORMAT=json`) · `make mini-up NAME=` · `make mini-down NAME=` (core needs `FORCE=1`) · `make mini-profile NAME=work|dev-db UP=1|0`.
+
 ## Colima and the boot path
 
 `make colima-{start,stop,restart,status}` — never bare `colima stop` or `brew

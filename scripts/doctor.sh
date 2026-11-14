@@ -367,6 +367,23 @@ section_jobs() {
   esac
 }
 
+# --- Service registry (mini) --------------------------------------------------
+# config/mini/services.yaml + the repos' mini-services.yaml (docs/mini-registry.md): FAIL on a loaded job the registry does
+# not know and on a job whose program is inside a worktree; a budget breach is a WARN. The same check feeds the heartbeat.
+section_registry() {
+  hdr "Service registry (make mini-ps)"
+  local bun_dir out summary rc=0
+  bun_dir=$(/bin/bash "$DOTFILES_DIR/scripts/lib/bun-bin.sh" 2>/dev/null) || { skip "registry" "bun not found — not checked"; return; }
+  out=$("$bun_dir/bun" "$DOTFILES_DIR/scripts/mini-registry.ts" check 2>&1) || rc=$?
+  summary=$(printf '%s\n' "$out" | tail -n 1)
+  printf '%s\n' "$out" | sed '$d' | sed 's/^/    /'
+  case "$rc" in
+    0) ok "registry" "$summary" ;;
+    2) skip "registry" "WARN: $summary" ;;
+    *) bad "registry" "$summary" ;;
+  esac
+}
+
 # TCC: a LaunchAgent program that is ad-hoc signed or on a versioned path loses its file-access grant on every
 # upgrade (docs/tcc.md). Static and read-only; the check itself lives in scripts/tcc-check.sh.
 section_tcc() {
@@ -400,6 +417,7 @@ section_worktrees
 
 if [ "$BACKEND" = "cache" ]; then
   section_external_volume   # the mini's drive: never on the MacBook
+  section_registry
   section_drift
   section_claude_accounts
   section_devhost_heartbeat

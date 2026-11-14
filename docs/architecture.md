@@ -247,6 +247,22 @@ hardening daemons are corporate, not mapped; `architecture-check.sh` asserts onl
 the `com.jkrumm.` / `sh.brew.` / `homebrew.mxcl.` / `cc.chlc.` prefixes there.
 Rationale for every one of these: `docs/macbook.md`.
 
+## Service registry and tiers
+
+`config/mini/services.yaml` lists every launchd job, container, VM and dev-server door on the mini with its owner repo,
+tier, memory budget and start/stop verbs; a repo adds its own in a `mini-services.yaml` at its root. `make mini-ps` shows
+tier, state and footprint against budget, plus drift (an unregistered loaded job, a program inside a worktree). Format,
+verbs and grading: [`mini-registry.md`](mini-registry.md).
+
+| Tier | Rule | Members |
+|-|-|-|
+| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules |
+| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors, the teamchat sandbox, `research-chrome` |
+| `manual` | started and stopped as a profile | `work` (VPN, dashboard, token minters), `dev-db` (mariadb, redis, clickstack) |
+
+The tier is recorded here and enforced by nothing yet; the rows that make `on-demand` and `manual` real are in
+`docs/plan.yaml`. `make doctor` and the heartbeat component `check_registry` fail on a loaded job the registry does not know.
+
 ## Doors (inbound)
 
 Every dev app's own `<name>.test` / `<name>.mini.jkrumm.com` door (23 of them —
@@ -305,14 +321,14 @@ rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to
 | Watcher | Mechanism | Watches | Alerts to | Who acts | Owner repo | Verdict |
 |-|-|-|-|-|-|-|
 | `com.jkrumm.devhost-health` liveness (`MacMini Dev Host - Push`) | push, **first** act of the run | the dead-machine checks only: tailnet Running, sshd listening, herdr-core socket answering (~15 s). Slow or hung components, swap pressure and a spent budget are WARN text, never DOWN | Kuma, Slack `Slack - Alerts` | the owner: the mini is unreachable or its core is dead | dotfiles | kept; reordered by issue 870 after nine false DOWNs in 48 h |
-| `com.jkrumm.devhost-health` detail (`MacMini Dev Host Detail - Push`, opt-in URL file) | push, second | the 19 components (services, disk, memory, auth, jobs WARN, quota, ...) | Kuma → the factory door, not the owner | a lead, through the door | dotfiles | kept; bounded (`jobrun --timeout 270`, per-component timeouts, 200 s budget) |
+| `com.jkrumm.devhost-health` detail (`MacMini Dev Host Detail - Push`, opt-in URL file) | push, second | the 20 components (services, disk, memory, auth, jobs WARN, the service registry, quota, ...) | Kuma → the factory door, not the owner | a lead, through the door | dotfiles | kept; bounded (`jobrun --timeout 270`, per-component timeouts, 200 s budget) |
 | Heartbeat side monitors: `MacMini Collie - Push`, `MacMini Secret Seed - Push`, factory monitor | push (same scheduler, own monitors, pushed before the composite) | collie bridge, secrets-cache freshness, the factory's `GET /health` relay (tick and queue movement) | Kuma, Slack | the owner | dotfiles / software-factory (the `/health` source) | kept |
 | `MacMini Drift - Push` | push | pins, brew-upgrade recency, pending macOS update | Kuma, Slack (2-day interval) | the owner applies by hand (`make collie-upgrade`, `make brew-upgrade`, `make mini-macos-update`) | dotfiles | merged into the heartbeat as a daily bounded side job, 2026-11-06 (`com.jkrumm.drift-check` retired) |
 | Kuma door monitors (`Local / Mac mini door`) | pull (Kuma through `:8795`) | mini service health: agent-workflows host and audio, brain-web, walkingpad, argo, ... from `kuma-door/registry.json` | Kuma, Slack | the owner | dotfiles (door, registry) / homelab (monitors) | kept; replaces the heartbeat's four duplicated service probes (agw host/audio, brain-web, walkingpad), retired 2026-11-06; the audio-vs-host version-mismatch comparison was dropped with them on purpose (the door proves liveness only; agent-workflows' own `make verify` covers release parity) |
 | Beszel agent (`com.jkrumm.beszel-agent`) | push (outbound WebSocket) | mini CPU, RAM, disk, network | the Beszel hub on homelab | unspecified (no alert route in these docs) | dotfiles | kept |
 | `jobrun` + `jobs-grade` | in-process record, then grading | every `jobrun` job: failure, absence, flapping, unloaded | a factory signal on the job's owner repo after 2 consecutive not-ok grades (once a day per job at most); ntfy topic `alerts` at priority 3 only when `factory` is unreachable; a WARN in the detail message; MacBook: a native notification on wake | a lead fixes it; nothing auto-heals | dotfiles | kept; the only grader |
 | `com.jkrumm.jobrun-canary` | in-process probe | the job, then signal chain, end to end | jobs-grade, so a signal on dotfiles | a lead | dotfiles | kept |
-| `make doctor` | on demand | LaunchAgents, architecture map, brew, drift (no push), remote path | the terminal | whoever runs it | dotfiles | kept; read-only |
+| `make doctor` | on demand | LaunchAgents, architecture map, service registry, brew, drift (no push), remote path | the terminal | whoever runs it | dotfiles | kept; read-only |
 | `com.jkrumm.factory-door` | alert door (inbound, `:8796`) | receives alerts from outside | files a factory Issue over the socket | the factory's lead is the Issue consumer; ops-signals.md does not cover it, so the exact flow is unspecified here | software-factory | kept |
 | `brain-sync`, `brain-backup` own pushes (`Brain Sync - Push`, `Brain Backup - Push`) | push (dead-man) | vault reconcile, nightly vault backup | Kuma, Slack | the owner (backup failures are tickets, not pages) | dotfiles | kept; both jobs now under a `jobrun` deadline |
 | `1Password Backup - Push` (opbackup, MacBook) | push | the weekly backup left the box | Kuma, Slack | the owner | dotfiles | kept |

@@ -1312,6 +1312,19 @@ check_jobs() {
   esac
 }
 
+# The service registry (config/mini/services.yaml, docs/mini-registry.md): a loaded job the registry does not know and a
+# job whose program lives in a worktree FAIL (the detail monitor goes DOWN and the factory door files an Issue); a memory
+# budget breach is a WARN. `make doctor` runs the same check on demand; this is what makes it reach the factory on its own.
+check_registry() {
+  local bun_dir out rc=0
+  bun_dir=$(/bin/bash "$(dirname "${BASH_SOURCE[0]}")/lib/bun-bin.sh" 2>/dev/null) || { echo "registry: bun not found, not checked"; return 2; }
+  out=$("$bun_dir/bun" "${MINI_REGISTRY_TS:-$(dirname "${BASH_SOURCE[0]}")/mini-registry.ts}" check 2>&1) || rc=$?
+  case "$rc" in
+    0|1|2) printf '%s\n' "$out" | tr '\n' ';' | sed 's/;$//; s/;/; /g'; return "$rc" ;;
+    *)     echo "registry: check crashed (rc=$rc), not graded"; return 2 ;;
+  esac
+}
+
 # --- Side monitors: their OWN Kuma monitors, same scheduler -------------------
 # They run BEFORE the composite on purpose: the composite is the long, many-tool
 # part, and a hang there must never starve a monitor that is one cheap probe.
@@ -1552,7 +1565,7 @@ failure=""
 components="${DEVHOST_COMPONENTS:-check_tailscale check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
                  check_obsidian check_disk check_external_volume check_runaways \
-                 check_jobs check_quota}"
+                 check_jobs check_registry check_quota}"
 # Word-splitting is the point: $components is a list of function names.
 # shellcheck disable=SC2086
 for component in $components; do

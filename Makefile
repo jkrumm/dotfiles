@@ -839,6 +839,24 @@ deploy: ## Converge this machine onto the tracked config (wraps setup; nothing t
 doctor: ## Read-only health of this machine (+ the mini when run from the MacBook)
 	@bash $(DOTFILES_DIR)/scripts/doctor.sh
 
+# The mini's service registry (config/mini/services.yaml + a mini-services.yaml at any repo's root):
+# every service with its tier, budget and start/stop verbs. docs/mini-registry.md.
+.PHONY: mini-ps mini-up mini-down mini-profile
+mini-ps: ## Every service on the mini: tier, state, footprint against budget, drift (FORMAT=json for the apps page)
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts ps $(if $(FORMAT),--format $(FORMAT))
+
+mini-up: ## Start a registered service, what it needs first (NAME=<service>)
+	@[ -n "$(NAME)" ] || { echo "usage: make mini-up NAME=<service>  (names: make mini-ps)"; exit 2; }
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts up "$(NAME)"
+
+mini-down: ## Stop a registered service (NAME=<service>; a core service needs FORCE=1)
+	@[ -n "$(NAME)" ] || { echo "usage: make mini-down NAME=<service> [FORCE=1]"; exit 2; }
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts down "$(NAME)" $(if $(FORCE),--force)
+
+mini-profile: ## Start or stop every manual service of a profile (NAME=work|dev-db UP=1|0)
+	@[ -n "$(NAME)" ] && { [ "$(UP)" = 1 ] || [ "$(UP)" = 0 ]; } || { echo "usage: make mini-profile NAME=<work|dev-db> UP=1|0"; exit 2; }
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts profile "$(NAME)" $(if $(filter 1,$(UP)),--up,--down)
+
 .PHONY: caddy-tailnet
 # Expose dev servers over the tailnet via Caddy. Runs ON the dev host (the mini).
 # Opt-in per machine and NOT in the default `setup` chain — only one machine is
@@ -3742,6 +3760,9 @@ help:
 	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
 	@echo ""
 	@echo "  make doctor                 Read-only health of this machine (+ the mini when run from the MacBook)"
+	@echo "  make mini-ps                Every service on the mini: tier, state, footprint against budget, drift (docs/mini-registry.md)"
+	@echo "  make mini-up|mini-down NAME=<service>   Start/stop a registered service (core needs FORCE=1)"
+	@echo "  make mini-profile NAME=<work|dev-db> UP=1|0   Start/stop a manual profile"
 	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."

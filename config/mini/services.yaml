@@ -1,0 +1,134 @@
+# The mini's service registry — every launchd job, container, VM and dev server on the Mac mini, with its tier,
+# memory budget and start/stop verbs. docs/mini-registry.md has the format; `make mini-ps` reads it.
+# A repo adds its own services in a `mini-services.yaml` at its root (same shape, `repo` defaults to the directory).
+#
+#   name        unique
+#   repo        owner repo under ~/SourceRoot or ~/IuRoot
+#   kind        launchd | compose | vm | static | dev-server
+#   tier        core (always on) | on-demand (starts on the first request) | manual (a profile starts it)
+#   profile     work | dev-db — for a manual service
+#   needs       [vm] is the Colima VM of the service's own profile; else a service name
+#   memory_mib  the budget; `make mini-ps` warns above it (physical footprint)
+#   door        the Caddy registry name(s) it serves, as scripts/lib/caddy-registry.py yields them
+#   label       launchd label (a brew service matches sh.brew.<n> and homebrew.mxcl.<n>); daemon: true for /Library/LaunchDaemons
+#   container   compose container name (vm: the Colima profile, default if omitted)
+#   start/stop  the owner's command; a launchd job without one gets launchctl bootstrap/bootout, a service with
+#               neither refuses the verb. status: the owner's own status command, for the apps page
+services:
+  - { name: hermes-gateway, repo: hermes-agent, kind: launchd, tier: core, label: ai.hermes.gateway, memory_mib: 570 }
+  - { name: athena-postgres, repo: epos-ai-teamchat-athena, kind: launchd, tier: manual, label: com.iu.athena-postgres, memory_mib: 50 }
+  - { name: athena-repo-sync, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.athena-repo-sync, memory_mib: 50 }
+  - { name: prometheus-artefact-daily, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-artefact-daily, memory_mib: 50 }
+  - { name: prometheus-conduktor-token, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-conduktor-token, memory_mib: 50 }
+  - { name: prometheus-dashboard-autodeploy, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-dashboard-autodeploy, memory_mib: 50 }
+  - { name: prometheus-epos-token, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-epos-token, memory_mib: 50 }
+  - { name: prometheus-stack-dashboard, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-stack-dashboard, memory_mib: 50 }
+  - { name: prometheus-state-backup, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-state-backup, memory_mib: 50 }
+  - { name: prometheus-vpn-watcher, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-vpn-watcher, memory_mib: 50 }
+  - { name: teamchat-api, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-api, memory_mib: 380 }
+  - { name: teamchat-broker, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-broker, memory_mib: 130 }
+  - { name: teamchat-funnel-reconcile, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-funnel-reconcile, memory_mib: 50 }
+  - { name: teamchat-profile, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-profile, memory_mib: 50 }
+  - { name: teamchat-runtime-deploy, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-runtime-deploy, memory_mib: 50 }
+  - { name: teamchat-vm-watch, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-vm-watch, memory_mib: 50 }
+  - { name: tool-checkout-deploy, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.tool-checkout-deploy, memory_mib: 50 }
+  - { name: agent-workflows-audio, repo: agent-workflows, kind: launchd, tier: core, label: com.jkrumm.agent-workflows-audio, door: audio, memory_mib: 110 }
+  - { name: agent-workflows-eval-mine, repo: agent-workflows, kind: launchd, tier: core, label: com.jkrumm.agent-workflows-eval-mine, memory_mib: 50 }
+  - { name: agent-workflows-gateway, repo: agent-workflows, kind: launchd, tier: core, label: com.jkrumm.agent-workflows-gateway, memory_mib: 70 }
+  - { name: agent-workflows-host, repo: agent-workflows, kind: launchd, tier: core, label: com.jkrumm.agent-workflows-host, door: agw-image, memory_mib: 290 }
+  - { name: argo, repo: argo, kind: launchd, tier: core, label: com.jkrumm.argo, door: argo-live, memory_mib: 160 }
+  - { name: beszel-agent, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.beszel-agent, memory_mib: 50 }
+  - { name: brain-backup, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-backup, memory_mib: 50 }
+  - { name: brain-sync, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-sync, memory_mib: 50 }
+  - { name: brain-web-refresh, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-web-refresh, memory_mib: 50 }
+  - { name: browser-reap, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.browser-reap, memory_mib: 50 }
+  - { name: claude-accounts-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.claude-accounts-keepalive, memory_mib: 50 }
+  - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, memory_mib: 170 }
+  - { name: devhost-health, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.devhost-health, memory_mib: 50 }
+  - { name: disk-sweep, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-sweep, memory_mib: 50 }
+  - { name: factory-door, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.factory-door, memory_mib: 50 }
+  - { name: finances, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances, memory_mib: 50 }
+  - { name: finances-backup-push, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances-backup-push, memory_mib: 50 }
+  - { name: fseventsd-watch, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.fseventsd-watch, memory_mib: 50 }
+  - { name: hc-events, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-events, memory_mib: 50 }
+  - { name: hc-reap, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-reap, memory_mib: 50 }
+  - { name: hc-resume, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-resume, memory_mib: 50 }
+  - { name: herdr-core, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.herdr-core, memory_mib: 50 }
+  - { name: hermes-backup, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-backup, memory_mib: 50 }
+  - { name: hermes-liveness, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-liveness, memory_mib: 50 }
+  - { name: hermes-serve, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-serve, door: hermes-api, memory_mib: 290 }
+  - { name: hermes-serve-liveness, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-serve-liveness, memory_mib: 50 }
+  - { name: home-climate, repo: home, kind: launchd, tier: core, label: com.jkrumm.home-climate, memory_mib: 50 }
+  - { name: home-nacht, repo: home, kind: launchd, tier: core, label: com.jkrumm.home-nacht, memory_mib: 50 }
+  - { name: homebridge, repo: home, kind: launchd, tier: core, label: com.jkrumm.homebridge, memory_mib: 100 }
+  - { name: iris, repo: iris, kind: launchd, tier: core, label: com.jkrumm.iris, door: iris, memory_mib: 90 }
+  - { name: iris-deploy, repo: iris, kind: launchd, tier: core, label: com.jkrumm.iris-deploy, memory_mib: 50 }
+  - { name: iris-testflight-crashes, repo: iris, kind: launchd, tier: core, label: com.jkrumm.iris-testflight-crashes, memory_mib: 50 }
+  - { name: jobrun-canary, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.jobrun-canary, memory_mib: 50 }
+  - { name: kuma-door, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.kuma-door, memory_mib: 50 }
+  - { name: linewatch-collector-agent, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-collector-agent, memory_mib: 50 }
+  - { name: linewatch-heartbeat, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-heartbeat, memory_mib: 50 }
+  - { name: linewatch-watchdog, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-watchdog, memory_mib: 50 }
+  - { name: lock-at-boot, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.lock-at-boot, memory_mib: 50 }
+  - { name: log-rotate, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.log-rotate, memory_mib: 50 }
+  - { name: modelpick-refresh, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-refresh, memory_mib: 50 }
+  - { name: modelpick-web, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-web, door: modelpick, memory_mib: 60 }
+  - { name: obsidian-autostart, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.obsidian-autostart, memory_mib: 50 }
+  - { name: research-chrome, repo: agent-workflows, kind: launchd, tier: on-demand, label: com.jkrumm.research-chrome, memory_mib: 700 }
+  - { name: smb-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.smb-keepalive, memory_mib: 50 }
+  - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, memory_mib: 250 }
+  - { name: soloist, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist, memory_mib: 80 }
+  - { name: soloist-speaker, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist-speaker, memory_mib: 50 }
+  - { name: usage-tracker, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker, memory_mib: 50 }
+  - { name: usage-tracker-prices, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker-prices, memory_mib: 50 }
+  - { name: usage-tracker-report, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker-report, memory_mib: 50 }
+  - { name: vps-pg-backup, repo: vps, kind: launchd, tier: core, label: com.jkrumm.vps-pg-backup, memory_mib: 50 }
+  - { name: walkingpad, repo: king-smith-walkingpad-mac, kind: launchd, tier: core, label: com.jkrumm.walkingpad, memory_mib: 50 }
+  - { name: weatherorb-public, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.public, memory_mib: 200 }
+  - { name: weatherorb-retention, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.retention, memory_mib: 50 }
+  - { name: weatherorb-serve, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.serve, door: weatherorb, memory_mib: 200 }
+  - { name: weatherorb-sync, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.sync, memory_mib: 200 }
+  - { name: weatherorb-tileserver, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.tileserver, door: [weatherorb-tiles, weatherorb-map], memory_mib: 200 }
+  - { name: weatherorb-verify, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.verify, memory_mib: 50 }
+  - { name: weatherorb-watchdog, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.watchdog, memory_mib: 50 }
+  - { name: weatherorb-worker-ingest, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.worker-ingest, memory_mib: 200 }
+  - { name: weatherorb-worker-round, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.worker-round, memory_mib: 200 }
+  - { name: colima, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.colima, memory_mib: 50 }
+  - { name: sleepwatcher, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.sleepwatcher, memory_mib: 50 }
+  - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, note: "budget 1536 once row pg-buffers has shipped shared_buffers 512MB", memory_mib: 3584 }
+  - { name: caddy, repo: dotfiles, kind: launchd, tier: core, label: sh.brew.caddy, daemon: true, process: caddy, memory_mib: 100, note: "root daemon; needs sudo to stop, no verb registered" }
+  - { name: dnsmasq, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.dnsmasq, daemon: true, process: dnsmasq, memory_mib: 20, note: "root daemon; *.test DNS" }
+  - { name: tailscale, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.tailscale, daemon: true, process: tailscaled, memory_mib: 150, note: "root daemon" }
+  - { name: maxvnodes, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.maxvnodes, daemon: true, memory_mib: 0, note: "root one-shot at boot (sysctl)" }
+  - { name: colima-docker-socket, repo: dotfiles, kind: launchd, tier: core, label: com.colima.docker-socket, daemon: true, memory_mib: 0, note: "root one-shot at boot (/var/run/docker.sock link)" }
+  - { name: colima-default, repo: dotfiles, kind: vm, tier: core, vm: default, start: "make -C ~/SourceRoot/dotfiles colima-start", stop: "make -C ~/SourceRoot/dotfiles colima-stop", memory_mib: 4608, note: "core until row mini-docker-idle makes the VM start on demand" }
+  - { name: colima-teamchat, repo: epos-ai-teamchat-athena, kind: vm, tier: on-demand, vm: teamchat, memory_mib: 4608, note: "kept up by teamchat-vm-watch; no verb until row teamchat-on-demand" }
+  - { name: linewatch, repo: linewatch, kind: compose, tier: core, container: linewatch, project: linewatch, needs: [vm], door: linewatch, start: "make -C ~/SourceRoot/linewatch up", stop: "make -C ~/SourceRoot/linewatch down", memory_mib: 100, note: "start is the repo's deploy; native under row linewatch-native" }
+  - { name: rb-api, repo: rb, kind: compose, tier: core, container: rb-api, project: rb, needs: [vm], door: rb, start: "make -C ~/SourceRoot/rb up", stop: "make -C ~/SourceRoot/rb down", memory_mib: 100, note: "always reachable (owner); native under row rb-native" }
+  - { name: rb-chromium, repo: rb, kind: compose, tier: core, container: rb-chromium, project: rb, needs: [vm], start: "make -C ~/SourceRoot/rb up", stop: "make -C ~/SourceRoot/rb down", memory_mib: 100 }
+  - { name: brain-web, repo: basalt-ui-obsidian, kind: compose, tier: core, container: brain-web, project: basalt-ui-obsidian, needs: [vm], door: brain, start: "make -C ~/SourceRoot/basalt-ui-obsidian up", stop: "make -C ~/SourceRoot/basalt-ui-obsidian down", memory_mib: 32, note: "nginx on a static dist; Caddy takes it over under row mini-docker-idle" }
+  - { name: dashboard-api, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: dashboard-api, project: dashboard, needs: [vm], memory_mib: 500, note: "no verb until row mini-work-profile" }
+  - { name: dashboard-ui, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: dashboard-ui, project: dashboard, needs: [vm], memory_mib: 32 }
+  - { name: vpn, repo: prometheus-stack, kind: compose, tier: manual, profile: work, container: prometheus-vpn, project: vpn, needs: [vm], memory_mib: 64 }
+  - { name: mariadb, repo: vps, kind: compose, tier: manual, profile: dev-db, container: mariadb, project: vps, needs: [vm], start: "make -C ~/SourceRoot/vps dev-mariadb-up", stop: "make -C ~/SourceRoot/vps dev-mariadb-down", memory_mib: 200 }
+  - { name: redis, repo: vps, kind: compose, tier: manual, profile: dev-db, container: redis, project: vps, needs: [vm], start: "make -C ~/SourceRoot/vps dev-redis-up", stop: "make -C ~/SourceRoot/vps dev-redis-down", memory_mib: 64 }
+  - { name: clickstack, repo: vps, kind: compose, tier: manual, profile: dev-db, container: clickstack, project: vps, needs: [vm], door: hyperdx, start: "make -C ~/SourceRoot/vps clickstack-up", stop: "make -C ~/SourceRoot/vps clickstack-down", memory_mib: 1500 }
+  - { name: vps-postgres, repo: vps, kind: compose, tier: manual, profile: dev-db, container: postgres, project: vps, needs: [vm], memory_mib: 0, note: "stale container; the dev Postgres moved to launchd (vps dev-pg-launchd)" }
+  - { name: idss-redpanda, repo: epos-studentenrolment-backend, kind: compose, tier: manual, profile: work, container: idss-redpanda, project: student-enrolment, needs: [vm], memory_mib: 0, note: "no verb registered" }
+  - { name: idss-bull-board, repo: epos-studentenrolment-backend, kind: compose, tier: manual, profile: work, container: idss-bull-board, project: student-enrolment, needs: [vm], memory_mib: 0, note: "no verb registered" }
+  - { name: idss-kafka-ui, repo: epos-studentenrolment-backend, kind: compose, tier: manual, profile: work, container: idss-kafka-ui, project: student-enrolment, needs: [vm], memory_mib: 0, note: "no verb registered" }
+  - { name: idss-mysql, repo: epos-studentenrolment-backend, kind: compose, tier: manual, profile: work, container: idss-mysql, project: student-enrolment, needs: [vm], memory_mib: 0, note: "no verb registered" }
+  - { name: idss-valkey, repo: epos-studentenrolment-backend, kind: compose, tier: manual, profile: work, container: idss-valkey, project: student-enrolment, needs: [vm], memory_mib: 0, note: "no verb registered" }
+  - { name: teamchat-opencode, repo: epos-ai-teamchat-athena, kind: compose, tier: on-demand, vm: teamchat, container: teamchat-opencode-1, project: teamchat, needs: [vm], memory_mib: 128, note: "on demand under row teamchat-on-demand" }
+  - { name: teamchat-relay, repo: epos-ai-teamchat-athena, kind: compose, tier: on-demand, vm: teamchat, container: teamchat-relay-1, project: teamchat, needs: [vm], memory_mib: 128, note: "on demand under row teamchat-on-demand" }
+  - { name: teamchat-egress, repo: epos-ai-teamchat-athena, kind: compose, tier: on-demand, vm: teamchat, container: teamchat-egress-1, project: teamchat, needs: [vm], memory_mib: 128, note: "on demand under row teamchat-on-demand" }
+  - { name: argo-dev, repo: argo, kind: dev-server, tier: on-demand, door: argo, memory_mib: 400 }
+  - { name: basalt-marketing, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt, memory_mib: 400 }
+  - { name: basalt-playground, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt-playground, memory_mib: 400 }
+  - { name: fpp, repo: free-planning-poker, kind: dev-server, tier: on-demand, door: [fpp, fpp-server, fpp-analytics, fpp-logdy], memory_mib: 800 }
+  - { name: jkrumm-com, repo: jkrumm.com, kind: dev-server, tier: on-demand, door: jkrumm, memory_mib: 400 }
+  - { name: plannotator, repo: dotfiles, kind: dev-server, tier: on-demand, door: plannotator, memory_mib: 200, note: "the interim review backend behind rv" }
+  - { name: rollhook, repo: rollhook, kind: dev-server, tier: on-demand, door: [rollhook, rollhook-dashboard, rollhook-marketing], memory_mib: 600 }
+  - { name: sy-serendipity, repo: sy-serendipity, kind: dev-server, tier: on-demand, door: sy-serendipity, memory_mib: 400 }
+  - { name: sy-serendipity-codex, repo: sy-serendipity, kind: dev-server, tier: on-demand, door: sy-serendipity-codex, memory_mib: 400 }
+
