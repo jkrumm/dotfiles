@@ -1,5 +1,5 @@
 ---
-description: Apple developer setup for every app of ours — what lives where (portal, 1Password, the mini), which credential does what, the order of a new app's one-time portal steps, and the traps that cost hours on Iris (App Group, Push, headless signing, tunnel, lock). Read before touching an Apple signing, provisioning, APNs, TestFlight or Sparkle problem, or before starting a new iOS/macOS app.
+description: Apple developer setup for every app of ours — what lives where (portal, 1Password, the mini), which credential does what, the order of a new app's one-time portal steps, the traps that cost hours on Iris (App Group, Push, headless signing, tunnel, lock), and the Mac release outside the store on the mini or a hosted GitHub runner (Developer ID, notarization, Sparkle, formula versus cask). Read before touching an Apple signing, provisioning, APNs, TestFlight, notarization or Sparkle problem, or before starting a new iOS/macOS app.
 ---
 
 # Apple signing — one team, many apps
@@ -19,11 +19,11 @@ All in the 1Password item `op://mini/apple-developer`, read on the mini with `se
 | `team-id` | the paid team's id | `DEVELOPMENT_TEAM`, ExportOptions `teamID` |
 | `asc-key-p8`, `asc-key-id`, `asc-issuer-id` | App Store Connect **Team** API key (Users and Access > Integrations; an individual key cannot do provisioning or notarytool) | `xcodebuild -allowProvisioningUpdates -authenticationKeyPath/-ID/-IssuerID` (creates App IDs, profiles, devices), TestFlight upload, `notarytool` |
 | `apns-key-p8`, `apns-key-id` | APNs **auth key** (token auth) | the server's APNs notifier (`APNS_KEY_P8` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_TOPIC` = bundle id). The key is not per environment (sandbox vs production is the token's host; unverified for production until the first TestFlight build). |
-| Sparkle EdDSA key | Mac update signing | private key in the mini's login keychain, backup file `~/.local/state/apple-developer/sparkle-ed25519.key` (0600, outside every repo); the 1Password copy is the owner's |
+| Sparkle EdDSA key | Mac update signing, **one key pair per app** | Iris: private key in the mini's login keychain, backup file `~/.local/state/apple-developer/sparkle-ed25519.key`. ntfy-mac: its own pair, file `sparkle-ntfy-mac-ed25519.key` in the same directory, and the repo secret `SPARKLE_ED_PRIVATE_KEY` for CI. 0600, outside every repo; the 1Password copy is the owner's |
 
 Not credentials, but needed: an Apple Development identity in the mini's login keychain (cloud-managed by `-allowProvisioningUpdates`), a Developer ID Application certificate for the Mac (Account Holder creates it).
 
-- 1Password flattens the `.p8` newlines into spaces. Rebuild real newlines and 64-character body lines before `-authenticationKeyPath` (Iris: `pem_normalize` in `scripts/device-lib.sh`; the server: `normalizePem`). Write it to a `mktemp` file, mode 0600, delete it with a `trap` on `EXIT`.
+- 1Password flattens the `.p8` newlines of a concealed field into spaces, and a CI secret can arrive with a literal `\n`. Rebuild real newlines and 64-character body lines before `-authenticationKeyPath` or `notarytool --key`. Copy ntfy-mac's `pem_normalize` (`scripts/apple-credentials.sh`): it takes either shape, keeps the BEGIN/END label and folds the body at 64. Iris has `pem_normalize` in `scripts/device-lib.sh`, the server `normalizePem`. Write the result to a `mktemp` file, mode 0600, delete it with a `trap` on `EXIT`.
 - "Certificates (0)" under Push Notifications in the portal is irrelevant: auth-key APNs needs no per-App-ID certificate.
 
 ## A new app: the one-time portal steps (Account Holder, ~5 minutes)
@@ -34,7 +34,7 @@ Do these before the first device build; the API key does the rest. Portal: devel
 2. **App IDs:** with `-allowProvisioningUpdates` the first build creates them (named `XC <bundle id>`). Then, **for each App ID that needs the group** (app and every extension that reads it): open it > App Groups > Configure/Edit > tick the group > Continue > Save.
 3. **Push Notifications** only on the App ID that holds `aps-environment` (the main app; widgets and notification-service extensions do not need it).
 4. **App Store Connect app record** (for TestFlight upload): My Apps > + > the bundle id.
-5. **Mac outside the store:** a Developer ID Application certificate (Certificates > + > Developer ID Application; the Account Holder creates it from a CSR whose private key lives on the signing machine). Export certificate + private key as a `.p12`, back it up as a 1Password Document in vault `mini`, import it on the mini. Notarization then uses the same Team key. Recipe: *Mac release* below.
+5. **Mac outside the store:** a Developer ID Application certificate (Certificates > + > Developer ID Application; the Account Holder creates it from a CSR whose private key lives on the signing machine). Export certificate + private key as a `.p12`, back it up as a 1Password Document in vault `mini`, import it on the mini. Headless, `security export` waits on a GUI approval that nobody answers (`set-key-partition-list` does not lift it): build the `.p12` with `openssl pkcs12 -export` from the private key and the certificate PEM kept in `~/.local/state/apple-developer/`, and prove it by importing into a throwaway keychain (ntfy-mac `AGENTS.md` "Release process"). Notarization then uses the same Team key. Recipe: *Mac release* below.
 
 An entitlement in the tracked `*.entitlements` that the portal's App ID lacks fails the whole build with "Provisioning profile … doesn't match the entitlements file's value for the com.apple.security.application-groups entitlement" (or `aps-environment`). Fix the portal, rerun; never strip the key from the tracked file. The Personal Team fallback (free, no Push, no App Groups) strips them in derived copies only.
 
@@ -48,7 +48,7 @@ An entitlement in the tracked `*.entitlements` that the portal's App ID lacks fa
 | APNs sandbox vs production | Xcode Debug builds use the sandbox host and tokens; TestFlight/App Store builds use production: `apnsEnv` follows the channel (`#if DEBUG`) |
 | `devicectl device copy from --domain-type appGroupDataContainer` refuses a file at the container root | only `Library`, `Documents`, `tmp` are readable: prove a write by a device-log line, not by the file |
 | No device log access without root | the app's own telemetry relay (HyperDX, `agw otel`) is the log; add an event for anything you need to prove |
-| Build number | `CFBundleVersion` from `git rev-list --count HEAD`, never committed |
+| Build number | `CFBundleVersion` from `git rev-list --count HEAD`, never committed. A repo whose releases carry a semantic-release version can stamp that `x.y.z` instead (ntfy-mac `scripts/stamp-version.sh`, working tree only): Sparkle needs only a value that grows |
 
 ## The Apple slot: one lock for every app
 
@@ -80,23 +80,96 @@ One script per app (Iris: `scripts/mac-release.sh`, `make mac-release IDENTITY=d
 3. **Archive** `Release` with `ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS=--timestamp CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO`. The last one keeps Xcode from adding `get-task-allow`, which notarization refuses.
    - `development`: `CODE_SIGN_STYLE=Automatic`, identity `Apple Development`, `-allowProvisioningUpdates` with the ASC Team key. Pipeline proof only: never notarized, `PUBLISH=draft` only (the script refuses `release`).
    - `developer-id`: `CODE_SIGN_STYLE=Manual`, identity `Developer ID Application`, no auth flags. The identity must be in a keychain on the search list.
-4. **Re-sign Sparkle inside out.** Sparkle ships its helpers (`Autoupdate`, `Updater.app`, the XPC services) ad-hoc signed and Xcode only re-signs the framework; notarization rejects them ("not signed with a valid Developer ID certificate", no secure timestamp). `codesign --force --options runtime --timestamp --sign <id>` over the XPC services, `Autoupdate`, `Updater.app`, the framework, then the app last with its entitlements (`codesign -d --entitlements - --xml` first, pass them back with `--entitlements`).
-5. **Check the signature** before spending notary time: `codesign --verify --deep --strict`; `TeamIdentifier` is the paid team; `flags=` contains `runtime`; a `Timestamp=` line; the entitlements the app needs are present and `app-sandbox` / `get-task-allow` are absent. Here-strings, not `printf | grep -q` (pipefail turns the early-exit SIGPIPE into a failure).
-6. **Notarize** (`developer-id`): `ditto -c -k --sequesterRsrc --keepParent` to a zip, `xcrun notarytool submit --key <file> --key-id --issuer --wait --timeout 30m --output-format json`. **`--wait` exits 0 on an Invalid verdict**: read `.status` and fail unless it is `Accepted`, printing `notarytool log <id>`. Then `stapler staple` + `stapler validate` + `spctl --assess --type execute` (must say `Notarized Developer ID`).
+4. **Re-sign Sparkle inside out.** Sparkle ships its helpers (`Autoupdate`, `Updater.app`, the XPC services) ad-hoc signed and Xcode only re-signs the framework; notarization rejects them ("not signed with a valid Developer ID certificate", no secure timestamp). `codesign --force --options runtime --timestamp --sign <id>` over the XPC services, `Autoupdate`, `Updater.app`, the framework, then the app last with its entitlements (`codesign -d --entitlements - --xml` first, pass them back with `--entitlements`). Anything else executable in the bundle (a bundled CLI in `Contents/MacOS`) is signed before the app, never with `--deep`: see *A SwiftPM package with an xcodegen app* below.
+5. **Check the signature** before spending notary time: `codesign --verify --deep --strict`; `TeamIdentifier` is the paid team; `flags=` contains `runtime`; a `Timestamp=` line; the entitlements the app needs are present and `app-sandbox` / `get-task-allow` are absent. Here-strings, not `printf | grep -q` (pipefail turns the early-exit SIGPIPE into a failure). Run the check on every piece that ships, not on the app alone: ntfy-mac `scripts/verify-signature.sh` loops over the app, the bundled CLI, the framework and each helper, and its `--release` mode adds the staple and Gatekeeper checks of step 6.
+6. **Notarize** (`developer-id`): `ditto -c -k --sequesterRsrc --keepParent` to a zip, `xcrun notarytool submit --key <file> --key-id --issuer --wait --timeout 30m --output-format json`. **`--wait` exits 0 on an Invalid verdict**: read `.status` and fail unless it is `Accepted`, printing `notarytool log <id>`. Then `stapler staple` + `stapler validate` + `spctl --assess --type execute` (must say `Notarized Developer ID`). The ticket can lag the `Accepted` verdict: retry `stapler staple` a few times, ten seconds apart (ntfy-mac `scripts/sign.sh`, five tries).
    - The queue can take hours, first submissions especially. On a timeout the script prints the submission id; `RESUME_BUILD=<n> RESUME_NOTARY_ID=<id>` continues with the same archive via `notarytool wait`, no rebuild and no re-sign (a changed byte voids the submission).
 7. **Zip the stapled app** (`ditto`, stapling changed bytes), then **appcast** with the pinned Sparkle tools: `generate_appcast --ed-key-file <file> --download-url-prefix https://github.com/<owner>/<repo>/releases/download/<tag>/ <dir>`. Verify: `sparkle:edSignature` present, `sparkle:version` equals the build, `sign_update --verify --ed-key-file <file> <zip> <sig>`. Tools live in `<DerivedData>/SourcePackages/artifacts/sparkle/Sparkle/bin`.
 8. **Publish:** `gh release create mac-v<version>-<build> <zip> appcast.xml --target <sha>` (+ `--draft`). Nothing is written back to the repo.
 
 **Facts that cost time:**
 
-- **Sparkle key as a file, never the keychain.** Headless, `sign_update` and `generate_appcast` hang on the keychain's access prompt. Use `--ed-key-file`; the key is exported once (`generate_keys -x <file>`) to `~/.local/state/apple-developer/sparkle-ed25519.key` (0600, outside every repo). The app's `SUPublicEDKey` is the public half of that key. Iris's key is the only one so far; whether a second app reuses it or gets its own is the owner's call (unverified: `generate_keys --account`). The 1Password copy is a Document in vault `mini`, owner-managed.
-- **Feed URL = `releases/latest/download/appcast.xml`** (`SUFeedURL`). `latest` never serves a draft, so a draft is safe, but **any** published release on that repo becomes the feed: a repo that also ships non-Mac releases needs a different feed host.
+- **Sparkle key as a file, never the keychain.** Headless, `sign_update` and `generate_appcast` hang on the keychain's access prompt. Use `--ed-key-file`; the key is exported once (`generate_keys -x <file>`) to `~/.local/state/apple-developer/sparkle-ed25519.key` (0600, outside every repo). The app's `SUPublicEDKey` is the public half of that key. **One key pair per app**: ntfy-mac has its own (`sparkle-ntfy-mac-ed25519.key`), so a leaked or rotated key costs one app. A new app generates its pair and names the file after the repo. The 1Password copy is a Document in vault `mini`, owner-managed.
+- **Feed URL = `releases/latest/download/appcast.xml`** (`SUFeedURL`), the appcast a release asset next to the zip. `latest` never serves a draft, so a draft is safe, but **any** published release on that repo becomes the feed: a repo that also ships non-Mac releases needs a different feed host. Before the first release carrying an appcast the URL answers 404 and "Check for Updates…" shows an update error: expected, not a defect (ntfy-mac `docs/waves/PLAN.md` Wave 7). Create the release as a draft, upload every asset, then publish, so the feed never points at a missing file (ntfy-mac `AGENTS.md` "Release process" step 3).
+- **The appcast script (copy ntfy-mac `scripts/appcast.sh`).** `generate_appcast` scans the whole directory and merges a stale `appcast.xml`: copy only the release zip into a fresh temp directory. The zip is a `ditto` of the stapled app alone. `--download-url-prefix https://github.com/<owner>/<repo>/releases/download/<tag>/`. Before succeeding the script checks the item: `sparkle:edSignature` present, `sparkle:version` equals the build, the enclosure URL names the asset, `sign_update --verify` accepts the zip. In CI the key arrives as a secret and is written to a 0600 temp file for `--ed-key-file`.
 - **Developer ID in a dedicated keychain.** Put the identity in its own keychain on the user search list with `security set-key-partition-list -S apple-tool:,codesign: -s -k <pass> <keychain>`; a reboot leaves it locked, so the script runs `security unlock-keychain -p` from a 0600 password file outside every repo (`~/.local/state/apple-developer/`). `errSecInternalComponent` from `codesign` means that keychain is locked or the partition list lacks `codesign:`. The unlock password is the one secret that touches argv (`-p` takes nothing else); keep the keychain used for nothing else.
 - **ASC key file:** mktemp, 0600, `trap … EXIT` (see the credentials section). `notarytool` takes `--key` as a file path, same as xcodebuild.
-- **Quarantined installs do not self-update.** A zip downloaded by a browser carries `com.apple.quarantine`; the app then runs from an `AppTranslocation` path and Sparkle's silent update never starts. An install without the flag updates fine: staged while the app runs, `Autoupdate` swaps it right after a quit, no admin prompt. Until the release ships as a DMG (or the interactive "Check for Updates…" alert is proven), tell the owner to `xattr -d com.apple.quarantine <app>` after install; it cannot be done over ssh (App Management).
+- **Quarantined installs do not self-update.** A zip downloaded by a browser carries `com.apple.quarantine`; the app then runs from an `AppTranslocation` path and Sparkle's silent update never starts. An install without the flag updates fine: staged while the app runs, `Autoupdate` swaps it right after a quit, no admin prompt. **Proven live on ntfy-mac, 2026-11-14:** 2.0.0 (the published tarball, checked on the mini, `quarantine=0`) to 2.0.1 through the published appcast, Sparkle's prompt, relaunch, same bundle id, config and history kept, Gatekeeper still `Notarized Developer ID`, the team pin matching (`docs/waves/PLAN.md` Wave 7, Issue 1045). Not yet seen there: Sparkle's own scheduled check finding an update, and an update of a quarantined install. Until the release ships as a DMG (or the interactive "Check for Updates…" alert is proven), tell the owner to `xattr -d com.apple.quarantine <app>` after install; it cannot be done over ssh (App Management).
 - **Not sandboxed.** A Developer ID app that Sparkle swaps in place is not sandboxed; moving off the sandbox moves data from the container to `~/Library/Application Support/<app>` and the old signature's Keychain items may be unreadable. Check first launch.
 - **A poller or hook that triggers releases:** after its first run, ticks may log "starting detached" with no job; run the release script by hand once to unstick it.
 - **Prove it** on a second machine: `spctl -a -vv <app>` says `source=Notarized Developer ID`, `stapler validate` works offline, a quarantined first launch needs no "Open Anyway", release N to N+1 updates.
+
+## A SwiftPM package with an xcodegen app (ntfy-mac shape)
+
+Iris archives an Xcode project. A Mac app built as a SwiftPM package plus an xcodegen app target, with a CLI bundled inside the app, signs after the build instead. The single entry point is ntfy-mac `scripts/sign.sh <app>`:
+
+- **Default is ad-hoc** (`codesign --force --deep --sign -`), so the gate, snapshots and CI need no certificate. `SIGN_IDENTITY=developer-id` switches to the real identity; `NOTARIZE=1` with an ad-hoc app is refused, because an ad-hoc app cannot be notarized.
+- **Inside out, never `--deep`**, on the Developer ID path. Order: the Sparkle XPC services, `Autoupdate`, `Updater.app`, the framework, the bundled CLI at `Contents/MacOS/<cli>`, the app last.
+  - Every piece gets `--options runtime --timestamp`; the XPC services also get `--preserve-metadata=entitlements`.
+  - A missing helper fails the script (Sparkle's layout changed) instead of being skipped.
+- **Every run ends in `scripts/verify-signature.sh`**; a failed check is a non-zero exit, so a half-signed bundle never reaches notarization or `package.sh`.
+- The app holds no entitlements and is not sandboxed. A Developer ID app needs none to be notarized.
+- A resumed notarization (`RESUME_NOTARY_ID`, step 6) skips the signing step entirely: re-signing would change bytes and void the submission.
+
+## Release on a hosted GitHub runner (ntfy-mac, proven 2026-11-13)
+
+**Public repos only for now:** the VPS runner our private repos use cannot build a Mac app, so the first private Mac app needs its own decision. For a public repo, a release does not have to run on the mini. ntfy-mac's `.github/workflows/release.yml` (`workflow_dispatch`, runner `macos-26`) builds, signs, notarizes, uploads and updates the tap with no Apple slot and no signing identity installed beforehand; the first run succeeded end to end.
+
+**Repository secrets** (set each with `printf '%s' "$value" | gh secret set <NAME>`: `secrets-run read` ends with a newline and a trailing newline stays in the secret):
+
+| Secret | Holds |
+|-|-|
+| `APPLE_TEAM_ID` | the team id, for the identity lookup and the signature check |
+| `APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD` | the Developer ID Application certificate with its private key as a `.p12` (built with `openssl pkcs12 -export`, see the portal steps), base64, and its password |
+| `ASC_KEY_P8`, `ASC_KEY_ID`, `ASC_ISSUER_ID` | the App Store Connect Team key for `notarytool` |
+| `SPARKLE_ED_PRIVATE_KEY` | the content of the app's Sparkle key file |
+
+**Steps, in order:**
+
+1. **Check every secret before anything is tagged.** semantic-release tags first, so a missing secret found later leaves a tag with no release. A step that lists the names and fails with `::error::missing repository secrets: …` goes before the release step.
+2. **Select Xcode** with `xcode-select -s /Applications/Xcode_<version>.app`: the image's default can differ from the one the app builds with. Give the job a long `timeout-minutes` (ntfy-mac: 120) and `NOTARY_TIMEOUT` below it (90m). A first notarization can queue for hours; when it outlasts the timeout the script prints the submission id, and a rerun with `RESUME_NOTARY_ID` continues it (step 6 above).
+3. **Import the certificate into a throwaway keychain.** In order:
+   - decode the `.p12` into `$RUNNER_TEMP`;
+   - `security create-keychain` with a `uuidgen` password, masked with `::add-mask::`;
+   - `set-keychain-settings -lut 21600`, then `unlock-keychain`;
+   - `security import … -P <password> -A -t cert -f pkcs12`, then delete the `.p12`;
+   - `set-key-partition-list -S apple-tool:,apple: -s -k <password>`;
+   - put the keychain first on the user search list, so `security find-identity` and `codesign` see it.
+4. **Run the release step** with `SIGN_IDENTITY=developer-id NOTARIZE=1` and the credential secrets as environment: `scripts/sign.sh` reads them from the environment first and from `secrets-run` second, so the same script runs on the mini and in CI.
+5. **Remove the keychain** in an `if: always()` step (`security delete-keychain`), so a failed run leaves nothing on a reused runner.
+
+**Recovery:** if the tag exists but the GitHub release or an asset upload failed, a re-run does not publish. Delete the tag and the draft release, then re-run (ntfy-mac `AGENTS.md` "Release process").
+
+The CI keychain differs from the mini's: a throwaway keychain with the `apple:` partition, against a dedicated keychain with the `codesign:` partition opened from a password file. Both are proven; keep them apart.
+
+## Packaging a Mac app for Homebrew: formula or cask
+
+| | Formula (ntfy-mac today) | Cask (planned) |
+|-|-|-|
+| Works with | an ad-hoc or a Developer ID build (proven) | per the research: a notarized build only, because brew quarantines cask downloads and Gatekeeper must accept the app |
+| App lives | under `opt_prefix`; the CLI is a symlink | in `/Applications` or `~/Applications`, `binary` stanza for the CLI |
+| Updates | brew owns them: the app turns Sparkle off for a Cellar or `opt` copy (`InstallChannel`) | `auto_updates true`; `brew upgrade` skips a self-updating cask whose app is the same or newer |
+| Trap | brew strips a lone top-level `.app` from a tarball: ship a sibling file next to it (ntfy-mac `LICENSE`) | a formula-to-cask migration needs a tested plan from a real formula install |
+
+Proven (Wave 1 spike): a formula with `opt_prefix` works, and the notification permission survived `brew upgrade` to a new cdhash and a new Cellar path. The cask rows come from the Wave 7 research, not from a run: verify with `/research` before building one.
+
+## Notifications: permission and the time-sensitive entitlement
+
+- **The permission followed the bundle id, not the path or the signature.** On ntfy-mac it survived a new cdhash, a Cellar path change, a cask-style overwrite, and the move from an ad-hoc to a Developer ID build with the bundle id unchanged (`docs/waves/PLAN.md` Wave 1 spike c, Wave 7 checklist 2026-11-13). Changing a shipped bundle id asks every user again, so keep it.
+- **Never quit the app while the authorization prompt is pending.** The authorization state went to denied and stayed there; only a fresh bundle id recovered it (Wave 1 spike a).
+- **Time-sensitive notifications need more than the entitlement key.**
+  - Required: a portal capability the API key cannot set, and a Developer ID provisioning profile embedded in the bundle.
+  - ntfy-mac skipped it (owner decision). The app reads its own entitlements at runtime and downgrades `timeSensitive` to `active` when the key is absent, so adding it later is a signing change only.
+  - Unproven on a run: that the portal offers the capability for macOS, and that a signed app claiming the entitlement without a profile is killed at launch. When `sign.sh` embeds a profile, test that the app still launches.
+
+## Sparkle has no Team ID pin
+
+Sparkle 2 accepts an update with a valid EdDSA signature or the same code identity: it never compares the Team ID. ntfy-mac pins the team in two places (`AGENTS.md`, the updating row of the Layout table), and a new Mac app copies both:
+
+1. **The release gate:** `scripts/verify-signature.sh` holds every piece of the build to the expected `TeamIdentifier` and a Developer ID Authority before `package.sh` and the appcast run.
+2. **The app:** it records the Team ID of its first Developer-ID-signed run (`Sources/NtfyCore/TeamPin.swift`, a `team-pin` file in the app support directory) and turns the updater off when a later build carries another team. A build that is not Developer ID signed, or a Homebrew copy, never self-updates.
+
+A curl installer cannot pin the team, because the id stays out of tracked files. It checks Developer ID, Hardened Runtime, the staple and Gatekeeper, so any notarized Developer ID app passes. Closing that gap needs the id as a build-time constant, an owner decision.
 
 ## Proving an entitlement on the phone
 
@@ -108,4 +181,4 @@ then an app event that reads `containerURL(forSecurityApplicationGroupIdentifier
 
 ## Where the details live
 
-Per-repo recipes stay in the repo (Iris: `AGENTS.md` "Device" and "Mac releases", skills `device`, `apple-dev`, `scripts/mac-release.sh` as the reference implementation, `docs/research/2026-11-04-apple-paid-team.md` for the design). This file is what holds for every app, so a new Mac app follows it without reading Iris. The global skill `apple-signing` points here.
+Per-repo recipes stay in the repo (Iris: `AGENTS.md` "Device" and "Mac releases", skills `device`, `apple-dev`, `scripts/mac-release.sh` as the reference implementation, `docs/research/2026-11-04-apple-paid-team.md` for the design; ntfy-mac: `AGENTS.md` "Release process", `scripts/sign.sh`, `scripts/verify-signature.sh`, `scripts/apple-credentials.sh`, `scripts/appcast.sh`, `.github/workflows/release.yml`, `docs/waves/PLAN.md` Waves 1 and 7). This file is what holds for every app, so a new Mac app follows it without reading Iris. The global skill `apple-signing` points here.
