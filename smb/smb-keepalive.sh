@@ -18,29 +18,33 @@
 # Two hosts, one loop; only the mount step differs:
 #   MacBook (login Keychain)  `osascript mount volume`, password from the Keychain
 #                             entry Finder saved; mounts at /Volumes/<share>.
-#   mini (secrets backend     no Finder session, never `op`: the password comes
-#   'cache')                  from the secrets cache (`secrets-run read`), the
-#                             mount is `mount_smbfs` at ~/HomeLab/<share>. The
-#                             mount point exists only while a share sits on it
-#                             (an empty directory would swallow a copy to a
-#                             HomeLab that is down). The password reaches
-#                             mount_smbfs through a pty (smb-mount.exp), never
-#                             its argv; it is also in a 0600 temp file for the
-#                             length of the secret read. Never in a tracked
-#                             file, the plist, the log or the environment.
-#
-# Health probe: macOS answers `Operation not permitted` (or hangs on a prompt nobody
-# sees) to a launchd job that READS an SMB mount unless the job's program holds the
-# Network Volumes grant, which is keyed on a versioned bun path. So the mini's probe
-# reads nothing: stat + df + `smbutil statshares -m`, none of which needs the grant,
-# and together they hang on a silent server and fail on a dropped session (`stat`
-# alone is answered from cache). The MacBook, where the job runs in the GUI session,
-# still lists the root with `ls -a`. EPERM is "cannot probe", never "stale".
+#   mini (secrets backend     no Finder session, never `op`: `mount_smbfs` at
+#   'cache')                  ~/HomeLab/<share>, run by smb-mount.sh as a transient
+#                             launchd job of its own (under jobrun the responsible
+#                             process is bun, and a mount from there hangs on a
+#                             Network Volumes prompt nobody sees). That job reads the
+#                             password from the secrets cache (`secrets-run read`)
+#                             and hands it to mount_smbfs through a pty
+#                             (smb-mount.exp): in no argv, no file, not even in this
+#                             process. The mount point exists only while a share sits
+#                             on it (an empty directory would swallow a copy to a
+#                             HomeLab that is down).
 #
 # Every external call is bounded: a hung smbfs call is abandoned, never waited
 # on (launchd reaps the leftover when the run exits). Declared shares:
 # dotfiles-private/smb-shares.conf (it names the server, so it stays out of this
 # public repo).
+#
+# Health probe: macOS answers `Operation not permitted` (or hangs on a prompt nobody
+# sees) to a launchd job that READS an SMB mount unless the job's program holds the
+# Network Volumes grant, which is keyed on a versioned bun path. So the mini's probe
+# reads nothing: `stat` of the root (answered from cache, only proves the mount is
+# there) plus `stat` of a name that cannot exist, which has to reach the server: a
+# healthy share answers ENOENT, a silent server hangs it, a dropped session answers
+# "Operation timed out". (`smbutil statshares` and `df` do not do: statshares hangs
+# under the job's program, df is answered from cache.) The MacBook, where the job
+# runs in the GUI session, still lists the root with `ls -a`. EPERM is "cannot
+# probe", never "stale".
 set -uo pipefail
 
 CONF="${SMB_SHARES_CONF:-$HOME/SourceRoot/dotfiles-private/smb-shares.conf}"
@@ -48,7 +52,6 @@ PROBE_SECONDS="${SMB_PROBE_SECONDS:-8}"
 RETRY_SLEEP="${SMB_RETRY_SLEEP:-2}"
 UNMOUNT_SECONDS="${SMB_UNMOUNT_SECONDS:-20}"
 MOUNT_SECONDS="${SMB_MOUNT_SECONDS:-45}"
-SECRET_SECONDS="${SMB_SECRET_SECONDS:-15}"
 SECRET_REF="${SMB_SECRET_REF:-op://homelab/samba/PASSWORD}"
 MOUNT_ROOT="${SMB_MOUNT_ROOT:-$HOME/HomeLab}"
 
@@ -98,36 +101,6 @@ bounded_err() {
   return 124
 }
 
-# bounded, but $SECRET (one line) is fed to the command's stdin through a pipe (printf is
-# a builtin: nothing in any argv). For the pty mount only.
-bounded_input() {
-  local secs="$1" pid i
-  shift
-  printf '%s\n' "$SECRET" | "$@" >/dev/null 2>&1 &
-  pid=$!
-  for ((i = 0; i < secs * 4; i++)); do
-    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $?; }  # the child's own status: 77 = password refused
-    sleep 0.25
-  done
-  kill -9 "$pid" 2>/dev/null
-  return 124
-}
-
-# bounded, but stdout goes to the file $2 (mode 600) — for the secret read only.
-bounded_to() {
-  local secs="$1" out="$2" pid i
-  shift 2
-  : > "$out"; chmod 600 "$out"
-  "$@" </dev/null >"$out" 2>/dev/null &
-  pid=$!
-  for ((i = 0; i < secs * 4; i++)); do
-    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
-    sleep 0.25
-  done
-  kill -9 "$pid" 2>/dev/null
-  return 124
-}
-
 # Mount point of //[user@]server/share, from the mount table (case-insensitive:
 # smbfs reports the server the way it was typed).
 mount_point() {
@@ -149,37 +122,26 @@ probe_cmd() { # $1 = name, rest = the command; stderr kept in $PROBE_ERR to tell
   return "$rc"
 }
 
+# A name that cannot exist: the lookup has to reach the server, and a healthy share answers ENOENT.
+probe_lookup() {
+  local rc
+  bounded_err "$PROBE_SECONDS" "$PROBE_ERR" stat "$1/.smb-keepalive-probe-$RANDOM$RANDOM"; rc=$?
+  case "$rc" in 0|124) return "$rc" ;; esac
+  grep -q "No such file or directory" "$PROBE_ERR" 2>/dev/null && return 0
+  grep -q "Operation not permitted" "$PROBE_ERR" 2>/dev/null && return 2
+  return 1
+}
+
 probe() {
   local mp="$1" rc
   probe_cmd stat stat "$mp"; rc=$?
   [ "$rc" -eq 0 ] || return "$rc"
   if [ "$host_kind" = mini ]; then
-    probe_cmd df df -k "$mp"; rc=$?
-    [ "$rc" -eq 0 ] || return "$rc"
-    probe_cmd statshares smbutil statshares -m "$mp"
+    probe_lookup "$mp"
   else
     # the root's attributes can come from cache; the listing has to reach the server
     probe_cmd ls ls -a "$mp"
   fi
-}
-
-# The password, once per run, from the secrets cache. Sets SECRET; 1 = unavailable.
-SECRET=""
-SECRET_FAILED=0
-load_secret() {
-  [ -n "$SECRET" ] && return 0
-  [ "$SECRET_FAILED" -eq 1 ] && return 1
-  local rc
-  bounded_to "$SECRET_SECONDS" "$RUN_TMP/pw" secrets-run read "$SECRET_REF"; rc=$?
-  SECRET=$(cat "$RUN_TMP/pw" 2>/dev/null); SECRET=${SECRET%$'\n'}
-  rm -f "$RUN_TMP/pw"
-  [ "$rc" -eq 0 ] && [ -n "$SECRET" ] && return 0
-  SECRET=""; SECRET_FAILED=1
-  case "$rc" in
-    124) log "secret read timed out after ${SECRET_SECONDS}s" ;;
-    *)   log "secret $SECRET_REF is not in the cache — run 'make secrets-reseal-request'" ;;
-  esac
-  return 1
 }
 
 smb_mount_macbook() {
@@ -204,16 +166,29 @@ release_mount_point() { # mini only; the caller knows the share is not mounted
   return 0
 }
 
+# The mount runs as a transient launchd job (smb-mount.sh), outside this process's TCC chain, and
+# leaves its status in a file; this side only waits for it, bounded. `launchctl submit` jobs restart
+# after they exit, so the job is removed as soon as it has reported (or on the deadline, which also
+# ends a hung mount_smbfs).
 smb_mount_mini() {
-  local server="$1" user="$2" share="$3" mp="$MOUNT_ROOT/$3" rc
-  load_secret || { release_mount_point "$share"; return 1; }
+  local server="$1" user="$2" share="$3" mp="$MOUNT_ROOT/$3" label="com.jkrumm.smb-keepalive.mount" rcf="$RUN_TMP/mount.rc" rc="" i
   mkdir -p "$mp" || { log "$share: cannot create $mp"; return 1; }
-  bounded_input "$MOUNT_SECONDS" expect -f "$HERE/smb-mount.exp" -- "$user" "$server" "$share" "$mp"
-  rc=$?
+  rm -f "$rcf"
+  launchctl remove "$label" >/dev/null 2>&1
+  launchctl submit -l "$label" -o /dev/null -e /dev/null -- /usr/bin/env "PATH=$PATH" "HOME=$HOME" \
+    "SMB_SECRET_REF=$SECRET_REF" /bin/bash "$HERE/smb-mount.sh" "$rcf" "$user" "$server" "$share" "$mp" \
+    || { log "$share: could not start the mount job"; release_mount_point "$share"; return 1; }
+  for ((i = 0; i < MOUNT_SECONDS * 4; i++)); do
+    [ -f "$rcf" ] && { rc=$(cat "$rcf"); break; }
+    sleep 0.25
+  done
+  launchctl remove "$label" >/dev/null 2>&1
+  [ -n "$rc" ] || rc=124
   if [ "$rc" -eq 0 ]; then log "$share: mounted at $mp"; return 0; fi
   release_mount_point "$share"
   case "$rc" in
     124) log "$share: mount timed out after ${MOUNT_SECONDS}s" ;;
+    3)   log "$share: secret $SECRET_REF is not in the cache — run 'make secrets-reseal-request'" ;;
     77)  log "$share: the server refused the password (is the cached secret current? make secrets-reseal-request)" ;;
     *)   log "$share: mount_smbfs failed (rc $rc)" ;;
   esac

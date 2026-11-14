@@ -122,7 +122,7 @@ upgrade, and without it the read answers `Operation not permitted` or hangs on a
 
 | Host | Probe | Why |
 |-|-|-|
-| mini | `stat` + `df -k` + `smbutil statshares -m <mount>`, no read | none needs the grant. Measured through a local forwarder in front of the share: a **silent** server (packets dropped) leaves `stat` answering from cache but hangs `df` and `statshares`; a **dropped session** (connection reset) makes `statshares` exit 64 |
+| mini | `stat <mount>` + `stat <mount>/<a name that cannot exist>`, no read | the lookup has to reach the server and needs no grant: a healthy share answers `No such file or directory`. Measured through a local forwarder in front of the share: a **silent** server (packets dropped) hangs the lookup; a **dropped session** (connection reset) answers `Operation timed out`. `stat` of the root alone is answered from cache; `df` is too, and `smbutil statshares` hangs under `jobrun` (it works from a plain `/bin/sh` launchd job, which is how the first fix attempt missed it) |
 | MacBook | `stat` + `ls -a` | runs in the GUI session, where the read works |
 
 An `Operation not permitted` from any probe is "cannot probe" (logged, mount left alone), never "stale".
@@ -130,14 +130,19 @@ An `Operation not permitted` from any probe is "cannot probe" (logged, mount lef
 | Host | Mount | Password | Mount point |
 |-|-|-|-|
 | MacBook | `osascript mount volume` | login Keychain entry Finder saved — mount each share once in Finder with *Remember* first | `/Volumes/<share>` |
-| mini (cache backend) | `mount_smbfs` through `expect` | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
+| mini (cache backend) | `mount_smbfs` through `expect`, in a transient launchd job (`smb/smb-mount.sh`) | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
 
-The mini's password sits in a 0600 temp file for the length of the secret read, then reaches
-`mount_smbfs` through a pty (`smb/smb-mount.exp`: `mount_smbfs` asks on its terminal, `expect` answers
-from a pipe), so it is in no argv — `ps`/`pgrep -fl` show only the user, server, share and mount
-point. Never in a tracked file, the plist, the log or the environment. (Keychain was the other
-candidate: `security add-internet-password -w` takes the secret in argv or on a pty prompt itself, and
-a login-keychain item would sit at rest, which the age-encrypted cache avoids.) The mount point is removed again
+The mini's password never enters the keepalive process: `smb/smb-mount.sh` runs as a transient `launchctl submit`
+job of its own, reads the ref from the secrets cache and hands it to `mount_smbfs` through a pty (`smb/smb-mount.exp`:
+`mount_smbfs` asks on its terminal, `expect` answers from a pipe). So it is in no argv (`ps`/`pgrep -fl` show only the
+user, server, share and mount point), no file, not the plist, the log or the environment. **The separate job is the
+fix for a hang, not a style choice:** under `jobrun` the responsible process is bun, and `mount_smbfs` from there hangs
+before it asks for anything (an argv mount hung > 20 s under `jobrun`, 1 s from a submitted job and from a terminal;
+the first mini deploy saw the same as a 45 s mount timeout), most likely the same Network Volumes cause as the probe above (not proven: the prompt itself is not observable headless).
+The keepalive waits for the job's status file, bounded, and removes the job (`submit` jobs restart after they exit).
+(Keychain was the other candidate for keeping the password out of argv: `security add-internet-password -w` takes the
+secret in argv or on a pty prompt itself, and a login-keychain item would sit at rest, which the age-encrypted cache
+avoids.) The mount point is removed again
 whenever the share is not mounted (an empty directory would swallow a copy while the
 HomeLab is down). That account can
 delete on the HomeLab shares, unlike the `hl` S3 key — the ref's comment in

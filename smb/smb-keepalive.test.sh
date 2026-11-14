@@ -22,14 +22,28 @@ fake() { printf '#!/bin/bash\n%s\n' "$2" > "$FAKE/$1"; chmod +x "$FAKE/$1"; }
 # The mount table is $FIX/table; mount_smbfs appends, diskutil/umount remove.
 fake mount 'cat "$FIX/table"'
 fake nc '[ ! -e "$FIX/down" ]'
-fake stat '[ -e "$FIX/hang" ] && exec sleep 30; [ -e "$FIX/statfail" ] && exit 1; exit 0'
+# stat: a missing-name lookup (the mini's server round trip) answers ENOENT when healthy; fixtures
+# make it hang (silent), time out (sessiongone) or be refused (eperm). Plain stat: hang / statfail.
+fake stat 'last="${@: -1}"
+  [ -e "$FIX/hang" ] && exec sleep 30
+  case "$last" in *.smb-keepalive-probe-*)
+    [ -e "$FIX/silent" ] && exec sleep 30
+    [ -e "$FIX/sessiongone" ] && { echo "stat: $last: Operation timed out" >&2; exit 1; }
+    [ -e "$FIX/eperm" ] && { echo "stat: $last: Operation not permitted" >&2; exit 1; }
+    echo "stat: $last: No such file or directory" >&2; exit 1 ;;
+  esac
+  [ -e "$FIX/statfail" ] && exit 1; exit 0'
 fake ls '[ -e "$FIX/eperm" ] && { echo "ls: $2: Operation not permitted" >&2; exit 1; }; exit 0'
-fake df '[ -e "$FIX/silent" ] && exec sleep 30; [ -e "$FIX/eperm" ] && { echo "df: Operation not permitted" >&2; exit 1; }; exit 0'
-fake smbutil '[ -e "$FIX/silent" ] && exec sleep 30; [ -e "$FIX/sessiongone" ] && exit 64; exit 0'
+# launchctl submit runs the job in the background the way launchd would; remove is a no-op here.
+fake launchctl 'case "$1" in
+  submit) shift; while [ "$1" != "--" ]; do shift; done; shift; echo "submit" >> "$FIX/launchctl.log"; "$@" >/dev/null 2>&1 & ;;
+  remove) echo "remove" >> "$FIX/launchctl.log"; exit 0 ;;
+esac'
 fake secrets-run '[ -e "$FIX/nosecret" ] && exit 1; printf "p@ss word/1\n"'
 # The real mount_smbfs asks for the password on its controlling terminal; the fake does the same and
 # records what it received apart from its argv, so the suite proves the secret is on the pty only.
 fake mount_smbfs 'echo "$*" >> "$FIX/mount_smbfs.args"; [ -e "$FIX/mountfail" ] && exit 1
+  [ -e "$FIX/mounthang" ] && exec sleep 30
   printf "Password for %s: " "${@: -2:1}" > /dev/tty; read -rs pw < /dev/tty; echo "$pw" > "$FIX/received.pw"
   if [ -e "$FIX/badpw" ]; then printf "Password for %s: " "${@: -2:1}" > /dev/tty; read -rs pw < /dev/tty; exit 1; fi
   [ "$pw" = "p@ss word/1" ] || exit 1
@@ -53,7 +67,7 @@ CONF
 
 run() { # run the script as the mini; prints its output, sets $rc
   out=$(PATH="$FAKE:$PATH" SMB_HOST_KIND="${KIND:-mini}" SMB_SHARES_CONF="$CONF" SMB_MOUNT_ROOT="$HOME/HomeLab" \
-    SMB_PROBE_SECONDS=3 SMB_RETRY_SLEEP=0 SMB_UNMOUNT_SECONDS=6 SMB_MOUNT_SECONDS=10 SMB_SECRET_SECONDS=6 \
+    SMB_PROBE_SECONDS=3 SMB_RETRY_SLEEP=0 SMB_UNMOUNT_SECONDS=6 SMB_MOUNT_SECONDS="${MOUNT_S:-10}" \
     bash "$HERE/smb-keepalive.sh" 2>&1); rc=$?
   printf '%s\n' "$out" | sed 's/^/    | /'
 }
@@ -108,7 +122,7 @@ check "remounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
 check "bounded (a 30 s hang finished in under 25 s)" test "$elapsed" -lt 25
 : > "$FIX/diskutil.log"
 
-echo "# silent server (stat answers from cache, df and statshares never return): hung, remounted"
+echo "# silent server (stat of the root answers from cache, the lookup never returns): hung, remounted"
 touch "$FIX/silent"
 SECONDS=0
 ( sleep 2; rm -f "$FIX/silent" ) &
@@ -122,7 +136,7 @@ check "remounted" grep -q "/HomeLab/SSD (smbfs" "$FIX/table"
 check "bounded" test "$elapsed" -lt 25
 : > "$FIX/diskutil.log"
 
-echo "# dropped session (statshares fails, the rest answers from cache): one retry, remounted"
+echo "# dropped session (the lookup times out, the root answers from cache): one retry, remounted"
 touch "$FIX/sessiongone"
 run
 rm "$FIX/sessiongone"
@@ -168,6 +182,15 @@ run
 rm "$FIX/badpw"
 check "exits 1" test "$rc" -eq 1
 check "says the password was refused" has "refused the password"
+check "no mount point left" test ! -e "$HOME/HomeLab/SSD"
+
+echo "# mount hangs (the job never reports): bounded, job removed, no mount point left"
+: > "$FIX/table"; rm -rf "$HOME/HomeLab"; : > "$FIX/launchctl.log"; touch "$FIX/mounthang"
+MOUNT_S=3 run
+rm "$FIX/mounthang"
+check "exits 1" test "$rc" -eq 1
+check "reports the timeout" has "mount timed out after 3s"
+check "the transient job was removed" grep -q remove "$FIX/launchctl.log"
 check "no mount point left" test ! -e "$HOME/HomeLab/SSD"
 
 echo "# secret missing from the cache: exit 1 with the reseal pointer, no mount attempt"
