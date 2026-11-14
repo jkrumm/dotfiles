@@ -85,6 +85,7 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make -k check` | `check` stops at the first failing prerequisite; `-k` runs every suite and lists all failures. |
 | `make check-linux` | The Linux-safe subset (shellcheck over every tracked bash script + the portable suites): what `.github/workflows/check.yml` runs on a hosted ubuntu runner for every PR and master push. A suite joins it only after it passes there. |
 | `make verify` | `make doctor`, under the repo-contract name. |
+| `make storage-status` | Shares, mounts, free space, keepalive grade, external volume, mirror and restic age; `ARGS=--json` is the contract in `docs/storage.md` §Status. Read-only, bounded; `make doctor` WARNs from it. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. On the mini it then runs `scripts/gate-pin-notice.sh` (below). |
 | `make worktree-audit` / `worktree-prune` | List / reclaim clean, fully-merged git worktrees across `~/SourceRoot` + `~/IuRoot` — they pile up in four different parent dirs (repo-local, `.claude/worktrees/`, `~/IuRoot/worktrees/`, `~/IuRoot/.wt/`), so it asks git rather than assuming a location. |

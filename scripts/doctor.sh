@@ -405,6 +405,29 @@ section_external_volume() {
   if [ "$rc" -eq 0 ]; then ok "external volume" "$out"; else skip "external volume" "WARN: $out"; fi
 }
 
+# Storage (docs/storage.md §Status), both machines: warns on a declared automount share that is not healthy and, on the
+# mini, on a mirror older than 36 h. A warning, never a failure, and never in the liveness push.
+section_storage() {
+  hdr "Storage (make storage-status)"
+  local out rc=0 n
+  out=$(bash "$DOTFILES_DIR/scripts/storage-status.sh" --json 2>&1) || rc=$?
+  if [ "$rc" -ne 0 ] || ! printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    skip "storage" "storage-status failed (rc=$rc): $(printf '%s' "$out" | head -n 1)"
+    return
+  fi
+  if [ "$(printf '%s' "$out" | jq '.shares | length')" -eq 0 ]; then
+    skip "storage shares" "$(printf '%s' "$out" | jq -r '.shares_reason // "none declared"')"
+  fi
+  while IFS='|' read -r name state warned reason; do
+    [ -n "$name" ] || continue
+    if [ "$warned" = true ]; then skip "storage $name" "WARN: $state: $reason"
+    else ok "storage $name" "$state"; fi
+  done < <(printf '%s' "$out" | jq -r '. as $s | .shares[] | .name as $n | "\(.name)|\(.state)|\([$s.warnings[] | select(.subject == $n)] | length > 0)|\(.reason // "")"')
+  n=$(printf '%s' "$out" | jq -r '.warnings[] | select(.code == "mirror_stale") | .message')
+  if [ -n "$n" ]; then skip "storage mirror" "WARN: $n"
+  elif [ "$(printf '%s' "$out" | jq '.mirror.available')" = true ]; then ok "storage mirror" "finished $(printf '%s' "$out" | jq '(.mirror.age_seconds / 3600) | floor') h ago"; fi
+}
+
 # --- Run -----------------------------------------------------------------------
 
 section_launchagents
@@ -412,6 +435,7 @@ section_core
 section_tcc
 section_architecture
 section_jobs
+section_storage
 section_brew
 section_worktrees
 

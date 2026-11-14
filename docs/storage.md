@@ -95,9 +95,61 @@ read the mounts through its Full Disk Access.
 
 ## Status
 
-Not built yet: `make storage-status` (plan row `storage-status`) prints shares, mounts, free
-space and the age of the mirror and the backup, and `--json` feeds a Tinycast command on the
-MacBook. Until then: `make smb-keepalive-status` for the mounts, the Kuma push monitor for restic.
+`make storage-status` (`scripts/storage-status.sh`, both Macs) prints one page: each declared share with its state and free
+space, the keepalive's grade, on the mini the external volume and the mirror, and the age of the last restic success.
+`make storage-status ARGS=--json` is the contract below; the Tinycast command on the MacBook reads it (`ssh mini` runs it
+there, the MacBook's own mounts come from its own run). `--no-remote` skips the one network read that is not a mount.
+`make doctor` carries the check (`section_storage`): a **WARN, never a failure**, for a declared automount share that is not
+healthy and, on the mini, a mirror older than 36 h (`STORAGE_MIRROR_MAX_AGE_HOURS`). It is not in the liveness push.
+
+Read-only and bounded: it never mounts, unmounts or writes, and every call has a deadline (`STORAGE_PROBE_SECONDS`, default 5;
+shares are probed in parallel), so a dead mount costs seconds, not a hang. A launchd job cannot list an SMB mount (see
+Mounts), so the probe reads nothing from the share: `stat <mount>`, `df -k` (which must answer for an `//…` SMB file system,
+not the boot volume) and `smbutil statshares -m <mount>`. All three answering is `healthy`. It is deliberately not the
+keepalive's `ls` probe. The server name never appears in the output.
+
+### JSON contract (`schema: 1`)
+
+A source that does not exist yet is not an error: its section has `available: false` and a `reason`, and its data fields are
+absent or null. Consumers must branch on `available`, never on a missing key.
+
+| Field | Type | Meaning |
+|-|-|-|
+| `schema` | `1` | Bumped on a breaking change |
+| `generated_at`, `host` | ISO UTC string, `"mini"` or `"macbook"` | |
+| `shares[]` | array | One per row of `smb-shares.conf` for this host, in file order. Empty with `shares_reason` set when none is declared |
+| `shares[].name` | string | Share name (`SSD`, `HDD`); never the server |
+| `shares[].automount` | boolean | The row's automount flag |
+| `shares[].state` | `healthy`, `stale`, `not_mounted`, `unreachable`, `unprobeable` | `stale` = mounted but a probe hung or failed; `not_mounted` = reachable on 445, nothing mounted; `unreachable` = not mounted and no answer on 445; `unprobeable` = macOS refused the probe (`Operation not permitted`), neither healthy nor stale |
+| `shares[].mounted`, `reachable` | boolean | From the mount table; from `nc` on 445 |
+| `shares[].mount_point` | string or null | Absolute path while mounted |
+| `shares[].healthy` | boolean or null | `null` only for `unprobeable` |
+| `shares[].free_bytes`, `total_bytes` | number or null | From `df` of the mounted share; null unless `healthy` |
+| `shares[].reason` | string or null | Why it is not healthy |
+| `shares_reason` | string or null | Why `shares` is empty |
+| `keepalive` | object | The keepalive's row from `jobs-grade`. `available`, `reason`; when available also `grade` (`ok`, `failing`, `stale`, `unloaded`, …), `rc`, `last_run`, `last_run_age_seconds`, `last_ok`, `consecutive_fail` |
+| `external_volume` | object | The mini's gate (`scripts/lib/volume-gate.sh`). `available` (false while `unattached`), `state` (`unattached`, `absent`, `locked`, `unreadable`, `present`; null on the MacBook), `free_bytes`, `total_bytes` (number or null, only when present), `reason` |
+| `mirror` | object | `<volume>/mirror/.status.json` written by `ext-mirror`. `available` is false with a `reason` while the volume is not present, the file does not exist (not built yet) or it has no readable `finished`; when available: `finished` (ISO), `age_seconds`, `sources` (the file's `sources`, passed through, or null) |
+| `backup` | object | Age of the last restic success, read from the Uptime Kuma push monitor `Restic Backup - Push` over the keyless ssh `make doctor` already uses (no new credential). `available`, `reason`; when available `source`, `last_success`, `last_success_epoch`, `age_seconds`. Not available when Kuma cannot be reached (not a backup fault) or with `--no-remote` |
+| `warnings[]` | array | `{code, subject, message}`; `code` is `share_not_healthy` (an automount share whose state is neither `healthy` nor `unprobeable`) or `mirror_stale` (older than the limit). Empty when all is well |
+
+Exit 0 whenever a status was produced, warnings included; 1 on a missing dependency; 2 on a bad flag. `make storage-status-test`
+holds the same contract as a `jq` predicate, plus a hanging-`stat` fixture.
+
+Example, trimmed (`"…"` marks omitted fields):
+
+```json
+{"schema":1,"host":"mini",
+ "shares":[{"name":"SSD","state":"healthy","mount_point":"/Users/me/HomeLab/SSD","free_bytes":189631221760,"total_bytes":499694788608,"…":"…"}],
+ "keepalive":{"available":true,"grade":"ok","last_run_age_seconds":42,"…":"…"},
+ "external_volume":{"available":false,"state":"unattached","reason":"not adopted yet (attached=false in config/external-volume.json)"},
+ "mirror":{"available":false,"reason":"the external volume is unattached"},
+ "backup":{"available":true,"age_seconds":56618,"…":"…"},
+ "warnings":[]}
+```
+
+Measured on the mini, 2026-11-14: both shares `healthy`, the volume `unattached`, the mirror not built, restic 15 h old, the
+keepalive `unloaded` with 378 failures in a row (issue 1106 owns that).
 
 ## Decided by the owner, 2026-11-14
 
