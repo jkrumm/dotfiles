@@ -25,6 +25,8 @@ never stop it, so its data never moves there.
 | `athena` | `athena_owner` | Athena teamchat as `athena_app` | peer over `~/.local/state/athena/pgsock` (0700) |
 | `weatherorb`, `weatherorb_dbos` | `weatherorb_owner` (PostGIS and pg_trgm stay the superuser's) | weatherorb (`weatherorb_owner`, `weatherorb_spots_ro`) | peer over `/tmp` (0700) |
 | `weatherorb_<suite>_test_<id>` | superuser | weatherorb's tests: scratch databases, undeclared (reported as drift), the app roles log in by peer | peer over `/tmp` |
+| `argo_test_<12 hex>` | superuser | argo's tests (`scripts/test.sh`, `bun test:api`): created and dropped per run, undeclared (reported as drift) | unix socket in `/tmp`, as the OS user |
+| `usage_test_<12 hex>` | superuser | usage-tracker's tests (`src/pg/testing.ts`): created and dropped per run, the harness refuses any other name (`assertScratchName`), undeclared (reported as drift) | unix socket in `/tmp`, as the OS user, no password |
 | `weatherorb_accounts_test` | superuser | weatherorb's accounts test | moves to a test container (weatherorb issue 1131) |
 
 The superuser is the OS user that ran initdb. It logs in only over the unix sockets (trust; both
