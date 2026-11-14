@@ -31,6 +31,7 @@ fake secrets-run '[ -e "$FIX/nosecret" ] && exit 1; printf "p@ss word/1\n"'
 # records what it received apart from its argv, so the suite proves the secret is on the pty only.
 fake mount_smbfs 'echo "$*" >> "$FIX/mount_smbfs.args"; [ -e "$FIX/mountfail" ] && exit 1
   printf "Password for %s: " "${@: -2:1}" > /dev/tty; read -rs pw < /dev/tty; echo "$pw" > "$FIX/received.pw"
+  if [ -e "$FIX/badpw" ]; then printf "Password for %s: " "${@: -2:1}" > /dev/tty; read -rs pw < /dev/tty; exit 1; fi
   [ "$pw" = "p@ss word/1" ] || exit 1
   mp="${@: -1}"; src="${@: -2:1}"; src="//fixture-user@${src#//*@}"
   echo "$src on $mp (smbfs, nodev, nosuid, mounted by test)" >> "$FIX/table"'
@@ -160,6 +161,14 @@ rm "$FIX/mountfail"
 check "exits 1" test "$rc" -eq 1
 check "reports the failure" has "mount_smbfs failed"
 check "no mount point created" test ! -e "$HOME/HomeLab/SSD" -a ! -e "$HOME/HomeLab/HDD"
+
+echo "# server refuses the password: exit 1 with the reseal pointer, no retry loop"
+: > "$FIX/table"; rm -rf "$HOME/HomeLab"; touch "$FIX/badpw"
+run
+rm "$FIX/badpw"
+check "exits 1" test "$rc" -eq 1
+check "says the password was refused" has "refused the password"
+check "no mount point left" test ! -e "$HOME/HomeLab/SSD"
 
 echo "# secret missing from the cache: exit 1 with the reseal pointer, no mount attempt"
 : > "$FIX/mount_smbfs.args"; touch "$FIX/nosecret"

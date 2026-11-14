@@ -98,7 +98,7 @@ bounded_err() {
   return 124
 }
 
-# bounded, but $SECRET_INPUT (one line) is fed to the command's stdin through a pipe (printf is
+# bounded, but $SECRET (one line) is fed to the command's stdin through a pipe (printf is
 # a builtin: nothing in any argv). For the pty mount only.
 bounded_input() {
   local secs="$1" pid i
@@ -106,7 +106,7 @@ bounded_input() {
   printf '%s\n' "$SECRET" | "$@" >/dev/null 2>&1 &
   pid=$!
   for ((i = 0; i < secs * 4; i++)); do
-    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
+    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $?; }  # the child's own status: 77 = password refused
     sleep 0.25
   done
   kill -9 "$pid" 2>/dev/null
