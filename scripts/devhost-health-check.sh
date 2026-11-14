@@ -1374,6 +1374,8 @@ check_registry() {
 FACTORY_LABEL="com.jkrumm.software-factory"
 FACTORY_PROBE_TRIES="${FACTORY_PROBE_TRIES:-3}"
 FACTORY_PROBE_PAUSE="${FACTORY_PROBE_PAUSE:-4}"
+FACTORY_ROUTE_P95_MAX_MS="${FACTORY_ROUTE_P95_MAX_MS:-2000}"
+FACTORY_ROUTE_MIN_SAMPLES="${FACTORY_ROUTE_MIN_SAMPLES:-10}"
 
 factory_health_detail() {
   # A 503 still carries a body; only a transport failure leaves it empty.
@@ -1381,6 +1383,16 @@ factory_health_detail() {
   while :; do
     if body=$("$CURL_BIN" -s -m 3 "$FACTORY_HEALTH_URL" 2>/dev/null) && [[ -n "$body" ]]; then
       if [[ "$("$JQ_BIN" -r '.heartbeat.ok // false' <<<"$body" 2>/dev/null)" == "true" ]]; then
+        # /health never queries the database, so ok can hold while every DB-backed route times out
+        # (2026-11-14). Slow = p95 over FACTORY_ROUTE_P95_MAX_MS with at least FACTORY_ROUTE_MIN_SAMPLES
+        # requests behind it (the factory's own routes_slow line). Either field absent (older server) or
+        # not a number = unknown, never down.
+        if [[ "$("$JQ_BIN" -r --argjson max "$FACTORY_ROUTE_P95_MAX_MS" --argjson min "$FACTORY_ROUTE_MIN_SAMPLES" \
+          '(.heartbeat.routeP95Ms) as $p | (.heartbeat.routeSamples) as $n
+           | (($p | type) == "number" and ($n | type) == "number" and $p > $max and $n >= $min)' <<<"$body" 2>/dev/null)" == "true" ]]; then
+          "$JQ_BIN" -r '"factory routes slow: p95 \(.heartbeat.routeP95Ms) ms over \(.heartbeat.routeSamples) requests in 5 min"' <<<"$body"
+          return 1
+        fi
         "$JQ_BIN" -r '"tick \(.heartbeat.tickAt // "?"), queue moved \(.heartbeat.queueMovedAt // "?")"' <<<"$body" 2>/dev/null \
           || echo "heartbeat ok"
         return 0
