@@ -243,13 +243,17 @@ step_lima-cache() {
   local dir="$HOME/Library/Caches/lima/download/by-url-sha256"
   [ -d "$dir" ] || { skip lima-cache "no lima download cache"; return 0; }
   if "$PGREP" -qf 'limactl (create|start|clone)'; then skip lima-cache "limactl create/start running"; return 0; fi
-  local before after n=0 entry
+  local before after n=0 left=0 entry
   before=$(free_kb "$HOME")
   while IFS= read -r -d '' entry; do
     [ -z "$(find "$entry" -mmin -1440 -print -quit 2>/dev/null)" ] || continue
-    rm -rf -- "$entry" && n=$((n + 1))
+    if rm -rf -- "$entry"; then n=$((n + 1)); else left=$((left + 1)); fi
   done < <(find "$dir" -mindepth 1 -maxdepth 1 -print0)
   after=$(free_kb "$HOME")
+  if [ "$left" -gt 0 ]; then
+    echo "lima-cache: FAILED: $n image(s) removed, $left could not be, $(delta "$before" "$after")"
+    return 1
+  fi
   echo "lima-cache: $n image(s) older than 1 day removed, $(delta "$before" "$after")"
 }
 

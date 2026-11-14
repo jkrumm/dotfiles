@@ -112,5 +112,10 @@ old 2 "$L/stale/data" "$L/stale"
 printf "#!/bin/sh\nexit 1\n" > "$FAKE/pgrep-none"; chmod +x "$FAKE/pgrep-none"
 out11=$(DISK_SWEEP_PGREP="$FAKE/pgrep-none" bash "$HERE/disk-sweep.sh" lima-cache 2>&1); rc11=$?
 check "lima-cache: exit 0, stale image removed, fresh kept" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/stale" ] && [ -d "$2/fresh" ] && printf "%s" "$3" | grep -q "1 image(s)"' _ "$rc11" "$L" "$out11"
+# An old image rm cannot remove: counted, step fails.
+mkdir -p "$L/locked"; echo x > "$L/locked/data"; old 2 "$L/locked/data" "$L/locked"; chflags uchg "$L/locked/data"
+out12=$(DISK_SWEEP_PGREP="$FAKE/pgrep-none" bash "$HERE/disk-sweep.sh" lima-cache 2>&1); rc12=$?
+check "lima-cache: unremovable image fails the step" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "1 could not be"' _ "$rc12" "$out12"
+chflags nouchg "$L/locked/data"
 
 exit "$fail"
