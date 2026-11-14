@@ -78,6 +78,7 @@ services:
   - { name: obsidian-autostart, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.obsidian-autostart, memory_mib: 50 }
   - { name: rb, repo: rb, kind: launchd, tier: core, label: com.jkrumm.rb, door: rb, stop: "make -C ~/SourceRoot/rb down", note: "native since Issue 1184, always reachable (owner); 127.0.0.1:4050, health /api/health; the budget covers its headless Chrome during a fetch run (about 0.4 GiB, stopped after 180 s idle); start is launchctl bootstrap of the plist", memory_mib: 600 }
   - { name: research-chrome, repo: agent-workflows, kind: launchd, tier: on-demand, label: com.jkrumm.research-chrome, memory_mib: 700 }
+  - { name: shared-chrome, repo: dotfiles, kind: launchd, tier: on-demand, label: com.jkrumm.shared-chrome, start: "~/.local/bin/shared-chrome ensure", stop: "~/.local/bin/shared-chrome stop", note: "the headless Chrome behind /browse: DevTools on 127.0.0.1:9223, one context per agent; a context idle 15 min is closed, Chrome stops 60 s after the last; budget is Chrome (~0.4 GiB) plus ~75 MiB per context", memory_mib: 900 }
   - { name: smb-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.smb-keepalive, memory_mib: 50 }
   - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, memory_mib: 250 }
   - { name: soloist, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist, memory_mib: 80 }

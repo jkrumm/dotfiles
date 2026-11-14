@@ -17,7 +17,7 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 | Tier | Rule | Members today |
 |-|-|-|
 | `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, the teamchat api and broker |
-| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), the teamchat sandbox and its VM, `research-chrome` |
+| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), the teamchat sandbox and its VM, `research-chrome`, `shared-chrome` (the `/browse` Chrome) |
 | `manual` | started and stopped as a profile | `work` (VPN, dashboard, token minters, deploy gates), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs have no profile |
 
 A tier is a promise the registry holds, not yet one the host keeps: nothing is moved here. The on-demand wake, the idle

@@ -63,6 +63,11 @@ CADDY_DNS_MODULE_VERSION ?= v0.2.4
 # resolves to on the day it runs.
 FALLOW_VERSION := 3.38.1
 
+# playwright-cli — drives the shared headless Chrome (`shared-chrome`, agents/browser.md) over CDP: one
+# isolated context per agent, ~22 tokens of tool schema where chrome-devtools-mcp costs ~5.9k. npm-global
+# like fallow and pinned the same way; it attaches to a running Chrome and downloads no browser.
+PLAYWRIGHT_CLI_VERSION := 0.1.24
+
 # pymobiledevice3 — physical-iPhone screenshots/syslog without Xcode's GUI (`developer
 # core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
 # xcodes (Xcode manager) ships from scripts/install-xcodes.sh (pinned, sha256 + signature).
@@ -113,6 +118,7 @@ setup:
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
+	@$(MAKE) --no-print-directory shared-chrome-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
 	@$(MAKE) --no-print-directory hc-events-setup
@@ -286,6 +292,18 @@ _setup-tools:
 	@FALLOW_BIN="$$(npm prefix -g 2>/dev/null)/bin/fallow"; \
 	if [ -x "$$FALLOW_BIN" ]; then \
 		$(MAKE) --no-print-directory _link SRC="$$FALLOW_BIN" DST="$(HOME)/.local/bin/fallow"; \
+	fi
+	@# playwright-cli — npm global, pinned, linked into ~/.local/bin like fallow (a subagent's PATH has no fnm shell).
+	@if [ "$$(playwright-cli --version 2>/dev/null | head -1 | tr -d '[:space:]')" = "$(PLAYWRIGHT_CLI_VERSION)" ]; then \
+		echo "    · playwright-cli $(PLAYWRIGHT_CLI_VERSION) (ok)"; \
+	else \
+		npm install -g "@playwright/cli@$(PLAYWRIGHT_CLI_VERSION)" >/dev/null 2>&1 \
+			&& echo "    ✓ playwright-cli $(PLAYWRIGHT_CLI_VERSION) installed" \
+			|| echo "    ✗ playwright-cli install failed — npm install -g @playwright/cli@$(PLAYWRIGHT_CLI_VERSION)"; \
+	fi
+	@PW_BIN="$$(npm prefix -g 2>/dev/null)/bin/playwright-cli"; \
+	if [ -x "$$PW_BIN" ]; then \
+		$(MAKE) --no-print-directory _link SRC="$$PW_BIN" DST="$(HOME)/.local/bin/playwright-cli"; \
 	fi
 	@# Apple toolchain (iris): xcodegen comes from the Brewfile; xcodes + pymobiledevice3 below.
 	@bash $(DOTFILES_DIR)/scripts/install-xcodes.sh || echo "    ✗ xcodes install failed — bash scripts/install-xcodes.sh"
@@ -1288,6 +1306,11 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/lib/jobs-grade.ts" \
 		DST="$(HOME)/.local/bin/jobs-grade"
+	@# shared-chrome: the one headless Chrome the browse path drives (ensure/status/stop)
+	@chmod +x $(DOTFILES_DIR)/scripts/shared-chrome.ts
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/shared-chrome.ts" \
+		DST="$(HOME)/.local/bin/shared-chrome"
 	@# agent-dispatch was deleted; its link is left dangling on machines that
 	@# installed it. -L is true for a dangling link too; a real file is never touched.
 	@if [ -L "$(HOME)/.local/bin/agent-dispatch" ]; then \
@@ -3005,6 +3028,23 @@ hc-reap-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.hc-reap.json"; \
 	echo "  ✓ hc-reap torn down (unloaded, plist and jobrun state removed)"
 
+# The shared headless Chrome for UI checks (scripts/shared-chrome.ts): one Chrome, DevTools on 127.0.0.1:9223,
+# its own profile, one isolated context per agent. The job is loaded but not running; `shared-chrome ensure`
+# starts it and its supervisor stops it when no context is left. Any machine. Log: ~/Library/Logs/shared-chrome.log.
+.PHONY: shared-chrome-setup shared-chrome-teardown shared-chrome-status
+shared-chrome-setup:
+	@chmod +x "$(DOTFILES_DIR)/scripts/shared-chrome.ts"
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.shared-chrome" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ on demand (shared-chrome ensure), idle 15 min; log: ~/Library/Logs/shared-chrome.log"
+shared-chrome-teardown:
+	@"$(DOTFILES_DIR)/scripts/shared-chrome.ts" stop >/dev/null 2>&1 || true; \
+	PLIST="$(LAUNCHAGENTS)/com.jkrumm.shared-chrome.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; rm -f "$$PLIST"; \
+	echo "  ✓ shared-chrome torn down (stopped, unloaded; the profile under ~/.local/share/shared-chrome is kept)"
+shared-chrome-status: ## The shared headless Chrome: up/down, supervisor, one line per context
+	@"$(DOTFILES_DIR)/scripts/shared-chrome.ts" status || true
+
 # Test-browser janitor (scripts/browser-reap.py), every 30 min under jobrun: ends Playwright/puppeteer Chrome trees
 # whose launcher is gone (ppid 1), temp profile, older than 30 min. Any machine. Log: ~/Library/Logs/browser-reap.log.
 .PHONY: browser-reap-setup browser-reap-teardown browser-reap-run browser-reap-test claude-project-mcp-test
@@ -3732,6 +3772,7 @@ help:
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
+	@echo "  make shared-chrome-status        The shared headless Chrome behind /browse: up/down, supervisor, contexts (shared-chrome-setup, shared-chrome-teardown)"
 	@echo "  make browser-reap-setup         Load the 30-min reaper for orphaned Playwright/puppeteer Chrome trees (browser-reap-run ARGS=--dry-run, browser-reap-teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"

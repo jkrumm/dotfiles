@@ -94,17 +94,17 @@ investigation ships a dev stack there; go straight to prod otherwise, and say so
 3. `agw hdx query clickstack_query_tiles '<json>'` (or `clickstack_query_tile`
    per tile) — every tile must return data or be justified (e.g. a rare-event
    counter that's legitimately zero right now).
-4. Screenshot with the chrome-devtools MCP — **not** the `/browse` haiku fork,
+4. Screenshot with playwright-cli on the shared Chrome — **not** the `/browse` haiku fork,
    which (observed 3×) ignores the save path, drops credentials into files and
-   returns 900 px captures. Spawn a `browser` agent (it owns the chrome-devtools MCP) with `model: sonnet` and these
+   returns 900 px captures. Spawn a `browser` agent with `model: sonnet` and these
    rules baked in: `secrets-run read op://…/AGENT_EMAIL|AGENT_PASSWORD` into
-   shell vars only, never a file, never printed; `take_snapshot` to find the
-   login fields; `resize_page` 1440×1800 and verify via `evaluate_script`;
-   `take_screenshot` with `fullPage: true`. chrome-devtools rejects absolute
-   paths outside its workspace root (the session cwd), so pass a relative
-   `filePath` and `mv` it to `/tmp/hdx/` in the same step — a screenshot left in
-   a repo gets swept up by the next `git add -A` (happened once). Time range via the kiosk
-   deep link from `agw hdx link <id> --env <env> --last 24h`.
+   shell vars only, never a file, never printed; its own session and context
+   (`shared-chrome ensure`, `playwright-cli -s=$S attach --cdp=… --idle-timeout=900000`,
+   `tab-new --isolated-context=$S <url>`); `snapshot` to find the login fields and
+   `fill` them; `resize 1440 1800`, verified on the PNG (`file`); `screenshot
+   --filename=/tmp/hdx/<name>.png` (`--full-page`), never a path inside a repo (a
+   screenshot left in a repo gets swept up by the next `git add -A`, happened once);
+   `detach` last. Time range via the kiosk deep link from `agw hdx link <id> --env <env> --last 24h`.
 5. Critique the screenshot + tile list against `reference/dashboard-review.md`.
 6. `agw hdx write clickstack_patch_dashboard '<json>' --env <env> --commit` for
    anything that failed the checklist, repeat 3–5 until it passes.

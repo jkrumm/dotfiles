@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.shared-chrome</string>
+  <!-- The supervisor of the one headless Chrome the browse path shares (scripts/shared-chrome.ts). Loaded, not
+       running: `shared-chrome ensure` kickstarts it on the first request. It runs Chrome with DevTools on
+       127.0.0.1:9223 and its own profile, closes a context idle for 15 min, and exits (stopping Chrome) once no
+       context is left. No KeepAlive on purpose: an idle stop must stay stopped, and a crashed Chrome is restarted
+       by the next ensure. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/scripts/shared-chrome.ts</string>
+    <string>run</string>
+  </array>
+  <key>RunAtLoad</key><false/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/shared-chrome.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/shared-chrome.log</string>
+</dict>
+</plist>

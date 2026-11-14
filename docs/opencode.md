@@ -42,8 +42,8 @@ shared `opencode.db` — retry. agent-workflows' agent steps are NOT on this lan
 server over HTTP, configured by that process (`packages/opencode-host` in agent-workflows).
 
 **Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
-`chrome-devtools` (local, `--isolated
---headless`; reach for it only for browser work) in `opencode.json`'s `mcp`;
+`chrome-devtools` (local, attached to the shared Chrome with `--browserUrl=http://127.0.0.1:9223`; run `shared-chrome ensure`
+first and open pages with `new_page` + `isolatedContext`; reach for it only for browser work) in `opencode.json`'s `mcp`;
 `plugins/protect-branches.js` throws on whatever `hooks/protect-branches.ts` denies;
 `agent/{implementer,verifier}.md` are rendered from `agents/` (frontmatter differs,
 body is verbatim; `reviewer`, `review-verifier`, `Explore` and `general-purpose` are Claude Code only and skipped via `SKIP` in the script). Instructions stay the always-on rules plus the four small
