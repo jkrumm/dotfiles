@@ -290,13 +290,18 @@ if [ "$VERB" = cutover ]; then
   # A full pg-apply before the cutover creates the declared databases with their schemas but no
   # tables (2026-11-14: one ran through the /tmp alias); a restore cannot create those schemas
   # again. Such a shell holds no data: drop it. A target with any table stops the cutover.
-  for db in shared agent_workflows spike_s1 athena; do
-    exists=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d postgres -Atc "SELECT count(*) FROM pg_database WHERE datname = '$db'")
+  # The maintenance database `postgres` gets the same treatment (its prod-mirror schemas, empty, stop
+  # the restore just the same: first cutover attempt), recreated empty since it must exist.
+  for db in postgres shared agent_workflows spike_s1 athena; do
+    exists=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d template1 -Atc "SELECT count(*) FROM pg_database WHERE datname = '$db'")
     [ "$exists" = 1 ] || continue
     n=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d "$db" -Atc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p', 'S', 'v', 'm') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'")
     [ "$n" = 0 ] || { log "$db on the bare server already holds $n relations; not a shell left by an apply"; false; }
-    log "drop the empty shell $db on the bare server (no relations)"
-    "$PGBIN/dropdb" -h /tmp -p "$OLD_PORT" --force "$db"
+    s=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d "$db" -Atc "SELECT count(*) FROM pg_namespace WHERE nspname !~ '^pg_' AND nspname NOT IN ('information_schema', 'public')")
+    [ "$s" = 0 ] && continue
+    log "drop the empty shell $db on the bare server ($s schemas, no relations)"
+    "$PGBIN/dropdb" -h /tmp -p "$OLD_PORT" --maintenance-db=template1 --force "$db"
+    if [ "$db" = postgres ]; then "$PGBIN/createdb" -h /tmp -p "$OLD_PORT" --maintenance-db=template1 -T template0 postgres; fi
   done
   log "apply --no-schemas on the bare server: roles, empty databases, privileges"
   "${PGC[@]}" apply --port "$OLD_PORT" --no-schemas
