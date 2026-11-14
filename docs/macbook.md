@@ -119,8 +119,11 @@ runs it on both Macs. `make smb-keepalive-status` shows the launchd state and th
 | MacBook | `osascript mount volume` | login Keychain entry Finder saved — mount each share once in Finder with *Remember* first | `/Volumes/<share>` |
 | mini (cache backend) | `mount_smbfs` | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
 
-The mini's password is in `mount_smbfs`' argv for the length of the call (same-user
-processes only); never in a file, the plist, the log or the environment. That account can
+The mini's password sits in a 0600 temp file for the length of the secret read and in
+`mount_smbfs`' argv for the length of the call (same-user processes only); never in a
+tracked file, the plist, the log or the environment. The mount point is removed again
+whenever the share is not mounted (an empty directory would swallow a copy while the
+HomeLab is down). That account can
 delete on the HomeLab shares, unlike the `hl` S3 key — the ref's comment in
 `headless.refs` carries the blast radius. A HomeLab that is down at boot delays and fails
 nothing: the run logs "skipped" and exits 0. Teardown (the rollback): `make

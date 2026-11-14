@@ -21,9 +21,13 @@
 #   mini (secrets backend     no Finder session, never `op`: the password comes
 #   'cache')                  from the secrets cache (`secrets-run read`), the
 #                             mount is `mount_smbfs` at ~/HomeLab/<share>. The
-#                             password is in mount_smbfs' argv for the length of
-#                             the call (the same user's processes only), never in
-#                             a file, the plist, the log or the environment.
+#                             mount point exists only while a share sits on it
+#                             (an empty directory would swallow a copy to a
+#                             HomeLab that is down). The password is in a 0600
+#                             temp file for the length of the secret read and in
+#                             mount_smbfs' argv for the length of the call (the
+#                             same user's processes only); never in a tracked
+#                             file, the plist, the log or the environment.
 #
 # Every external call is bounded: a hung smbfs call is abandoned, never waited
 # on (launchd reaps the leftover when the run exits). Declared shares:
@@ -149,15 +153,23 @@ smb_mount_macbook() {
 
 # The mount point exists only while a mount sits on it: created for the attempt,
 # removed again when the mount fails (a failed run leaves nothing behind).
+# rmdir refuses a directory with content, so a real one is never touched.
+release_mount_point() { # mini only; the caller knows the share is not mounted
+  [ "$host_kind" = mini ] || return 0
+  rmdir "$MOUNT_ROOT/$1" 2>/dev/null
+  rmdir "$MOUNT_ROOT" 2>/dev/null
+  return 0
+}
+
 smb_mount_mini() {
-  local server="$1" user="$2" share="$3" mp="$MOUNT_ROOT/$3" created=0 rc
-  load_secret || return 1
-  [ -d "$mp" ] || { mkdir -p "$mp" || { log "$share: cannot create $mp"; return 1; }; created=1; }
+  local server="$1" user="$2" share="$3" mp="$MOUNT_ROOT/$3" rc
+  load_secret || { release_mount_point "$share"; return 1; }
+  mkdir -p "$mp" || { log "$share: cannot create $mp"; return 1; }
   bounded "$MOUNT_SECONDS" mount_smbfs -N -o nobrowse \
     "//$(urlencode "$user"):$(urlencode "$SECRET")@${server}/${share}" "$mp"
   rc=$?
   if [ "$rc" -eq 0 ]; then log "$share: mounted at $mp"; return 0; fi
-  [ "$created" -eq 1 ] && rmdir "$mp" 2>/dev/null
+  release_mount_point "$share"
   case "$rc" in
     124) log "$share: mount timed out after ${MOUNT_SECONDS}s" ;;
     *)   log "$share: mount_smbfs failed (rc $rc)" ;;
@@ -184,11 +196,13 @@ failed=0
 while read -r server user share automount scope _rest; do
   case "${server:-}" in ''|\#*) continue ;; esac
   [ -n "${share:-}" ] || { log "malformed row: '$server $user'"; continue; }
+  case "${scope:-}" in \#*) scope="" ;; esac
   case "${scope:-$host_kind}" in "$host_kind") ;; macbook|mini) continue ;; *) log "$share: bad scope '$scope'"; continue ;; esac
   checked=$((checked + 1))
 
   if ! bounded 5 nc -z -G 3 "$server" 445; then
     log "$share: $server:445 unreachable (HomeLab down, Tailscale down or off-tailnet) — skipped"
+    [ -z "$(mount_point "$server" "$share")" ] && release_mount_point "$share"
     continue
   fi
 
@@ -197,6 +211,7 @@ while read -r server user share automount scope _rest; do
     if [ "${automount:-no}" = yes ]; then
       smb_mount "$server" "$user" "$share" || failed=$((failed + 1))
     else
+      release_mount_point "$share"
       log "$share: reachable, not mounted (automount off)"
     fi
     continue

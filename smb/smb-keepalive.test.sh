@@ -39,7 +39,7 @@ fake umount 'exit 1'
 CONF="$TMP/shares.conf"
 cat > "$CONF" <<'CONF'
 # fixture
-nas.example.test fixture-user SSD yes
+nas.example.test fixture-user SSD yes # trailing comment is not a scope
 nas.example.test fixture-user HDD no macbook
 nas.example.test fixture-user HDD yes mini
 CONF
@@ -53,13 +53,21 @@ run() { # run the script as the mini; prints its output, sets $rc
 }
 has() { printf '%s' "$out" | grep -q -- "$1"; }
 
-echo "# unreachable server: skipped, exit 0, nothing mounted or created"
+echo "# unreachable server: skipped, exit 0, nothing mounted, leftover empty mount points removed"
+mkdir -p "$HOME/HomeLab/SSD" "$HOME/HomeLab/HDD" # left by an earlier mount
 touch "$FIX/down"
 run
 check "exits 0" test "$rc" -eq 0
 check "reports skipped" has "skipped"
-check "no mount point created" test ! -e "$HOME/HomeLab"
+check "leftover empty mount points removed" test ! -e "$HOME/HomeLab"
+check "trailing comment on a row is not a scope" sh -c '! printf "%s" "$1" | grep -q "bad scope"' _ "$out"
 check "table untouched" test ! -s "$FIX/table"
+
+echo "# a mount point with content is never removed"
+mkdir -p "$HOME/HomeLab/SSD"; echo keep > "$HOME/HomeLab/SSD/file"
+run
+check "non-empty mount point kept" test -f "$HOME/HomeLab/SSD/file"
+rm -rf "$HOME/HomeLab"
 rm "$FIX/down"
 
 echo "# absent + automount yes: mounted under the home, scoped rows honoured"
