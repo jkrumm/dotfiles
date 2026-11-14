@@ -804,7 +804,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -3028,6 +3028,10 @@ KUMA_DOOR_GENERATED  ?= $(HOME)/SourceRoot/homelab/uptime-kuma/monitors.mini-doo
 .PHONY: kuma-door-test kuma-door-setup kuma-door-restart kuma-door-teardown kuma-door-gen kuma-door-check
 kuma-door-test: ## bun test for the Kuma door (door, registry validation, generator)
 	@bun test $(DOTFILES_DIR)/kuma-door/
+
+.PHONY: lenses-test
+lenses-test: ## bun test for the /lenses skill's tool (stubs, index, check, views, workflow args)
+	@bun test $(DOTFILES_DIR)/skills/lenses/
 # setup reloads the job (bootout, then bootstrap): launchd keeps the definition from the first load,
 # so a changed plist only applies after a reload.
 kuma-door-setup:

@@ -39,6 +39,7 @@ Everything routed through `agw` exists only on the mini.
 |-|-|
 | `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`agw review prepare|submit|dispose|covered`, reviewer agent in-session) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
 | MCP · subagent | `/browse` (`browser` agent, chrome-devtools inline, haiku) · `/analyze` (fallow in a native subagent) |
+| Workflow fan-out | `/lenses` (40 to 90 expert angles on one undertaking: question-first catalogue, one Opus agent per lens, source audit, gap rounds, synthesis handover; tens of millions of tokens, only on an explicit ask) |
 | inline — git | `/commit` (`--split`/`--amend`) |
 | inline — build | `/upgrade-deps` · `/archify` |
 | inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (hc + the Herdr app) · `/router` (`routerctl`) |
