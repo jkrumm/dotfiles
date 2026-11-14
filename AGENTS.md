@@ -199,7 +199,7 @@ Facts to hold:
   (`~/.local/share/herdr-core/active/`, official installer); on the mini `com.jkrumm.herdr-core` is only a one-shot
   starter, the MacBook's Herdr app starts its own. No wrapper at `~/.local/bin`, no Homebrew core: `docs/herdr-core.md`
   §How the core runs now.
-- **`ssh iumac` runs fixed verbs only** (forced-command gate `scripts/iumac-gate.sh`; list in `docs/remote-dev.md` §mini → iumac) and carries no SSH identity. File pulls: `rsync … iumac:<path>`; anything else MacBook-side: `ask-human.sh ask … --cmd`. Installers that write to the MacBook run from its own terminal.
+- **`ssh iumac` runs fixed verbs only** (forced-command gate `scripts/iumac-gate.sh`; list in `docs/remote-dev.md` §mini → iumac) and carries no SSH identity. A dotfiles pull and its link targets: `ssh iumac dotfiles-sync` (ff-only, `config/macbook-sync.tsv`). File pulls: `rsync … iumac:<path>`; anything else MacBook-side: `ask-human.sh ask … --cmd`. Installers that write to the MacBook run from its own terminal.
 - **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
   keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
   billing, and still looks healthy in `claude agents`. `rd work` spawns *through* the launchd core (a GUI-session
