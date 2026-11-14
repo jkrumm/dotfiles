@@ -515,8 +515,8 @@ the physical-possession trade and `docs/remote-dev.md` own the rationale.
 
 opbackup + secrets auto-reseed (hourly guard, `make opbackup-{setup,check,teardown}`),
 the battery charge limiter (`make batt-{setup,limit,status}`), the database
-tunnel (`make db-tunnel-setup`), the HomeLab SMB keepalive (`make
-smb-keepalive-setup`) and the reverse `ssh iumac` reach on :2222 all
+tunnel (`make db-tunnel-setup`), the Keychain half of the HomeLab SMB keepalive (`make
+smb-keepalive-setup`, which also runs on the mini) and the reverse `ssh iumac` reach on :2222 all
 run only on the MacBook and cost every mini agent context for no benefit — full
 command tables and gotchas: `docs/macbook.md`.
 
@@ -542,10 +542,13 @@ restore it: `docs/disk.md`. **Agents cannot see `~/.Trash`** (no Full Disk Acces
 
 **HomeLab files** — agents on the mini use **`hl`** (S3 against the HomeLab
 VersityGW, buckets `ssd` and `hdd` = the same roots as SMB: `hl lsd homelab:hdd/fuji`,
-`hl copy ./x homelab:hdd/inbox/…`, `hl presign <bucket>/<key> [ttl]`), **never an SMB
-mount**. The mini's key (`s3-agent`, in the headless cache) reads and writes both, no delete; the
-MacBook's `hl` resolves `s3-admin` (full access) through live `op`. Humans use
-Finder SMB, kept alive by `com.jkrumm.smb-keepalive` (`docs/macbook.md`; `SSD` automounts), or
+`hl copy ./x homelab:hdd/inbox/…`, `hl presign <bucket>/<key> [ttl]`) for anything an
+S3 call does; the mini's key (`s3-agent`, in the headless cache) reads and writes both, no delete. For a bulk
+copy to or from the shares the mini has a self-healing SMB mount, `~/HomeLab/SSD` and `~/HomeLab/HDD`, kept by
+`com.jkrumm.smb-keepalive` (`docs/macbook.md` §HomeLab Samba; password from the cache, can delete: use it
+for copies, not as a scratch disk; absent while the HomeLab is down). The MacBook's `hl` resolves `s3-admin`
+(full access) through live `op`. Humans use
+Finder SMB, kept alive by the same agent (`SSD` automounts), or
 Cyberduck (manual install — not in the Brewfile); `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
 nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
 **Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not

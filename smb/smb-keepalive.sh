@@ -1,52 +1,78 @@
 #!/usr/bin/env bash
-# Keep the HomeLab Samba shares usable on the MacBook.
+# Keep the HomeLab Samba shares usable — on the MacBook and on the headless mini.
 #
 # macOS never reconnects an SMB mount after sleep or a network change: the mount
 # stays in the table, and the first Finder/stat touching it blocks. Every run
 # (60 s, plus every network change via WatchPaths), per declared share:
 #
-#   server unreachable on :445        → log, leave everything alone
-#   mounted, bounded stat succeeds    → healthy
-#   mounted, stat hangs or fails      → force-unmount, remount
+#   server unreachable on :445        → log "skipped", leave everything alone
+#   mounted, bounded stat+ls succeed  → healthy
+#   mounted, stat or ls hangs/fails   → force-unmount, remount
 #   not mounted, automount=yes        → mount
 #   not mounted, automount=no         → nothing (opt-in per share)
 #
 # Runs under `jobrun`, so the exit code is graded: non-zero only when a mount or
-# remount failed or the declaration is missing. Unreachable is a normal laptop
-# state and exits 0.
+# remount failed or the declaration/secret is missing. Unreachable is a normal
+# state (laptop off-tailnet, a HomeLab that is down at boot) and exits 0.
 #
-# Mounting goes through `osascript mount volume`, which takes the password from
-# the login Keychain entry Finder saved — no secret here or in the plist.
+# Two hosts, one loop; only the mount step differs:
+#   MacBook (login Keychain)  `osascript mount volume`, password from the Keychain
+#                             entry Finder saved; mounts at /Volumes/<share>.
+#   mini (secrets backend     no Finder session, never `op`: the password comes
+#   'cache')                  from the secrets cache (`secrets-run read`), the
+#                             mount is `mount_smbfs` at ~/HomeLab/<share>. The
+#                             password is in mount_smbfs' argv for the length of
+#                             the call (the same user's processes only), never in
+#                             a file, the plist, the log or the environment.
+#
 # Every external call is bounded: a hung smbfs call is abandoned, never waited
-# on (launchd reaps the leftover when the run exits).
-#
-# MacBook-only: no-ops on the cache backend (the mini — agents there use `hl`,
-# never an SMB mount). Declared shares: dotfiles-private/smb-shares.conf (it
-# names the server, so it stays out of this public repo).
+# on (launchd reaps the leftover when the run exits). Declared shares:
+# dotfiles-private/smb-shares.conf (it names the server, so it stays out of this
+# public repo).
 set -uo pipefail
 
 CONF="${SMB_SHARES_CONF:-$HOME/SourceRoot/dotfiles-private/smb-shares.conf}"
-PROBE_SECONDS=8
-UNMOUNT_SECONDS=20
-MOUNT_SECONDS=45
+PROBE_SECONDS="${SMB_PROBE_SECONDS:-8}"
+RETRY_SLEEP="${SMB_RETRY_SLEEP:-2}"
+UNMOUNT_SECONDS="${SMB_UNMOUNT_SECONDS:-20}"
+MOUNT_SECONDS="${SMB_MOUNT_SECONDS:-45}"
+SECRET_SECONDS="${SMB_SECRET_SECONDS:-15}"
+SECRET_REF="${SMB_SECRET_REF:-op://homelab/samba/PASSWORD}"
+MOUNT_ROOT="${SMB_MOUNT_ROOT:-$HOME/HomeLab}"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] smb-keepalive: $*"; }
 
-MARKER="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend"
-if [ "$(tr -d '[:space:]' 2>/dev/null < "$MARKER" || true)" = cache ]; then
-  log "secrets backend is 'cache' (the mini) — agents use hl, nothing to keep alive."
-  exit 0
+# Which host: the secrets backend marker (cache = the mini). SMB_HOST_KIND is the test seam.
+host_kind="${SMB_HOST_KIND:-}"
+if [ -z "$host_kind" ]; then
+  MARKER="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend"
+  if [ "$(tr -d '[:space:]' 2>/dev/null < "$MARKER" || true)" = cache ]; then host_kind=mini; else host_kind=macbook; fi
 fi
 
 [ -f "$CONF" ] || { log "no share declaration at $CONF"; exit 1; }
 
 # Run "$@" for at most $1 seconds. 0 = exited 0; 1 = failed; 124 = still running
 # after the deadline (abandoned, never waited on — a hung smbfs call can sit in
-# the kernel uninterruptibly).
+# the kernel uninterruptibly). Output is discarded.
 bounded() {
   local secs="$1" pid i
   shift
   "$@" </dev/null >/dev/null 2>&1 &
+  pid=$!
+  for ((i = 0; i < secs * 4; i++)); do
+    kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
+    sleep 0.25
+  done
+  kill -9 "$pid" 2>/dev/null
+  return 124
+}
+
+# bounded, but stdout goes to the file $2 (mode 600) — for the secret read only.
+bounded_to() {
+  local secs="$1" out="$2" pid i
+  shift 2
+  : > "$out"; chmod 600 "$out"
+  "$@" </dev/null >"$out" 2>/dev/null &
   pid=$!
   for ((i = 0; i < secs * 4; i++)); do
     kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
@@ -76,7 +102,40 @@ probe() {
   bounded "$PROBE_SECONDS" ls -a "$1"
 }
 
-smb_mount() {
+# RFC 3986 percent-encoding of one string, bytewise (the URL carries the password).
+urlencode() {
+  local LC_ALL=C s="$1" i c out=""
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "$c" in
+      [A-Za-z0-9._~-]) out+="$c" ;;
+      *) out+=$(printf '%%%02X' "'$c") ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# The password, once per run, from the secrets cache. Sets SECRET; 1 = unavailable.
+SECRET=""
+SECRET_FAILED=0
+load_secret() {
+  [ -n "$SECRET" ] && return 0
+  [ "$SECRET_FAILED" -eq 1 ] && return 1
+  local dir rc
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/smb-keepalive.XXXXXX") || return 1
+  bounded_to "$SECRET_SECONDS" "$dir/pw" secrets-run read "$SECRET_REF"; rc=$?
+  SECRET=$(cat "$dir/pw" 2>/dev/null); SECRET=${SECRET%$'\n'}
+  rm -rf "$dir"
+  [ "$rc" -eq 0 ] && [ -n "$SECRET" ] && return 0
+  SECRET=""; SECRET_FAILED=1
+  case "$rc" in
+    124) log "secret read timed out after ${SECRET_SECONDS}s" ;;
+    *)   log "secret $SECRET_REF is not in the cache — run 'make secrets-reseal-request'" ;;
+  esac
+  return 1
+}
+
+smb_mount_macbook() {
   local server="$1" user="$2" share="$3" rc
   bounded "$MOUNT_SECONDS" osascript -e "mount volume \"smb://${user}@${server}/${share}\""
   rc=$?
@@ -86,6 +145,28 @@ smb_mount() {
     *)   log "$share: mount failed (Keychain entry missing? mount it once in Finder with 'Remember')" ;;
   esac
   return 1
+}
+
+# The mount point exists only while a mount sits on it: created for the attempt,
+# removed again when the mount fails (a failed run leaves nothing behind).
+smb_mount_mini() {
+  local server="$1" user="$2" share="$3" mp="$MOUNT_ROOT/$3" created=0 rc
+  load_secret || return 1
+  [ -d "$mp" ] || { mkdir -p "$mp" || { log "$share: cannot create $mp"; return 1; }; created=1; }
+  bounded "$MOUNT_SECONDS" mount_smbfs -N -o nobrowse \
+    "//$(urlencode "$user"):$(urlencode "$SECRET")@${server}/${share}" "$mp"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then log "$share: mounted at $mp"; return 0; fi
+  [ "$created" -eq 1 ] && rmdir "$mp" 2>/dev/null
+  case "$rc" in
+    124) log "$share: mount timed out after ${MOUNT_SECONDS}s" ;;
+    *)   log "$share: mount_smbfs failed (rc $rc)" ;;
+  esac
+  return 1
+}
+
+smb_mount() {
+  if [ "$host_kind" = mini ]; then smb_mount_mini "$@"; else smb_mount_macbook "$@"; fi
 }
 
 force_unmount() {
@@ -98,19 +179,22 @@ force_unmount() {
 
 checked=0
 failed=0
-while read -r server user share automount _rest; do
+# Row: <server> <user> <share> <automount yes|no> [macbook|mini] — the optional last field
+# restricts the row to one host (a share may automount on the mini and stay opt-in on the MacBook).
+while read -r server user share automount scope _rest; do
   case "${server:-}" in ''|\#*) continue ;; esac
   [ -n "${share:-}" ] || { log "malformed row: '$server $user'"; continue; }
+  case "${scope:-$host_kind}" in "$host_kind") ;; macbook|mini) continue ;; *) log "$share: bad scope '$scope'"; continue ;; esac
   checked=$((checked + 1))
 
   if ! bounded 5 nc -z -G 3 "$server" 445; then
-    log "$share: $server:445 unreachable (Tailscale down or off-tailnet) — skipped"
+    log "$share: $server:445 unreachable (HomeLab down, Tailscale down or off-tailnet) — skipped"
     continue
   fi
 
   mp=$(mount_point "$server" "$share")
   if [ -z "$mp" ]; then
-    if [ "$automount" = yes ]; then
+    if [ "${automount:-no}" = yes ]; then
       smb_mount "$server" "$user" "$share" || failed=$((failed + 1))
     else
       log "$share: reachable, not mounted (automount off)"
@@ -123,7 +207,7 @@ while read -r server user share automount _rest; do
   # destructive path (a vanished entry is not a dead mount); a hang does not.
   probe "$mp"
   rc=$?
-  [ "$rc" -eq 1 ] && { sleep 2; probe "$mp"; rc=$?; }
+  [ "$rc" -eq 1 ] && { sleep "$RETRY_SLEEP"; probe "$mp"; rc=$?; }
   if [ "$rc" -eq 0 ]; then
     log "$share: healthy at $mp"
     continue
@@ -133,6 +217,6 @@ while read -r server user share automount _rest; do
   { force_unmount "$mp" "$share" && smb_mount "$server" "$user" "$share"; } || failed=$((failed + 1))
 done < "$CONF"
 
-[ "$checked" -gt 0 ] || { log "no shares declared in $CONF"; exit 1; }
+[ "$checked" -gt 0 ] || { log "no shares declared for the $host_kind in $CONF"; exit 1; }
 [ "$failed" -eq 0 ] || { log "$failed share(s) could not be (re)mounted"; exit 1; }
 exit 0

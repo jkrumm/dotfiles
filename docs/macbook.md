@@ -97,23 +97,35 @@ A `KeepAlive` LaunchAgent holding one `ssh -N` with every `-L` in
 needs literal quotes, `ControlMaster=no`+`ControlPath=none`, and ssh must stay in
 the foreground.
 
-## HomeLab Samba — `make smb-keepalive-setup`
+## HomeLab Samba — `make smb-keepalive-setup` (both Macs)
 
 macOS never reconnects an SMB mount after sleep or a network change; the stale
 mount then blocks the first Finder/`stat` that touches it.
 `com.jkrumm.smb-keepalive` runs `smb/smb-keepalive.sh` under `jobrun` (graded by
-`jobs-grade` on wake) every 60 s and on every
+`jobs-grade`) every 60 s and on every
 network change (`WatchPaths` on `/Library/Preferences/SystemConfiguration`): per
 share in `dotfiles-private/smb-shares.conf` (it names the server, so not here),
-`:445` unreachable → skip; mounted and a bounded `stat`+`ls` hangs or fails →
-`diskutil unmount force` + remount; absent and `automount yes` → mount. Mounting
-is `osascript mount volume`, password from the Keychain entry Finder saved — mount
-each share once in Finder with *Remember* first. Every call is bounded and a hung
-one is abandoned, never waited on. Same target links `smb/nsmb.conf` →
-`~/Library/Preferences/nsmb.conf` (`soft=yes`, SMB3-only, no NetBIOS, no
-multichannel — each key checked against nsmb.conf(5)). `make smb-keepalive-status`
-shows the launchd state and the log tail. Both shares ship `automount no`; flip
-per share to opt in.
+`:445` unreachable → log "skipped", exit 0; mounted and a bounded `stat`+`ls`
+hangs or fails → `diskutil unmount force` + remount; absent and `automount yes` →
+mount. Every call is bounded and a hung one is abandoned, never waited on. A row's
+optional fifth field (`macbook`|`mini`) scopes it to one host. `make smb-keepalive-setup`
+also links `smb/nsmb.conf` → `~/Library/Preferences/nsmb.conf` (`soft=yes`, SMB3-only,
+no NetBIOS, no multichannel — each key checked against nsmb.conf(5)); `make setup`
+runs it on both Macs. `make smb-keepalive-status` shows the launchd state and the log tail,
+`make smb-keepalive-test` the hermetic suite (fake mount table, a hanging `stat` fixture).
+
+| Host | Mount | Password | Mount point |
+|-|-|-|-|
+| MacBook | `osascript mount volume` | login Keychain entry Finder saved — mount each share once in Finder with *Remember* first | `/Volumes/<share>` |
+| mini (cache backend) | `mount_smbfs` | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
+
+The mini's password is in `mount_smbfs`' argv for the length of the call (same-user
+processes only); never in a file, the plist, the log or the environment. That account can
+delete on the HomeLab shares, unlike the `hl` S3 key — the ref's comment in
+`headless.refs` carries the blast radius. A HomeLab that is down at boot delays and fails
+nothing: the run logs "skipped" and exits 0. Teardown (the rollback): `make
+smb-keepalive-teardown` unloads the agent, removes the plist, the jobrun state and the
+`nsmb.conf` link; mounts stay until unmounted (`diskutil unmount force ~/HomeLab/<share>`).
 
 ## The reverse reach — mini → iumac on :2222
 
