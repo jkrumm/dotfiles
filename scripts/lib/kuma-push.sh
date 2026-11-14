@@ -39,9 +39,33 @@ kuma_resolve_push_url() {
 # character in msg is encoded properly. Do NOT hand-roll the URL — an earlier
 # version appended a fallback that escaped only spaces, which would have
 # corrupted the query as soon as a check interpolated tool output into msg.
+#
+# One retry on a transport failure (curl 6/7/28/35/52/55/56: DNS, refused, timed out,
+# TLS, empty reply, reset). Kuma's push endpoint stalls past 15 s now and then; before
+# the retry that one lost push failed the whole devhost-health run (6 flaps in a day,
+# every one a single timed-out push, all sibling pushes fine). An HTTP error (rc 22)
+# is a real answer and is never retried. The retry is spent at most once per process:
+# when Kuma is genuinely down the first retry fails too, and later pushes then go out
+# once each, so a dead Kuma cannot stretch a heartbeat run past its jobrun timeout.
+KUMA_PUSH_RETRY_SPENT=0
 kuma_push() {
-  local url="$1" status="$2" msg="$3"
-  curl -fsS --max-time 15 -o /dev/null \
+  local url="$1" status="$2" msg="$3" rc=0
+  kuma_push_once 15 "$url" "$status" "$msg" || rc=$?
+  case "$rc" in
+    6|7|28|35|52|55|56)
+      (( KUMA_PUSH_RETRY_SPENT == 0 )) || return "$rc"
+      sleep 2
+      rc=0
+      kuma_push_once 10 "$url" "$status" "$msg" || rc=$?
+      (( rc == 0 )) || KUMA_PUSH_RETRY_SPENT=1
+      ;;
+  esac
+  return "$rc"
+}
+
+kuma_push_once() {
+  local max_time="$1" url="$2" status="$3" msg="$4"
+  curl -fsS --max-time "$max_time" -o /dev/null \
     --data-urlencode "status=$status" \
     --data-urlencode "msg=$msg" \
     -G "$url"

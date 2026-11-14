@@ -35,6 +35,12 @@ case "\$*" in *api/push/*) ;; *7793*)
   fi
   echo '{"heartbeat":{"ok":true,"tickAt":"t","queueMovedAt":"q"}}'; exit 0 ;; esac
 [ "\${STUB_CURL_FAIL:-0}" = 1 ] && exit 22
+# STUB_CURL_TIMEOUT=once: the first push call times out (rc 28), later ones answer; =always: every push call does.
+case "\$*" in *api/push/*)
+  if [ "\${STUB_CURL_TIMEOUT:-0}" != 0 ]; then
+    n=\$(cat "$TMP/timeout.calls" 2>/dev/null || echo 0); n=\$((n + 1)); echo "\$n" > "$TMP/timeout.calls"
+    if [ "\${STUB_CURL_TIMEOUT}" = always ] || [ "\$n" = 1 ]; then exit 28; fi
+  fi ;; esac
 exit 0
 STUB
 # obsidian stub: version answers, or hangs (and leaves a grandchild sleeper) when STUB_OBSIDIAN_HANG=1.
@@ -145,6 +151,16 @@ assert_eq "failed push exits 1" 1 "$RC"
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_PUSH_URL_FILE="$TMP/missing-url"
 assert_eq "no push URL exits 1" 1 "$RC"
 assert_eq "...and pushes nothing" 0 "$(pushes)"
+
+echo "a push that times out once is retried: exit 0; a dead Kuma still exits 1 and retries only once"
+rm -f "$TMP/timeout.calls"
+run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_TIMEOUT=once
+assert_eq "one timed-out push is absorbed by the retry" 0 "$RC"
+base=$(( $(pushes) - 1 ))
+rm -f "$TMP/timeout.calls"
+run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_TIMEOUT=always
+assert_eq "Kuma down: exit 1" 1 "$RC"
+assert_eq "Kuma down: one retry in the whole run, not one per push" $(( base + 1 )) "$(pushes)"
 
 echo "drift: runs once after the composite, the stamp holds it back for 20 h"
 rm -f "$TMP/drift.runs" "$TMP/state/drift-last-run"
