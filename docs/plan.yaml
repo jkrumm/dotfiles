@@ -1,0 +1,110 @@
+version: 1
+rows:
+  - key: core-restart-audit
+    kind: docs
+    title: Core restart audit - why hc-resume saw 18 core restarts since 2026-10-31, and whether recovery survives an app-triggered update
+    facts:
+      why: |-
+        The incident doc (docs/incident-2026-11-13-mini-panic.md, standing constraint 2) says the Herdr app's auto-update has no off switch (herdr-app #207), so recovery must survive an app-triggered core update. ~/Library/Logs/hc-resume.log holds 18 "stream ended (core restart?)" lines since 2026-10-31, among them 2026-11-13T07:00:35Z followed by "no launchd-born core" for about a minute and 18 resumes at 07:02Z. Nobody has classified them, so "recovery is complete" is unproven for the restart class that happens most often.
+      what: |-
+        Read-only analysis: ~/Library/Logs/hc-resume.log (and its rotated files), the core's own log and launchd's record of com.jkrumm.herdr-core, the herdr-app updater log if one exists, make herdr-core-update history in git log and ~/Library/Logs. Output lands in docs/herdr-core.md as a new section "Core restarts, classified". Touches no script, no plist, no launcher, and does not run hc server restart, hc update or any live proof.
+      change: |-
+        Classify each stream-ended event as owner update (make herdr-core-update), app-triggered update, launchd respawn after a crash, host reboot, or unknown with the evidence that is missing. Per event, count terminals resumed (resume lines after it) versus terminals that had a jk.claude.session label, from the log alone. State from that data whether recovery after an app-triggered update was complete, and name the one extra log line or field that would make the next event measurable if the log cannot say. Do not change hc-resume (standing constraint 4).
+      acceptance: |-
+        docs/herdr-core.md has a table with one row per stream-ended event since 2026-10-31 (cause class, resumed count, evidence or "unknown: <what is missing>") and a closing line stating whether recovery survived an app-triggered update on the evidence; no file under scripts/ or config/ changes; make check passes.
+
+  - key: recovery-check
+    title: Measured recovery check - resumable terminals versus terminals running claude, read-only, run by the heartbeat after a boot
+    after: [core-restart-audit]
+    facts:
+      why: |-
+        After the 2026-11-13 panic reboot hc-resume fired 25 resumes within 9 ms and 5 minutes later only 10 terminals showed as claude-code, so recovery is not proven complete. Nothing computes "resumable versus running" today; the only way to know is to read terminals by hand. The incident doc's recovery target is explicitly measured, not assumed.
+      what: |-
+        New scripts/recovery-check.ts (or .sh, matching scripts/lib/core-health.sh style) with a fixture-driven test, a make recovery-check target, a bounded recovery sub-check in scripts/devhost-health-check.sh (the core component, near check_core) with its test in scripts/devhost-heartbeat.test.sh, docs/devhost-health.md and the remote-dev skill/doc line that says how to read it. Does not edit scripts/hc-resume.ts, the core's plist, launcher or any make herdr-core-* target.
+      change: |-
+        The check is read-only. It runs scripts/lib/core-up.sh first and does nothing when no launchd-born core answers (hc would start a core). Then it lists terminals and counts: resumable (kept terminal with a jk.claude.session label), running (foreground is claude), waiting (resumable and foreground still a login shell), per-terminal last hc-resume verdict from ~/Library/Logs/hc-resume.log (sent at, or skipped with the reason). One line for people (recovery: 25 resumable, 10 running claude, 12 waiting, 3 skipped) and --json. The heartbeat runs it only while the host booted less than 45 minutes ago, appends the counts to ~/Library/Logs/devhost-snapshots.jsonl, and from 10 minutes after tailnet-up reports a WARN (never a FAIL, never a DOWN) when running is less than resumable; an env knob DEVHOST_RECOVERY=0 turns the sub-check off. Every hc call is bounded at 5 s like the other sub-tools. Rollback: revert the commit; the sub-check is additive and gated by the knob.
+      acceptance: |-
+        Tests cover the count from a fixture of hc terminal records (all running, some waiting, no label, core not up = no hc call), the WARN threshold and the booted-less-than-45-minutes gate; make recovery-check prints the line on the live mini without touching the core (read verbs only); docs/devhost-health.md explains the three numbers and the expected curve; /review is clean; make check passes. No reboot, kill or core restart is used to prove it.
+
+  - key: kuma-fast-alert
+    repo: homelab
+    title: Page the owner when the mini's door does not answer for about 3 minutes (the Dev Host push monitors only page after 20)
+    facts:
+      why: |-
+        The Dev Host push monitors have interval 600 s and maxretries 1 (time to DOWN about 20 minutes) and went PENDING and back during the 2026-11-13 panic without a page; an outage under 10 minutes never reaches DOWN. The door leaf monitors do notice in about 4 minutes (interval 120, maxretries 2, retry 60) but route to the factory door, and the factory runs on the mini, so a dead mini pages nobody for 30 minutes. dotfiles docs/devhost-health.md "Why a push at all" records the gap; the reboot push of dotfiles issue 1034 only tells the owner after the mini is back.
+      what: |-
+        homelab/uptime-kuma/monitors.yaml (one new leaf monitor, listed in settings.watchers like the push monitors so it keeps the direct ntfy page), homelab docs/ntfy.md "Kuma alert routing" table (make test fails when it does not list exactly the watchers), and the mini-door generated file only if the leaf belongs next to the door group. Nothing on the mini and nothing in the door.
+      change: |-
+        Add a pull monitor "MacMini Door - Reachable": GET https://${MINI_TAILSCALE_HOST}:8795/healthz (the door's own liveness, no new ACL grant), interval 60, timeout 30, maxretries 2, retry_interval 60, accepted 200-299, so DOWN comes after about 3 to 4 minutes of an unreachable or starved host. Watcher, so it pages ntfy directly; a recovery sends the usual UP. Apply with sync.py on the homelab (its header comment). State in docs/ntfy.md that a planned reboot pages once and that this monitor says "unreachable", where the 1034 push says "rebooted". Rollback: delete the monitor entry and run sync.py again.
+      acceptance: |-
+        make test passes in homelab (watchers list and the ntfy.md table agree); sync.py applied and the monitor is UP in Kuma, shown by the monitor's last heartbeat; the monitor entry names its time to DOWN in a comment (interval plus retries); /review is clean. No outage is staged to prove it.
+
+  - key: recovery-drill
+    kind: docs
+    title: Recovery drill for the owner - how to read recovery after any reboot, and a quiet-window drill that never breaks the core
+    after: [recovery-check, core-restart-audit, kuma-fast-alert]
+    facts:
+      why: |-
+        The standing constraint forbids proving recovery by rebooting or restarting the core, so the only live proofs are the next real reboot and an owner-chosen quiet window. Today there is no page that says what to look at, in what order, or what a good curve is. The detection side also changed (reboot push, door monitor, recovery check) and docs/devhost-health.md still says an outage under 10 minutes reaches nobody.
+      what: |-
+        New docs/recovery-drill.md; one-line pointers from docs/incident-2026-11-13-mini-panic.md, docs/herdr-core.md and the remote-dev skill; docs/devhost-health.md paragraph "Why a push at all" brought in line with the door monitor. Docs only.
+      change: |-
+        Write three parts. (1) After any reboot, read-only: the order of what to read (reboot push, make recovery-check, hc-resume.log pacing lines, devhost-snapshots.jsonl), what the three numbers mean, and the expected curve from docs/herdr-core.md. (2) The owner's controlled drill in a quiet window, by hand: preconditions (Data volume under 85%, no factory leads running, recovery-check baseline taken, a time chosen), the one command the owner runs by hand, what to read afterwards, and what counts as pass; stated plainly that no agent runs it (herdr-core-guard denies it) and that the result is a measured line pasted back. (3) The scratch-core proof of hc-resume logic (own HC_SESSION and XDG paths, the Wave 3 recipe in docs/herdr-core.md) as the drill that never touches the production core, also owner-run.
+      acceptance: |-
+        docs/recovery-drill.md exists with the three parts and a worked example line from make recovery-check; the three pointers and the corrected devhost-health.md paragraph are in; no command in the doc is one herdr-core-guard allows an agent to run that restarts, stops or updates the core; make check passes.
+
+  - key: ssd-prep
+    kind: chore
+    checkpoint: spec
+    title: External SSD on the mini - the volume contract (mount order, absent tolerance, TCC, what stays off it, disk budget), path-agnostic
+    after: [core-restart-audit]
+    facts:
+      why: |-
+        The owner is attaching a 1 TB external SSD to the mini for bulk data, first the weatherorb data (weatherorb's own plan row v2-host names the data root and needs about 228 GB while the internal disk has about 131 GiB free), maybe more later. Owner verdict on the first plan: the drive (volume name "HDD USB EXT") already holds data he does not want to lose, it is encrypted and its secret exists, so it is kept and unlocked, never reformatted by a lead; if its format turns out unsuitable that is a Decision, and cleaning it up is his call. It is not attached yet and no mount path is known. A volume that can be absent, locked or half-mounted at boot or after a USB hiccup, read by launchd jobs that today assume their paths exist, is a new failure class on the box that just panicked; the contract has to exist before the first byte moves.
+      what: |-
+        New docs/external-ssd.md, scripts/lib/volume-gate.sh with scripts/volume-gate.test.sh, config/external-volume.json (name, sentinel file, attached: false), a doctor and heartbeat check "external volume" that is a no-op while attached is false, a new class in config/tcc-programs.json and scripts/tcc-check (or docs/tcc.md if the check needs no code) for programs that touch a removable volume, docs/disk.md (a per-owner row class "external"), AGENTS.md line. No mount path, no device name, no data move; tests use a temporary directory as the stand-in volume.
+      change: |-
+        Write the Spec first (checkpoint); it states the rule that no lead formats, erases or converts the drive, and how an encrypted volume is unlocked headless (the passphrase as a ref in dotfiles-private/headless.refs resolved through the secrets cache and secrets-run, handed to diskutil over stdin never argv, never op on the mini; a missing ref goes through make secrets-reseal-request). Then build the path-agnostic parts: the gate (a job calls it before touching the volume: present = the mount is there, unlocked, and the sentinel file at its root is readable; absent or locked = exit 0 with one "skipped: volume absent" or "skipped: volume locked" line, never mkdir -p on the missing path, never fall back to the internal disk); the unlock job design (a launchd agent on volume arrival and at login, bounded, idempotent, logging to ~/Library/Logs, off the boot path); the doctor and heartbeat check (WARN while the volume is absent or locked and attached is true, never FAIL, never in the composite liveness push); the TCC class and the program list that needs the Removable Volumes grant, with the probe command; the keep-off list (swap and the VM disk, ~/.colima, herdr-core state and logs, ~/Library/Logs, the secrets cache, LaunchAgent programs, anything the boot path needs); Spotlight off (mdutil) and Time Machine exclusion (tmutil addexclusion) as steps; the format check as a read-only procedure for when the drive is attached (diskutil info and apfs list: file system, encryption, free space, what is on it by top-level size, nothing deleted) with the outcomes it leads to (APFS encrypted: keep; HFS+, exFAT or MBR: Decision, with copy-off to a HomeLab share first); and the disk budget table (internal after the move, SSD headroom, where Postgres and weatherorb data land is weatherorb's choice). Docker: the Colima VM disk and named volumes stay on the internal disk (the VM is on the boot path); a bind mount of an SSD directory into containers is allowed only behind the gate, and the Spec names which candidate volumes (sizes from docs/disk.md) could move later, as a follow-up question, not a task.
+      acceptance: |-
+        The Spec is submitted before the code; volume-gate.test.sh proves present, absent and locked (exit 0, nothing created on the internal disk), sentinel missing, and a path that vanishes mid-run; no code path formats, erases or converts a volume; doctor and heartbeat checks are silent while attached is false; docs/external-ssd.md carries the mount-order rule (dependents gate themselves, launchd has no mount dependency), the keep-off list and the TCC steps; docs/disk.md has the external class; /review is clean; make check passes. No path to the SSD appears in any tracked file.
+
+  - key: ssd-adopt
+    kind: chore
+    title: Adopt the external SSD once the owner has attached it - mount, grants, exclusions, budget, hand the data root to weatherorb
+    after: [ssd-prep]
+    facts:
+      why: |-
+        ssd-prep delivers the contract with no volume attached. The first real volume needs the device facts (name, format, mount point as macOS shows it), the TCC grant given to the actual programs, and the budget numbers measured. Done once, with the contract's checks turned on, before weatherorb moves any data.
+      what: |-
+        config/external-volume.json (attached: true, the volume name and sentinel; the mount point is read at run time, never written into tracked files), config/tcc-programs.json entries for the programs that will write there, docs/disk.md measured row, docs/external-ssd.md "as attached" section with the date. The first step is an Errand for the owner's hands (attach, and the macOS Removable Volumes prompt), with a --check that exits 0 while the volume is absent.
+      change: |-
+        Raise the Errand (summary: attach the existing encrypted drive "HDD USB EXT" to the mini; check: the volume is not mounted). When it is attached, read-only first: diskutil info and apfs list for file system and encryption, top-level sizes of what is on it, free space; write the findings in docs/external-ssd.md. Never format, erase or convert: an unsuitable format, or a need to clean up before weatherorb fits, is a Decision (factory issue ask) with the sizes, and the cleanup stays the owner's. Find the passphrase ref (a 1Password item the owner names if it cannot be found; add it to dotfiles-private/headless.refs and run make secrets-reseal-request), install the unlock job from ssd-prep, then write the sentinel file, set mdutil -i off and tmutil addexclusion, run the TCC probe for each program in the list and record the result, turn the doctor and heartbeat check on, measure free space and write the disk.md row. Prove absent and locked tolerance with diskutil unmount and mount in a window where no dependent job runs, never by reboot or cable pull. File one signal on weatherorb (factory signal file --repo weatherorb) giving it the contract and the sentinel and asking that its v2-host row wait for dotfiles:ssd-adopt and put the data root on the volume behind the gate; the move of the weatherorb data is its lead's.
+      acceptance: |-
+        docs/external-ssd.md records the drive's file system, encryption, free space and top-level contents, and nothing on the drive was changed except the sentinel file; make doctor shows the external volume check OK with the volume mounted and unlocked and WARN after diskutil unmount (then OK after mount, the unlock job having re-unlocked it); make tcc-check passes with the new programs listed; docs/disk.md has the measured row; the weatherorb signal is filed and named in the ship; no mount path or device identifier in any tracked file; /review is clean; make check passes.
+
+  - key: smb-mini-homelab
+    kind: feature
+    title: Self-healing HomeLab Samba mount on the mini, the way the MacBook has it
+    facts:
+      why: |-
+        Owner verdict on the first plan: he wants a Samba connection that heals itself between the HomeLab and the mini, as the MacBook has with com.jkrumm.smb-keepalive (docs/macbook.md "HomeLab Samba"). The mini reaches the HomeLab only through hl (S3) and ssh today, so a bulk copy to or from the HomeLab shares (SSD, HDD) has no mounted path. macOS never reconnects an SMB mount after sleep or a network change, and a stale mount blocks the first stat that touches it.
+      what: |-
+        smb/smb-keepalive.sh and smb/com.jkrumm.smb-keepalive.plist.template (generalised only as far as a headless host needs), a Makefile setup target for the mini, dotfiles-private/smb-shares.conf (server names live there, never in a tracked file), the credential through the secrets cache and secrets-run instead of the Keychain entry Finder saved (the mini has no Finder session; never op), config/tcc-programs.json, docs/macbook.md or docs/remote-dev.md, docs/background-jobs.md. Does not touch the core, its plist or launcher.
+      change: |-
+        Run the keepalive on the mini under jobrun with the same behaviour: port 445 unreachable means skip, a mounted share whose bounded stat and ls hangs or fails is force-unmounted and remounted, absent with automount yes is mounted, every call bounded and a hung one abandoned. Mount points under the user's home, never created when the mount fails. The job is off the boot path: a HomeLab that is down at boot delays nothing and fails nothing (exit 0 with one skipped line). Register it with jobs-grade. A missing secrets ref goes through make secrets-reseal-request. Rollback: make target to unload the agent and remove the plist; the shares are only mounts.
+      acceptance: |-
+        A share is mounted on the mini after make setup; after diskutil unmount force of it the next run (within 60 s) remounts it; a test with a hanging stat fixture proves the bounded unmount and remount path; with the HomeLab unreachable the job exits 0 and reports skipped; jobs-grade lists the job; no server name, user name or password in a tracked file; /review is clean; make check passes.
+
+  - key: smb-ssd-share
+    kind: feature
+    title: Serve the external SSD from the mini over Samba, with the MacBook's keepalive mounting it
+    after: [ssd-adopt, smb-mini-homelab]
+    facts:
+      why: |-
+        Owner verdict on the first plan: the SSD should also be reachable over a self-healing Samba connection, from the MacBook and the other clients. The mini already shares ~/Shuttle through macOS smbd on 445 (tailnet tag:mac to tag:mac), so the transport and the ACL exist; what is missing is the share for the SSD, which can be absent or locked, and the client side that mounts it and heals it.
+      what: |-
+        The macOS sharing configuration for one share point on the SSD (sharing -a needs root: look first for a root-free way, raise an Errand with --tried only when there is none), smb/smb-keepalive.sh on the MacBook with one more entry in its dotfiles-private/smb-shares.conf (via ask-human.sh ask --cmd for the MacBook side), docs/external-ssd.md and docs/macbook.md. The tailnet ACL is unchanged unless a grant is missing (dotfiles-private/tailscale-acl.jsonc, then the biometric-gated apply).
+      change: |-
+        Add the share on the mini only after the volume gate reports present and unlocked, and make the share point a path inside the volume so an absent volume exposes nothing on the internal disk. The MacBook's keepalive mounts it like the HomeLab shares (automount yes once it has been mounted in Finder with Remember), so a mini reboot or a re-plug heals within a minute of the share coming back. Users and permissions as the Shuttle share has them. Rollback: remove the share point and the conf entry; the data is untouched.
+      acceptance: |-
+        From the MacBook the share mounts and lists the volume root; after the volume is unmounted on the mini and mounted again the MacBook mount recovers without a manual step (shown by the keepalive log, no reboot or cable pull used); with the volume absent the share lists nothing and the internal disk is not written; no server name or user name in a tracked file; /review is clean; make check passes.
