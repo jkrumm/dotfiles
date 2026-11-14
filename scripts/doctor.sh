@@ -372,11 +372,16 @@ section_jobs() {
 # not know, on a job whose program is inside a worktree and on a service below its declared process_type (or whose plist lost it); a budget breach is a WARN. The same check feeds the heartbeat.
 section_registry() {
   hdr "Service registry (make mini-ps)"
-  local bun_dir out summary rc=0
+  local bun_dir out summary debt rc=0
   bun_dir=$(/bin/bash "$DOTFILES_DIR/scripts/lib/bun-bin.sh" 2>/dev/null) || { skip "registry" "bun not found — not checked"; return; }
   out=$("$bun_dir/bun" "$DOTFILES_DIR/scripts/mini-registry.ts" check 2>&1) || rc=$?
   summary=$(printf '%s\n' "$out" | tail -n 1)
   printf '%s\n' "$out" | sed '$d' | sed 's/^/    /'
+  debt=$("$bun_dir/bun" "$DOTFILES_DIR/scripts/mini-registry.ts" debt 2>&1) || true
+  if [[ -n "$debt" ]]; then
+    printf '    recorded breaches (debt, exceptions; rules/run-on-mini.md):\n'
+    printf '%s\n' "$debt" | sed 's/^/      /'
+  fi
   case "$rc" in
     0) ok "registry" "$summary" ;;
     2) skip "registry" "WARN: $summary" ;;
