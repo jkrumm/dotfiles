@@ -16,6 +16,11 @@ import { join } from "node:path";
 import {
   effectiveCwd,
   inspectDockerCommand,
+  longRunningInWorktree,
+  recipeOf,
+  startsLongRunning,
+  targetStartsLongRunning,
+  type WorktreeProbe,
   projectDirectories,
   shouldBlock,
   splitIntoCommands,
@@ -438,5 +443,69 @@ describe("shouldBlock — wrappers with arguments, and shell strings", () => {
     expect(unwrapWrappers(["sudo", "-u", "x", "docker", "ps"])).toEqual(["docker", "ps"]);
     expect(unwrapWrappers(["timeout", "-k", "1", "60", "docker", "ps"])).toEqual(["docker", "ps"]);
     expect(unwrapWrappers(["env", "A=1", "-u", "B", "docker"])).toEqual(["docker"]);
+  });
+});
+
+describe("long-running containers from a worktree", () => {
+  const MAKEFILE = [
+    ".PHONY: up down e2e test-integration check wrapper",
+    "up: ## start the stack",
+    "\tdocker compose up -d",
+    "down:",
+    "\tdocker compose down",
+    "e2e: up",
+    "\tbun test e2e",
+    "wrapper:",
+    "\t@$(MAKE) --no-print-directory up",
+    "check:",
+    "\tdocker compose -f c.yaml up --abort-on-container-exit --exit-code-from t",
+    "test-integration:",
+    "\tgo test ./...",
+    "",
+  ].join("\n");
+  const probe = (worktree: boolean, makefile: string | null = MAKEFILE): WorktreeProbe => ({ isWorktree: () => worktree, readMakefile: () => makefile });
+  const judge = (command: string, opts: { worktree?: boolean; factory?: boolean; makefile?: string | null } = {}) =>
+    longRunningInWorktree(command, "/wt", opts.factory ?? true, probe(opts.worktree ?? true, opts.makefile === undefined ? MAKEFILE : opts.makefile));
+
+  test("what counts as long-running", () => {
+    expect(startsLongRunning("docker compose up -d")).toBe(true);
+    expect(startsLongRunning("docker-compose -f x.yml up")).toBe(true);
+    expect(startsLongRunning("docker run -d --name x img")).toBe(true);
+    expect(startsLongRunning("docker compose up --abort-on-container-exit")).toBe(false);
+    expect(startsLongRunning("docker compose up --exit-code-from tests")).toBe(false);
+    expect(startsLongRunning("docker run --rm img go test")).toBe(false);
+    expect(startsLongRunning("docker compose down")).toBe(false);
+  });
+
+  test("a target is long-running through its recipe, its dependencies and a $(MAKE) call", () => {
+    expect(targetStartsLongRunning(MAKEFILE, "up")).toBe(true);
+    expect(targetStartsLongRunning(MAKEFILE, "e2e")).toBe(true);
+    expect(targetStartsLongRunning(MAKEFILE, "wrapper")).toBe(true);
+    expect(targetStartsLongRunning(MAKEFILE, "check")).toBe(false);
+    expect(targetStartsLongRunning(MAKEFILE, "test-integration")).toBe(false);
+    expect(targetStartsLongRunning(MAKEFILE, "missing")).toBe(false);
+    expect(recipeOf(MAKEFILE, "down")?.lines).toEqual(["docker compose down"]);
+  });
+
+  test("a make target that starts a project is denied from a worktree in a factory session", () => {
+    expect(judge("make up")).toContain("make up starts a long-running container project");
+    expect(judge("make -C /wt e2e")).toContain("e2e");
+    expect(judge("cd /wt && make wrapper")).not.toBeNull();
+  });
+
+  test("passes: a plain checkout, a session outside the factory, a run-and-exit target, a slot", () => {
+    expect(judge("make up", { worktree: false })).toBeNull();
+    expect(judge("make up", { factory: false })).toBeNull();
+    expect(judge("make check")).toBeNull();
+    expect(judge("make test-integration")).toBeNull();
+    expect(judge("factory slot run -- make up")).toBeNull();
+    expect(judge("make up", { makefile: null })).toBeNull();
+  });
+
+  test("a raw up or detached run is denied from a worktree, a run-and-exit one is not", () => {
+    expect(judge("docker compose up -d", { makefile: null })).toContain("docker up");
+    expect(judge("docker run -d img", { makefile: null })).toContain("docker run");
+    expect(judge("docker compose up --abort-on-container-exit", { makefile: null })).toBeNull();
+    expect(judge("docker ps", { makefile: null })).toBeNull();
   });
 });
