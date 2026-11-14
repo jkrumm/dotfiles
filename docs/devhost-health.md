@@ -416,6 +416,12 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
   native cluster the same day, so the guest's steady use is about 0.7 GB (eight containers, the largest at 0.3 GB), and a
   vz guest never returns memory while it runs: its host footprint climbs to whatever the ceiling is. Same revert signal
   (a guest OOM kill, or `available` under 0.5 GB): go to 3 GB. The VPN sidecar re-authenticates headless after the restart.
+- **One VM, always on, 3 GB (2026-11-14, the owner's decision):** the VPN, the dashboard and the teamchat sandbox are
+  reached by colleagues, so they run always and share the default VM; the second VM (teamchat's own profile, 2 GB) goes
+  once its sandbox has moved. The two guests used 0.75 GB and 0.59 GB, about 1.05 GB merged. 2 GB would hold that, but the
+  dev databases and the student-enrolment stack start in the same VM on demand, and a guest OOM there could take the VPN:
+  so `COLIMA_MEMORY` 2 → **3**. Net: 4 GB in two VMs becomes 3 GB in one. Revert signal as above, next step 4 GB; never a
+  second VM.
 - **Ceiling on agent terminals: not set.** 30 terminals ≈ 7 GB fits the budget; capping needs a choice of *which* terminals
   hc-resume skips, which the owner's constraint forbids (pacing and order only). Past ~30 live `claude` processes expect
   swap above the warn line.
