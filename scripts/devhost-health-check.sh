@@ -214,9 +214,9 @@ HEARTBEAT_BUDGET="${DEVHOST_HEARTBEAT_BUDGET:-200}"
 SIDE_MONITOR_TIMEOUT="${DEVHOST_SIDE_MONITOR_TIMEOUT:-20}"
 # Daily drift sweep (scripts/drift-check.sh), a side job AFTER the composite push. Worst case inside
 # jobrun's 270 s: the composite push is reached by <= 200 s (budget, measured from script start, so the
-# snapshot and side monitors are inside it) + one 3 s kill grace + a 15 s push (~218 s). Drift only
-# starts when SECONDS is <= DRIFT_START_LIMIT (200) and is capped at 60 s (+ grace), so the whole run
-# ends by ~263 s at worst.
+# snapshot and side monitors are inside it) + one 3 s kill grace + a 15 s push + at most one 2 s + 10 s
+# push retry per run (~230 s). Drift only starts when SECONDS is <= DRIFT_START_LIMIT (200), checked
+# after those pushes, and is capped at 60 s (+ grace), so the whole run ends by ~263 s at worst.
 DRIFT_TIMEOUT="${DEVHOST_DRIFT_TIMEOUT:-60}"
 DRIFT_START_LIMIT=200
 DRIFT_CHECK_BIN="${DEVHOST_DRIFT_CHECK_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/drift-check.sh}"
