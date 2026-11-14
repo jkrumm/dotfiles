@@ -451,7 +451,7 @@ user-scope server costs an `npx` + `node` pair (~124 MiB) in every session, 24 o
 held 2978 MiB idle on the mini. `make setup` removes any leftover registration, project-local ones too
 (`projects[<dir>].mcpServers` in every account's `.claude.json`, which the user-scope remove and
 `claude mcp list` from this directory never see; `scripts/claude-project-mcp.sh`, backup
-`.claude.json.bak-chrome-devtools`), and `make doctor` §Browser debugging fails on one, naming account and
+`.claude.json.bak-chrome-devtools`), and `make status` §Browser debugging prints a ✗ line for one, naming account and
 project. Test-browser Chrome trees that outlive their launcher (Playwright/puppeteer temp profile, parent
 launchd, older than 30 min) are ended by `com.jkrumm.browser-reap` every 30 min
 (`scripts/browser-reap.py`, `make browser-reap-run ARGS=--dry-run`, log `~/Library/Logs/browser-reap.log`);
