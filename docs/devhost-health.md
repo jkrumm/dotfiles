@@ -411,6 +411,10 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
   lands on the next planned `make colima-restart`; nothing was restarted. Guest peak is unknown (steady 1.5 GB, the heaviest
   container limit is 3 GiB); revert signal is a guest OOM kill (`colima ssh -- dmesg | rg -i oom`) or `available` under
   1 GB: go to 5 GB, not back to 6. Saves ~2 GB host-resident and ~2 GB less to compress.
+- **Applied and restarted (2026-11-14):** `COLIMA_MEMORY` on the mini 4 → **2**. The dev Postgres left the VM for the
+  native cluster the same day, so the guest's steady use is about 0.7 GB (eight containers, the largest at 0.3 GB), and a
+  vz guest never returns memory while it runs: its host footprint climbs to whatever the ceiling is. Same revert signal
+  (a guest OOM kill, or `available` under 0.5 GB): go to 3 GB. The VPN sidecar re-authenticates headless after the restart.
 - **Ceiling on agent terminals: not set.** 30 terminals ≈ 7 GB fits the budget; capping needs a choice of *which* terminals
   hc-resume skips, which the owner's constraint forbids (pacing and order only). Past ~30 live `claude` processes expect
   swap above the warn line.
