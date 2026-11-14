@@ -152,6 +152,7 @@ STOPPED=()
 ATHENA_STOPPED=0
 DOCKER_STOPPED=0
 SWITCHED=0
+ALIAS=0
 COPIED=()
 DONE=0
 
@@ -194,6 +195,8 @@ rollback() {
     cp "$RUN/saved/postgresql.auto.conf" "$RUN/saved/pg_hba.conf" "$RUN/saved/pg_ident.conf" "$BARE_DATA/"
     restart_bare
     wait_ready /tmp "$OLD_PORT" 60 || log "WARN: the bare server does not answer on $OLD_PORT"
+    # the 5432 server removed its socket on shutdown, and with it the alias weatherorb connects through
+    if [ "$ALIAS" = 1 ]; then ln -sfn "/tmp/.s.PGSQL.$OLD_PORT" "/tmp/.s.PGSQL.$NEW_PORT" && log "alias /tmp/.s.PGSQL.$NEW_PORT restored"; fi
     SWITCHED=0
   fi
   for db in ${COPIED[@]+"${COPIED[@]}"}; do
@@ -253,6 +256,7 @@ if [ "$VERB" = cutover ]; then
   n=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d postgres -Atc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'")
   [ "$n" = 0 ] || die "the bare server's postgres database is not empty ($n relations); the copy needs it empty"
 fi
+if [ -L "/tmp/.s.PGSQL.$NEW_PORT" ]; then ALIAS=1; fi
 mkdir -p "$RUN/saved"
 cp "$BARE_DATA/postgresql.auto.conf" "$BARE_DATA/pg_hba.conf" "$BARE_DATA/pg_ident.conf" "$RUN/saved/"
 

@@ -23,7 +23,8 @@ never stop it, so its data never moves there.
 | `postgres` | superuser | the vps prod mirror's schemas (`make restore-local`) | TCP, scram |
 | `spike_s1` | superuser | none (agent-workflows' finished runtime spike, kept) | - |
 | `athena` | `athena_owner` | Athena teamchat as `athena_app` | peer over `~/.local/state/athena/pgsock` (0700) |
-| `weatherorb`, `weatherorb_dbos` | superuser | weatherorb (`weatherorb_owner`, `weatherorb_spots_ro`) | peer over `/tmp` (0700) |
+| `weatherorb`, `weatherorb_dbos` | `weatherorb_owner` (PostGIS and pg_trgm stay the superuser's) | weatherorb (`weatherorb_owner`, `weatherorb_spots_ro`) | peer over `/tmp` (0700) |
+| `weatherorb_<suite>_test_<id>` | superuser | weatherorb's tests: scratch databases, undeclared (reported as drift), the app roles log in by peer | peer over `/tmp` |
 | `weatherorb_accounts_test` | superuser | weatherorb's accounts test | moves to a test container (weatherorb issue 1131) |
 
 The superuser is the OS user that ran initdb. It logs in only over the unix sockets (trust; both
@@ -110,8 +111,13 @@ install has a `simple_detail` type an upgraded one lacks).
    made (their sources are untouched). It refuses while any client still holds a TCP connection
    to 5433.
 4. `alias`: `/tmp/.s.PGSQL.5432` as a symlink to the 5433 socket, so a client moved to libpq's
-   default socket (weatherorb) works before and after the switch. `/tmp` is cleared at boot: after a
-   reboot before the cutover, run it again.
+   default socket (weatherorb) works before and after the switch. `/tmp` is cleared at boot, and a
+   restart of the server on 5432 removes the link on shutdown: after a reboot or a manual restart
+   before the cutover, run it again. The rollback restores it itself.
+
+An apply converges database grants exactly, so a grant made by hand outside the declaration (an
+app's own `make db-owner`) is revoked by the next apply, a drill's included. Put what an app needs
+into `cluster.yaml`.
 
 ### Status (issue 1119, 2026-11-14)
 

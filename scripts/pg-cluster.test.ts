@@ -162,6 +162,15 @@ describe("converge", () => {
     expect(sql.some((s) => s.startsWith("CREATE DATABASE appdb"))).toBe(true)
   })
 
+  test("an owner change never revokes the new owner's own privileges", () => {
+    const s = empty()
+    s.databases.appdb = { owner: "u", provider: "icu", collate: "en_US.UTF-8", icu_locale: "en-US", settings: { timezone: "Etc/UTC" }, role_settings: {}, privileges: { app: ["CREATE"], ro: ["CONNECT"] }, schemas: { app: { owner: "u", privileges: { app: ["CREATE", "USAGE"], ro: ["USAGE"] } }, public: { owner: "pg_database_owner", privileges: { PUBLIC: ["USAGE"] } } }, extensions: {}, default_privileges: ["app|app|r|ro|SELECT"] }
+    const sql = converge(d, s, pw, opts()).statements.map((x) => x.sql)
+    expect(sql).toContain("ALTER DATABASE appdb OWNER TO app")
+    expect(sql).toContain("ALTER SCHEMA app OWNER TO app")
+    expect(sql.some((x) => x.includes("FROM app"))).toBe(false)
+  })
+
   test("an existing database with another locale is drift, never recreated", () => {
     const s = empty()
     s.databases.appdb = { owner: "app", provider: "libc", collate: "C", icu_locale: null, settings: {}, role_settings: {}, privileges: {}, schemas: {}, extensions: {}, default_privileges: [] }

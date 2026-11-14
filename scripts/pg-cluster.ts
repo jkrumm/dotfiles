@@ -367,7 +367,8 @@ export function converge(d: Decl, s: State, passwords: Record<string, string | u
         p.drift.push(`database ${name}: locale is ${h.provider} ${h.collate}${h.icu_locale ? ` ${h.icu_locale}` : ""}, declared ${db.locale.provider} ${db.locale.locale}${wantIcu ? ` ${wantIcu}` : ""} (never recreated by apply)`)
     }
     // the owner's own privileges are implicit; PUBLIC's defaults (CONNECT, TEMPORARY) are revoked unless declared
-    const have = h?.privileges ?? { PUBLIC: ["CONNECT", "TEMPORARY"] }
+    // the new owner's earlier grants become its implicit ones with the owner change: never revoke them
+    const have = withoutOwner(h?.privileges ?? { PUBLIC: ["CONNECT", "TEMPORARY"] }, db.owner)
     const { grant, revoke } = diffGrants(withoutOwner(db.privileges, db.owner), have, "database")
     for (const [g, ps] of revoke) at("postgres", `REVOKE ${ps.join(", ")} ON DATABASE ${id(name)} FROM ${id(g)}`)
     for (const [g, ps] of grant) at("postgres", `GRANT ${ps.join(", ")} ON DATABASE ${id(name)} TO ${id(g)}`)
@@ -382,7 +383,7 @@ export function converge(d: Decl, s: State, passwords: Record<string, string | u
       const hs = h?.schemas[sn] ?? (sn === "public" ? { owner: "pg_database_owner", privileges: { PUBLIC: ["USAGE"] } } : undefined)
       if (!hs) at(name, `CREATE SCHEMA ${id(sn)} AUTHORIZATION ${id(sd.owner)}`)
       else if (hs.owner !== sd.owner) at(name, `ALTER SCHEMA ${id(sn)} OWNER TO ${id(sd.owner)}`)
-      const base: Grants = hs?.privileges ?? (sn === "public" ? { PUBLIC: ["USAGE"] } : {})
+      const base: Grants = withoutOwner(hs?.privileges ?? (sn === "public" ? { PUBLIC: ["USAGE"] } : {}), sd.owner)
       const { grant, revoke } = diffGrants(withoutOwner(sd.privileges, sd.owner), base, "schema")
       for (const [g, ps] of revoke) at(name, `REVOKE ${ps.join(", ")} ON SCHEMA ${id(sn)} FROM ${id(g)}`)
       for (const [g, ps] of grant) at(name, `GRANT ${ps.join(", ")} ON SCHEMA ${id(sn)} TO ${id(g)}`)

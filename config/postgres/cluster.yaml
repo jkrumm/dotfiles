@@ -52,6 +52,9 @@ server:
     - local all ${USER} trust
     - local athena athena_owner,athena_app peer map=athena
     - local weatherorb,weatherorb_dbos weatherorb_owner,weatherorb_spots_ro peer map=weatherorb
+    # weatherorb's tests: the superuser creates weatherorb_<suite>_test_<id> scratch databases,
+    # the spots tests then log in to them as the app roles
+    - local /^weatherorb_[a-z0-9_]+_test_[0-9a-f_]+$ weatherorb_owner,weatherorb_spots_ro peer map=weatherorb
     - host all all 127.0.0.1/32 scram-sha-256
     - host all all ::1/128 scram-sha-256
   ident:
@@ -88,8 +91,7 @@ roles:
   usage:
     connection_limit: 10
     password: op://mini/vps-dev/SHARED_USAGE_DB_PASSWORD
-  # weatherorb's app owner, by peer over the socket. Its objects still belong to
-  # the superuser until weatherorb's Issue moves them (docs/postgres.md §Apps).
+  # weatherorb's app owner (importer, migrations, workers), by peer over the socket.
   weatherorb_owner:
     password: none
   weatherorb_spots_ro:
@@ -188,9 +190,9 @@ databases:
       - { for: athena_owner, schema: athena, on: tables, to: athena_app, grant: [SELECT, INSERT] }
       - { for: athena_owner, schema: athena, on: sequences, to: athena_app, grant: [SELECT, USAGE] }
 
-  # weatherorb V1. Its own app roles replace the superuser in weatherorb's Issue.
+  # weatherorb V1, owned by its app role (weatherorb issue 1131); the extensions stay the superuser's.
   weatherorb:
-    owner: ${USER}
+    owner: weatherorb_owner
     locale: { provider: libc, locale: en_US.UTF-8 }
     privileges:
       PUBLIC: [CONNECT, TEMPORARY]
@@ -198,14 +200,14 @@ databases:
       postgis: { schema: public }
       pg_trgm: { schema: public }
     schemas:
-      spots: { owner: "${USER}", privileges: { weatherorb_spots_ro: [USAGE] } }
+      spots: { owner: weatherorb_owner, privileges: { weatherorb_spots_ro: [USAGE] } }
   weatherorb_dbos:
-    owner: ${USER}
+    owner: weatherorb_owner
     locale: { provider: libc, locale: en_US.UTF-8 }
     privileges:
       PUBLIC: [CONNECT, TEMPORARY]
     schemas:
-      dbos: { owner: "${USER}" }
+      dbos: { owner: weatherorb_owner }
   weatherorb_accounts_test:
     owner: ${USER}
     locale: { provider: libc, locale: en_US.UTF-8 }
