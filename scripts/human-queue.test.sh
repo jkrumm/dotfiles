@@ -784,6 +784,17 @@ STUB
     PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=TIMEOUT bash "$AH" ask "unanswered" --cmd "echo nope" >/dev/null 2>&1; rc=$?
     assert_eq "answer: an unanswered dialog exits 75" "75" "$rc"
     assert_eq "answer: and leaves the errand open" "0" "$(grep -c 'errand done' "$FXDIR/calls")"
+    # push <errand> takes an Issue's Errand too (source null, no requestKey), the desk pass's call.
+    jq -nc '{id:"errand_issue-1", issueId:"issue_9", summary:"an issue errand", command:"echo issue-ran", requestKey:null,
+      check:null, expiresAt:null, host:"macbook", source:null, raisedAt:"2026-11-13T09:00:00.000Z", doneAt:null}' >> "$FXDIR/open.jsonl"
+    : > "$FXDIR/calls"
+    out="$(PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Run bash "$AH" push errand_issue-1 2>&1)"; rc=$?
+    assert_eq "push issue errand: Run exits 0" "0" "$rc"
+    assert_contains "push issue errand: closed with the result note" "errand done errand_issue-1 --note answered on the MacBook (exit 0): issue-ran" "$(cat "$FXDIR/calls")"
+    assert_eq "push issue errand: no queue file written" "0" "$(queued_count)"
+    out="$(bash "$AH" push errand_nope-1 2>&1)"; rc=$?
+    assert_eq "push unknown errand: rc 1" "1" "$rc"
+    assert_contains "push unknown errand: names the id" "no open errand: errand_nope-1" "$out"
     # resolve takes an errand id.
     bash "$AH" resolve "$eid2" --as "done" --note "by hand" >/dev/null 2>&1; rc=$?
     assert_eq "resolve errand: rc 0" "0" "$rc"

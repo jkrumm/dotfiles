@@ -138,12 +138,14 @@ post_errand() {
   printf '%s\n' "$id"
 }
 
-# The open ask-human Errands as one JSON array on stdout.
+# The open ask-human Errands as one JSON array on stdout; `all` as $1 keeps every
+# open Errand, an Issue's included (source null), which `push` takes by id.
 factory_open_json() {
-  local out rc=0
+  local out rc=0 filter='[.errands[]? | select(.source == "ask-human")]'
+  [[ "${1:-}" == all ]] && filter='[.errands[]?]'
   out="$(factory_call errand list --open yes --format json)" || rc=$?
   (( rc == 0 )) || return "$rc"
-  jq -c '[.errands[]? | select(.source == "ask-human")]' <<<"$out" 2>/dev/null || return 1
+  jq -c "$filter" <<<"$out" 2>/dev/null || return 1
 }
 
 # Closes an Errand: $1 id, $2 done|not_needed, $3 note. Never fatal.
@@ -565,11 +567,12 @@ cmd_push() {
   local id="${1:-}"
   [[ -n "$id" ]] || die "push requires <id>"
   if [[ "$id" =~ $ERRAND_ID_RE ]]; then
-    # A factory-held request: build the request file from the Errand and push that.
+    # A factory-held Errand, a request's or an Issue's: build the request file from
+    # its summary and command and push that.
     local open row tmp rc=0 lid
-    open="$(factory_open_json)" || die "the factory did not answer — cannot look up $id"
+    open="$(factory_open_json all)" || die "the factory did not answer — cannot look up $id"
     row="$(jq -c --arg id "$id" '[.[] | select(.id == $id)][0] // empty' <<<"$open")"
-    [[ -n "$row" ]] || die "no open request: $id"
+    [[ -n "$row" ]] || die "no open errand: $id"
     ensure_queue_dir
     lid="$(date +%Y%m%dT%H%M%S)-$RANDOM"
     tmp="$(mktemp "$QUEUE_DIR/.${lid}.fx.XXXXXX")"
