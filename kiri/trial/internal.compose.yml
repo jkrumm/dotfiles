@@ -1,0 +1,15 @@
+# A network with internal: true where a container reaches the outside only through a proxy container.
+# `client` is on `inner` only; `proxy` is on `inner` and the default (outside) network.
+services:
+  proxy:
+    image: alpine/socat
+    command: TCP-LISTEN:8080,fork,reuseaddr TCP:example.com:80
+    networks: [inner, default]
+  client:
+    image: alpine:3.20
+    command: sleep 3600
+    networks: [inner]
+
+networks:
+  inner:
+    internal: true

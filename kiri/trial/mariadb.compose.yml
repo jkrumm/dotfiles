@@ -1,0 +1,24 @@
+# The shape of vps/compose.dev.yml's mariadb (image, command, loopback port, named volume, healthcheck),
+# verbatim except for the name, the host port and the throwaway password: the kiri trial's copy (docs/kiri-trial.md).
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: kiri-trial-mariadb
+    environment:
+      MARIADB_DATABASE: trial
+      MARIADB_ROOT_PASSWORD: trial-only-not-a-secret
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:23306:3306"
+    volumes:
+      - mariadb-trial-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mariadb-trial-data:
