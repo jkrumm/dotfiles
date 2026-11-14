@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  type Plist, type Snapshot, footprint, findings, grade, loadAll, normalizeLabel, parseContainers, parseDisabled,
-  hostRefusal, parseLaunchctlList, parsePri, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
+  type Container, type Plist, type Snapshot, footprint, findings, grade, loadAll, normalizeLabel, parseContainers, parseDisabled,
+  debtLines, gradeRules, hostRefusal, parseInspect, parseLaunchctlList, parsePri, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
 } from "./mini-registry.ts"
 
 const HOME = "/home/u"
@@ -360,5 +360,112 @@ describe("process type", () => {
   test("the host registry declares the control plane Interactive", () => {
     const declared = loadAll().services.filter((s) => s.process_type).map((s) => s.name)
     for (const n of ["postgres", "software-factory", "factory-door", "kuma-door"]) expect(declared).toContain(n)
+  })
+})
+
+describe("run rules", () => {
+  const reg = (...rows: string[]) => {
+    const r = parseRegistry(`services:\n${rows.map((x) => `  - ${x}`).join("\n")}`, "t", undefined, HOME)
+    expect(r.errors).toEqual([])
+    return r.services
+  }
+  const vm = "{ name: colima-default, repo: d, kind: vm, tier: core, vm: default, memory_mib: 4000 }"
+  const app = (extra = "", tier = "manual") => `{ name: app, repo: r, kind: compose, tier: ${tier}, container: app, needs: [vm], memory_mib: 100${extra} }`
+  const containers = (c: Partial<Container>) => new Map([["default", [{ name: "app", project: "p", state: "running", mib: 10, image: "app:1", restart: "no", limit_mib: 256, bind_hosts: ["127.0.0.1"], ...c }]]])
+  const check = (services: ReturnType<typeof reg>, c: Partial<Container> = {}) => {
+    const s = snap({ containers: containers(c) })
+    const g = grade(services, s)
+    const rules = gradeRules(services, s)
+    return { rules, f: findings(g.rows, g.drift, rules) }
+  }
+
+  test("inspect output: restart policy, limit in MiB, the host of every published port", () => {
+    const m = parseInspect("/app|app:1|unless-stopped|268435456|[127.0.0.1][]\n/db|mariadb:11|no|0|\n")
+    expect(m.get("app")).toEqual({ image: "app:1", restart: "unless-stopped", limit_mib: 256, bind_hosts: ["127.0.0.1", ""] })
+    expect(m.get("db")).toMatchObject({ restart: "no", limit_mib: 0, bind_hosts: [] })
+  })
+
+  test("a compliant container passes", () => {
+    expect(check(reg(vm, app())).f.rc).toBe(0)
+  })
+
+  test("restart unless-stopped with no debt field fails, naming the service and the rule; the debt field passes it and is listed", () => {
+    const failing = check(reg(vm, app()), { restart: "unless-stopped" })
+    expect(failing.f.rc).toBe(1)
+    expect(failing.f.lines.join("\n")).toMatch(/FAIL app breaks rule restart-policy/)
+    const recorded = check(reg(vm, app(", debt: { restart-policy: some-row }")), { restart: "unless-stopped" })
+    expect(recorded.f.rc).toBe(0)
+    expect(debtLines(recorded.rules)[0]).toContain("app: restart-policy -> some-row")
+  })
+
+  test("a debt field with no breach is stale and fails until it is removed", () => {
+    const stale = check(reg(vm, app(", debt: { restart-policy: some-row }")))
+    expect(stale.f.rc).toBe(1)
+    expect(stale.f.lines.join("\n")).toContain("app: the restart-policy breach is gone, remove its debt/exception field")
+  })
+
+  test("a container that is not there is not judged, so its field is not stale", () => {
+    const services = reg(vm, app(", debt: { no-memory-limit: some-row }"))
+    const s = snap({ containers: new Map([["default", []]]) })
+    expect(gradeRules(services, s).stale).toEqual([])
+  })
+
+  test("a core service may restart itself; nothing else may", () => {
+    expect(check(reg(vm, app("", "core")), { restart: "unless-stopped" }).f.rc).toBe(0)
+    expect(check(reg(vm, app("", "on-demand")), { restart: "always" }).f.rc).toBe(1)
+  })
+
+  test("no memory limit and a port that is not on 127.0.0.1", () => {
+    expect(check(reg(vm, app()), { limit_mib: 0 }).f.lines.join()).toContain("app breaks rule no-memory-limit")
+    expect(check(reg(vm, app()), { bind_hosts: ["127.0.0.1", ""] }).f.lines.join()).toContain("published on 0.0.0.0")
+    expect(check(reg(vm, app()), { bind_hosts: ["0.0.0.0"] }).rules.failures[0].rule).toBe("port-binding")
+  })
+
+  test("a Postgres or cache image is a breach, a native cache is allowed once, a second Postgres never", () => {
+    expect(check(reg(vm, app()), { image: "valkey/valkey:8-alpine" }).rules.failures[0].rule).toBe("shared-infrastructure")
+    expect(check(reg(vm, app()), { image: "postgres:18" }).rules.failures[0].rule).toBe("shared-infrastructure")
+    expect(check(reg(vm, app()), { image: "redis-exporter:1" }).f.rc).toBe(0)
+    const native = (n: string, l: string) => `{ name: ${n}, repo: d, kind: launchd, tier: core, label: ${l}, memory_mib: 50 }`
+    const one = gradeRules(reg(native("postgres", '"sh.brew.postgresql@18"'), native("valkey", "com.jkrumm.valkey")), snap())
+    expect(one.failures).toEqual([])
+    const two = gradeRules(reg(native("postgres", '"sh.brew.postgresql@18"'), native("pg2", "com.iu.athena-postgres"), native("valkey", "com.jkrumm.valkey"), native("redis", "com.jkrumm.redis")), snap())
+    expect(two.failures.map((b) => b.service).sort()).toEqual(["pg2", "redis"])
+  })
+
+  test("an exception is allowed and listed with its reason", () => {
+    const r = check(reg(vm, app(', exception: { shared-infrastructure: "mirrors production" }')), { image: "valkey/valkey:8" })
+    expect(r.f.rc).toBe(0)
+    expect(debtLines(r.rules).join()).toContain("allowed: mirrors production")
+  })
+
+  test("a second VM, an entry with no budget and a worktree program", () => {
+    const services = reg(vm, "{ name: colima-x, repo: d, kind: vm, tier: on-demand, vm: x, memory_mib: 4000 }",
+      "{ name: nobudget, repo: d, kind: launchd, tier: core, label: com.jkrumm.nb, memory_mib: 0 }",
+      "{ name: onceoff, repo: d, kind: launchd, tier: core, label: com.jkrumm.once, daemon: true, oneshot: true, memory_mib: 0 }",
+      "{ name: wt, repo: d, kind: launchd, tier: core, label: com.jkrumm.wt, memory_mib: 50 }")
+    const rules = gradeRules(services, snap({ loaded: [{ pid: 1, status: 0, label: "com.jkrumm.wt" }], plists: [plist("com.jkrumm.wt", "/r/.claude/worktrees/x/run.sh")] }))
+    expect(rules.failures.map((b) => `${b.service}:${b.rule}`).sort()).toEqual(["colima-x:second-vm", "nobudget:no-budget", "wt:worktree-program"])
+    const f = findings([], { unknown_jobs: [], worktree_jobs: ["com.jkrumm.wt (/r/.claude/worktrees/x/run.sh)"], unknown_installed: [], missing: [], unknown_containers: [], unclaimed_doors: [], disabled: [] }, rules)
+    expect(f.lines.filter((l) => l.includes("worktree")).length).toBe(1)
+  })
+
+  test("a debt or exception field names a known rule and a reason", () => {
+    const bad = parseRegistry("services:\n  - { name: x, repo: r, kind: launchd, tier: core, label: l, memory_mib: 1, debt: { restart-polcy: row }, exception: { port-binding: \"\" } }", "t", undefined, HOME)
+    expect(bad.errors.join()).toContain("unknown rule restart-polcy")
+    expect(bad.errors.join()).toContain("exception.port-binding must name the reason it is allowed")
+  })
+
+  test("the core services of a VM are limited to what the VM has", () => {
+    const services = reg(vm, app("", "core"))
+    expect(check(services, { limit_mib: 5000 }).rules.warnings[0]).toContain("5000 MiB")
+    expect(check(services, { limit_mib: 5000 }).f.rc).toBe(2)
+  })
+
+  test("the tracked registry passes its own rules on a quiet host", () => {
+    const { services, listed, errors } = loadAll()
+    expect(errors).toEqual([])
+    expect(listed.length).toBeGreaterThan(0)
+    const r = gradeRules(services, snap(), listed)
+    expect(r.failures.filter((b) => b.rule !== "worktree-program").map((b) => `${b.service}:${b.rule}`)).toEqual([])
   })
 })
