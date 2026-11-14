@@ -289,6 +289,16 @@ function diffGrants(want: Record<string, Priv[]>, have: Grants, kind: string) {
   return { grant, revoke }
 }
 
+// List settings take one literal per element: `= '/tmp, /x'` is ONE directory named "/tmp, /x"
+// (the 2026-11-14 drill's failed start). Postgres stores them as '"/tmp", "/x"', so compare elements.
+const LIST_SETTINGS = new Set(["unix_socket_directories", "search_path", "shared_preload_libraries", "local_preload_libraries", "session_preload_libraries", "temp_tablespaces"])
+const listItems = (v: string) => v.split(",").map((x) => x.trim().replace(/^"(.*)"$/, "$1")).filter(Boolean)
+export const settingLiteral = (k: string, v: string) => (LIST_SETTINGS.has(k.toLowerCase()) ? listItems(v).map(q).join(", ") : q(v))
+export function sameSetting(k: string, have: string | undefined, want: string): boolean {
+  if (have === undefined) return false
+  return LIST_SETTINGS.has(k.toLowerCase()) ? listItems(have).join("\n") === listItems(want).join("\n") : have === want
+}
+
 // The owner's own privileges are implicit (aclexplode lists them under the owner, readState drops them).
 const withoutOwner = (g: Record<string, Priv[]> | undefined, owner: string) => Object.fromEntries(Object.entries(g ?? {}).filter(([k]) => k !== owner))
 
@@ -303,8 +313,8 @@ export function converge(d: Decl, s: State, passwords: Record<string, string | u
 
   // server settings: ALTER SYSTEM writes postgresql.auto.conf; compare against that file
   const settings = { ...d.server.settings, ...(o.address ? d.server.address : {}) }
-  for (const [k, v] of Object.entries(settings)) if (s.auto_conf[k.toLowerCase()] !== v) at("postgres", `ALTER SYSTEM SET ${k} = ${q(v)}`, { outside_tx: true })
-  if (!o.address) for (const [k, v] of Object.entries(d.server.address)) if ((s.auto_conf[k.toLowerCase()] ?? s.running[k.toLowerCase()]) !== v) p.drift.push(`address setting ${k} is not ${v} yet (applied by the cutover: pg-apply --address)`)
+  for (const [k, v] of Object.entries(settings)) if (!sameSetting(k, s.auto_conf[k.toLowerCase()], v)) at("postgres", `ALTER SYSTEM SET ${k} = ${settingLiteral(k, v)}`, { outside_tx: true })
+  if (!o.address) for (const [k, v] of Object.entries(d.server.address)) if (!sameSetting(k, s.auto_conf[k.toLowerCase()] ?? s.running[k.toLowerCase()], v)) p.drift.push(`address setting ${k} is not ${v} yet (applied by the cutover: pg-apply --address)`)
 
   // client auth files: only with the address, they change who can log in over TCP
   const hba = render(d.server.hba)

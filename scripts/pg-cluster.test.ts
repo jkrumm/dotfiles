@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { type Decl, type State, compareDigests, converge, loadDecl, parseAutoConf, render, scramMatches, scramVerifier } from "./pg-cluster.ts"
+import { type Decl, type State, compareDigests, converge, loadDecl, parseAutoConf, render, sameSetting, scramMatches, scramVerifier, settingLiteral } from "./pg-cluster.ts"
 
 const ENV = { HOME: "/home/u", USER: "u" }
 const REAL = readFileSync(join(import.meta.dir, "..", "config", "postgres", "cluster.yaml"), "utf8")
@@ -141,9 +141,19 @@ describe("converge", () => {
     expect(before.files).toEqual([])
     expect(before.drift.some((x) => x.startsWith("address setting port"))).toBe(true)
     const at = converge(d, empty(), pw, opts({ address: true }))
-    expect(at.statements.map((s) => s.sql)).toContain("ALTER SYSTEM SET unix_socket_directories = '/tmp, /home/u/sock'")
+    expect(at.statements.map((s) => s.sql)).toContain("ALTER SYSTEM SET unix_socket_directories = '/tmp', '/home/u/sock'")
     expect(at.files.map((f) => f.path)).toEqual(["/data/pg_hba.conf", "/data/pg_ident.conf"])
     expect(at.files[0].content).toBe(render(["local all u trust", "host all all 127.0.0.1/32 scram-sha-256"]))
+  })
+
+  test("a list setting gets one literal per element and reads back from Postgres's stored form", () => {
+    expect(settingLiteral("unix_socket_directories", "/tmp, /home/u/sock")).toBe("'/tmp', '/home/u/sock'")
+    expect(settingLiteral("shared_buffers", "2GB")).toBe("'2GB'")
+    expect(sameSetting("unix_socket_directories", '"/tmp", "/home/u/sock"', "/tmp, /home/u/sock")).toBe(true)
+    expect(sameSetting("unix_socket_directories", '"/tmp, /home/u/sock"', "/tmp, /home/u/sock")).toBe(false)
+    const s = empty()
+    s.auto_conf = { shared_buffers: "2GB", port: "5432", unix_socket_directories: '"/tmp", "/home/u/sock"' }
+    expect(converge(d, s, pw, opts({ address: true })).statements.some((x) => x.sql.startsWith("ALTER SYSTEM"))).toBe(false)
   })
 
   test("--no-schemas stops at databases (the state a restore starts from)", () => {

@@ -173,7 +173,14 @@ verify_clients() { # the DB clients answer: the factory's health and CLI, agw's 
     sleep 2
   done
   [ "$ok" = 1 ] || return 1
-  factory --format json read flow >/dev/null || return 1 # the CLI reaches the server, which reads the database
+  # the CLI reaches the server, which reads the database; a fresh server answers /health before
+  # its first read is fast (drill of 2026-11-14 timed out once), so give it two minutes
+  ok=0
+  for ((i = 0; i < 12; i++)); do
+    factory --format json read flow >/dev/null 2>&1 && { ok=1; break; }
+    sleep 10
+  done
+  [ "$ok" = 1 ] || { factory --format json read flow >/dev/null; return 1; }
   make -C "$HOME/SourceRoot/agent-workflows" verify || return 1
   make -C "$HOME/SourceRoot/software-factory" verify || log "WARN: software-factory make verify failed (above); its health and CLI answer"
   return 0
@@ -271,6 +278,17 @@ if [ "$VERB" = cutover ]; then
   log "end the remaining client sessions on the Docker server"
   docker exec postgres psql -U "$(docker_user)" -d postgres -Atc \
     "SELECT datname, usename, pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()"
+  # A full pg-apply before the cutover creates the declared databases with their schemas but no
+  # tables (2026-11-14: one ran through the /tmp alias); a restore cannot create those schemas
+  # again. Such a shell holds no data: drop it. A target with any table stops the cutover.
+  for db in shared agent_workflows spike_s1 athena; do
+    exists=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d postgres -Atc "SELECT count(*) FROM pg_database WHERE datname = '$db'")
+    [ "$exists" = 1 ] || continue
+    n=$("$PGBIN/psql" -h /tmp -p "$OLD_PORT" -d "$db" -Atc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p', 'S', 'v', 'm') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'")
+    [ "$n" = 0 ] || { log "$db on the bare server already holds $n relations; not a shell left by an apply"; false; }
+    log "drop the empty shell $db on the bare server (no relations)"
+    "$PGBIN/dropdb" -h /tmp -p "$OLD_PORT" --force "$db"
+  done
   log "apply --no-schemas on the bare server: roles, empty databases, privileges"
   "${PGC[@]}" apply --port "$OLD_PORT" --no-schemas
   DU=$(docker_user)
