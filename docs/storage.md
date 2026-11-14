@@ -88,7 +88,10 @@ or on the next network change (`docs/macbook.md` §HomeLab Samba). Shares are de
 | home folder with `~/Shuttle` | mini | mounted by hand today; automount comes with `smb-ssd-share` | local disk |
 
 Agents on the mini read and write HomeLab files with `hl` (S3). The SMB mounts are for bulk
-copies and for people.
+copies and for people. **A launchd job cannot read an SMB mount**: macOS answers `Operation not
+permitted`, or hangs on a prompt nobody sees, unless its program holds the Network Volumes grant,
+and that grant is keyed on a versioned binary path. Jobs use `hl`; terminals in the Herdr core
+read the mounts through its Full Disk Access.
 
 ## Status
 
