@@ -2825,9 +2825,8 @@ spotlight-sudoers: ## Install the one NOPASSWD rule (`mdutil -i off` on the Data
 	sed "s/__USER__/$$(id -un)/" "$$SRC" > "$$TMP"; \
 	sudo /usr/sbin/visudo -cf "$$TMP" >/dev/null || { echo "  ✗ sudoers syntax check failed — nothing installed"; exit 1; }; \
 	sudo /usr/bin/install -m 0440 -o root -g wheel "$$TMP" /etc/sudoers.d/spotlight-index; \
-	sudo -n -l /usr/bin/mdutil -i off /System/Volumes/Data >/dev/null 2>&1 \
-		&& { echo "  ✓ /etc/sudoers.d/spotlight-index installed"; $(MAKE) --no-print-directory spotlight-fence; } \
-		|| { echo "  ✗ installed but sudo -n -l does not list the rule"; exit 1; }
+	echo "  ✓ /etc/sudoers.d/spotlight-index installed"; \
+	bash $(DOTFILES_DIR)/scripts/spotlight-fence.sh apply || { echo "  ✗ the rule is installed but the index is not off (the line above says why)"; exit 1; }
 spotlight-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/spotlight-fence.sh $(DOTFILES_DIR)/scripts/spotlight-fence.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/spotlight-fence.test.sh

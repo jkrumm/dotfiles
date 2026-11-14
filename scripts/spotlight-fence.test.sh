@@ -12,6 +12,7 @@ has() { printf '%s' "$out" | grep -q -- "$1"; }
 cat > "$TMP/mdutil" <<STUB
 #!/bin/sh
 [ "\$1" = "-s" ] || exit 0
+[ "\${STUB_MDUTIL_FAIL:-0}" = 1 ] && { echo "mdutil: error" >&2; exit 1; }
 [ -f "$TMP/index_on" ] && echo "/System/Volumes/Data:
 	Indexing enabled." || echo "/System/Volumes/Data:
 	Indexing disabled."
@@ -54,6 +55,11 @@ run check
 check "index on: WARN exit 2" sh -c '[ "$1" -eq 2 ]' _ "$rc"
 check "...names the file index" has "file index of /System/Volumes/Data is on"
 check "...names the fix" has "make spotlight-fence"
+
+setup
+run check STUB_MDUTIL_FAIL=1
+check "an mdutil that fails is a WARN, never 'fenced'" sh -c '[ "$1" -eq 2 ]' _ "$rc"
+check "...says so" has "no readable state"
 
 echo "apply"
 setup index_on

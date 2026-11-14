@@ -23,25 +23,34 @@ PS_BIN="${PS_BIN:-/bin/ps}"
 SLEEP_BIN="${SPOTLIGHT_SLEEP_BIN:-/bin/sleep}"
 DATA_VOLUME="/System/Volumes/Data"
 
-index_enabled() { "$MDUTIL_BIN" -s "$DATA_VOLUME" 2>/dev/null | grep -q 'Indexing enabled'; }
+# on | off | unknown: an mdutil that fails or says something else is neither, and must not read as "fenced".
+index_state() {
+  local out
+  out=$("$MDUTIL_BIN" -s "$DATA_VOLUME" 2>/dev/null) || { echo unknown; return; }
+  case "$out" in
+    *"Indexing enabled"*) echo on ;;
+    *"Indexing disabled"*|*"Indexing and searching disabled"*) echo off ;;
+    *) echo unknown ;;
+  esac
+}
 
 cmd_check() {
-  if index_enabled; then
-    echo "spotlight: file index of $DATA_VOLUME is on (fix: make spotlight-fence)"
-    return 2
-  fi
-  echo "spotlight fenced: file index of $DATA_VOLUME is off"
+  case "$(index_state)" in
+    off) echo "spotlight fenced: file index of $DATA_VOLUME is off" ;;
+    on) echo "spotlight: file index of $DATA_VOLUME is on (fix: make spotlight-fence)"; return 2 ;;
+    *) echo "spotlight: mdutil -s $DATA_VOLUME gave no readable state"; return 2 ;;
+  esac
 }
 
 cmd_apply() {
-  if index_enabled; then
+  if [ "$(index_state)" != off ]; then
     # No `sudo -n -l <cmd>` probe: it exits 0 for a user whose full-sudo rule needs a password (measured). Try the command.
     if ! "$SUDO_BIN" -n "$MDUTIL_BIN" -i off "$DATA_VOLUME" >/dev/null 2>&1; then
-      echo "  · file index is on and the sudoers rule is missing: make spotlight-sudoers (needs sudo; the owner runs it through ask-human)"
+      echo "  · file index is not off and the sudoers rule is missing: make spotlight-sudoers (needs sudo; the owner runs it through ask-human)"
       return 1
     fi
   fi
-  if index_enabled; then echo "  ✗ file index of $DATA_VOLUME is still on"; return 1; fi
+  if [ "$(index_state)" != off ]; then echo "  ✗ file index of $DATA_VOLUME is not off"; return 1; fi
   echo "  ✓ file index of $DATA_VOLUME is off"
 }
 
