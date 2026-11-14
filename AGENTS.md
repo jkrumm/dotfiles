@@ -40,7 +40,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Source of truth for PR-required repos — read by `protect-branches.ts` **and** `scripts/github-config.sh` |
 | `rules/` | `~/.claude/rules/` (dir symlink) | All global rules. No `paths:` frontmatter → always on; with `paths:` → lazy. Roster in the global file's *Config hierarchy*. |
-| `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`, `verifier.md`, `Explore.md` and `general-purpose.md` (replace the built-ins; the Explore one inherits the caller's model otherwise), and the read-only `reviewer.md` + `review-verifier.md` that `/review` calls (`Agent(type)` restrictions are ignored in subagents, so "spawn only review-verifier" is prose). Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
+| `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`, `verifier.md`, `browser.md` (owns the chrome-devtools MCP inline), `Explore.md` and `general-purpose.md` (replace the built-ins; the Explore one inherits the caller's model otherwise), and the read-only `reviewer.md` + `review-verifier.md` that `/review` calls (`Agent(type)` restrictions are ignored in subagents, so "spawn only review-verifier" is prose). Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
 | `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md`, activated by `outputStyle` in settings.json |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every session, symlinked individually |
 | `hooks/{session-env,protect-branches,docker-makefile,broad-kill-guard,review-bypass-guard,herdr-core-guard,test-slot,permission-allow,machine-role,model-discipline,iu-model-guard}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
@@ -434,8 +434,10 @@ declarations) lives in `~/SourceRoot/dotfiles-private`; full model in its
 **never exported**: Claude Code falls back to the Max subscription when the key is
 absent, and exporting it bills API credits instead.
 
-**MCP servers**, registered at user scope by `make setup`: `chrome-devtools`
-(deferred; use only via `/browse`). Claude Code
+**MCP servers**: none registered at user scope. `chrome-devtools` is declared inline in
+`agents/browser.md` and runs only while that subagent does (`/browse` forks it); a
+user-scope server costs an `npx` + `node` pair (~124 MiB) in every session, 24 of them
+held 2978 MiB idle on the mini. `make setup` removes any leftover registration. Claude Code
 reaches the platform through `agw` (`/check`, `/review`, `/prose`,
 `/excalidraw-diagram`, `/brain` lookups, `/otel` — mini-only). HyperDX is deliberately *not* registered — `/otel`
 speaks its endpoint through `agw hdx`. Keep project MCPs minimal.

@@ -83,8 +83,9 @@ exists, so a new account ships dark (§Adding an account).
 - **Never copy credentials between dirs.** Each dir does its own `/login`, because
   two homes sharing one refresh-token family invalidate each other (caam,
   ClaudeBar).
-- **User-scope MCP servers** (`chrome-devtools`) live in `.claude.json`, so the `make setup` registration
-  loop runs once per enabled account (`CLAUDE_CONFIG_DIR=… claude mcp add-json …`).
+- **User-scope MCP servers** live in `.claude.json`, so a registration loop would run once per enabled
+  account (`CLAUDE_CONFIG_DIR=… claude mcp add-json …`). None is registered today: `chrome-devtools`
+  is inline in `agents/browser.md`, and `make setup` only removes a leftover registration per account.
 - Same for every other `~/.claude.json` writer: `_claude_theme_auto`
   (`claude.zsh:40`) pre-trusts; it loops over the
   registry.
