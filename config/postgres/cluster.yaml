@@ -1,0 +1,213 @@
+# The mini's one Postgres, declared. Applied idempotently by `make pg-apply`
+# (scripts/pg-cluster.ts); `make pg-plan` shows what an apply would change.
+# The model, the cutover and how to add an app: docs/postgres.md.
+#
+# What lives here: the server's settings and client auth, every role and its
+# password ref, every database with its owner, locale, privileges, settings,
+# extensions, the schemas the platform provisions and their grants. What does
+# NOT live here: tables, sequences, app-created schemas (agent_workflows makes
+# one per tenant) and their grants. Those are data; they arrive with a restore.
+#
+# Rules: one role per app, least privilege, no app logs in as the superuser,
+# no two roles share a password. Passwords are 1Password refs resolved through
+# secrets-run on the mini; `none` means the role has no password (it logs in by
+# peer over a 0700 socket, or not at all). ${HOME} and ${USER} are expanded.
+
+server:
+  service: postgresql@18
+  data_dir: /opt/homebrew/var/postgresql@18
+  # The OS user that ran initdb. Superuser; trusted only over the 0700 unix
+  # socket (admin, backups, this apply). Never an app login over TCP.
+  superuser: ${USER}
+  # Applied only by `pg-apply --address` (the cutover): changing them earlier
+  # would let an unplanned restart take a port another server still holds.
+  address:
+    port: "5432"
+    listen_addresses: localhost
+    # /tmp is libpq's default; the second dir is where Athena's clients have
+    # always looked for their socket, so they keep working unchanged.
+    unix_socket_directories: /tmp, ${HOME}/.local/state/athena/pgsock
+    unix_socket_permissions: "0700"
+  settings:
+    # About 60 clients today; the sum of the role limits plus weatherorb's
+    # pools fits under 100 with the reserved superuser slots.
+    max_connections: "100"
+    superuser_reserved_connections: "3"
+    # 32 GiB host shared with every agent: 2 GB of buffers, the rest is the
+    # OS page cache (effective_cache_size only informs the planner).
+    shared_buffers: 2GB
+    effective_cache_size: 8GB
+    work_mem: 16MB
+    maintenance_work_mem: 512MB
+    # The nightly dump holds one REPEATABLE READ transaction over every table
+    # of a database; agent_workflows has one schema per tenant.
+    max_locks_per_transaction: "1024"
+    max_wal_size: 4GB
+    password_encryption: scram-sha-256
+    TimeZone: Europe/Berlin
+    log_timezone: Europe/Berlin
+  # pg_hba.conf, first match wins. TCP is password-only; peer maps the OS user
+  # to the app roles named in `ident`.
+  hba:
+    - local all ${USER} trust
+    - local athena athena_owner,athena_app peer map=athena
+    - local weatherorb,weatherorb_dbos weatherorb_owner,weatherorb_spots_ro peer map=weatherorb
+    - host all all 127.0.0.1/32 scram-sha-256
+    - host all all ::1/128 scram-sha-256
+  ident:
+    - athena ${USER} athena_owner
+    - athena ${USER} athena_app
+    - weatherorb ${USER} weatherorb_owner
+    - weatherorb ${USER} weatherorb_spots_ro
+
+roles:
+  agent_workflows:
+    password: op://mini/vps-dev/AGENT_WORKFLOWS_DB_PASSWORD
+  argo:
+    connection_limit: 20
+    # The prod ref on purpose (owner exception, vps .env.dev.tpl): argo's
+    # schema sync logs in with the same value on both hosts.
+    password: op://vps/argo/DB_PASSWORD
+  argo_agw_ro:
+    connection_limit: 5
+    password: op://mini/vps-dev/ARGO_AGW_RO_DB_PASSWORD
+  athena_app:
+    password: none
+  athena_owner:
+    password: none
+  basalt_ui_playground:
+    password: op://vps/basalt-ui-playground/DB_PASSWORD
+  factory:
+    connection_limit: 10
+    password: op://mini/vps-dev/SHARED_FACTORY_DB_PASSWORD
+  # Owns a schema of the prod mirror in `postgres`; nothing logs in as it here.
+  modelpick:
+    password: none
+  umami:
+    password: op://vps/umami/DB_PASSWORD
+  usage:
+    connection_limit: 10
+    password: op://mini/vps-dev/SHARED_USAGE_DB_PASSWORD
+  # weatherorb's app owner, by peer over the socket. Its objects still belong to
+  # the superuser until weatherorb's Issue moves them (docs/postgres.md §Apps).
+  weatherorb_owner:
+    password: none
+  weatherorb_spots_ro:
+    password: none
+
+# locale: a database that exists is never recreated; a different locale is
+# reported as drift. New databases are created from template0.
+# privileges: the owner's own are implicit; PUBLIC loses CONNECT and TEMPORARY
+# unless listed. Database and declared-schema grants converge exactly (extras
+# are revoked); default privileges are granted, extras only reported.
+databases:
+  # The maintenance database, and the vps prod mirror's schemas
+  # (vps `make restore-local`, `make pg-sync-schema`).
+  postgres:
+    owner: ${USER}
+    locale: { provider: libc, locale: en_US.UTF-8 }
+    privileges:
+      PUBLIC: [CONNECT, TEMPORARY]
+      argo: [CONNECT, CREATE]
+      basalt_ui_playground: [CONNECT, CREATE]
+      modelpick: [CONNECT, CREATE]
+      umami: [CONNECT]
+    extensions:
+      pgcrypto: { schema: umami }
+    schemas:
+      argo: { owner: "${USER}", privileges: { argo: [USAGE, CREATE] } }
+      basalt_ui_playground: { owner: "${USER}", privileges: { basalt_ui_playground: [USAGE, CREATE] } }
+      drizzle: { owner: "${USER}" }
+      modelpick: { owner: "${USER}", privileges: { modelpick: [USAGE, CREATE] } }
+      umami: { owner: "${USER}", privileges: { umami: [USAGE, CREATE] } }
+    default_privileges:
+      - { for: "${USER}", schema: argo, on: tables, to: argo, grant: [ALL] }
+      - { for: "${USER}", schema: argo, on: sequences, to: argo, grant: [ALL] }
+      - { for: "${USER}", schema: basalt_ui_playground, on: tables, to: basalt_ui_playground, grant: [ALL] }
+      - { for: "${USER}", schema: basalt_ui_playground, on: sequences, to: basalt_ui_playground, grant: [ALL] }
+      - { for: "${USER}", schema: modelpick, on: tables, to: modelpick, grant: [ALL] }
+      - { for: "${USER}", schema: modelpick, on: sequences, to: modelpick, grant: [ALL] }
+      - { for: "${USER}", schema: umami, on: tables, to: umami, grant: [ALL] }
+      - { for: "${USER}", schema: umami, on: sequences, to: umami, grant: [ALL] }
+
+  # The software factory, argo and agw's usage ledger: one schema per writer.
+  shared:
+    owner: ${USER}
+    locale: { provider: icu, locale: en_US.UTF-8, icu_locale: en-US }
+    settings: { TimeZone: Etc/UTC }
+    privileges:
+      PUBLIC: [TEMPORARY]
+      argo: [CONNECT, CREATE]
+      factory: [CONNECT]
+      usage: [CONNECT]
+    role_settings:
+      argo: { search_path: argo }
+      factory: { search_path: factory }
+      usage: { search_path: usage }
+    schemas:
+      argo: { owner: argo }
+      factory: { owner: factory }
+      factory_legacy: { owner: factory }
+      usage: { owner: usage, privileges: { argo: [USAGE], factory: [USAGE] } }
+    default_privileges:
+      - { for: usage, schema: usage, on: tables, to: argo, grant: [SELECT] }
+
+  # agent-workflows' system of record; it creates its tenant schemas itself.
+  agent_workflows:
+    owner: agent_workflows
+    locale: { provider: icu, locale: en_US.UTF-8, icu_locale: en-US }
+    settings: { TimeZone: Etc/UTC }
+    privileges:
+      PUBLIC: [TEMPORARY]
+      argo_agw_ro: [CONNECT]
+    schemas:
+      agw: { owner: agent_workflows, privileges: { argo_agw_ro: [USAGE] } }
+      public: { owner: pg_database_owner, privileges: { PUBLIC: [USAGE], argo_agw_ro: [USAGE] } }
+    default_privileges:
+      - { for: agent_workflows, on: tables, to: argo_agw_ro, grant: [SELECT] }
+      - { for: agent_workflows, on: sequences, to: argo_agw_ro, grant: [SELECT] }
+      - { for: agent_workflows, on: schemas, to: argo_agw_ro, grant: [USAGE] }
+
+  # agent-workflows' finished runtime spike (docs/spikes/s1-runtime); kept, not used.
+  spike_s1:
+    owner: ${USER}
+    locale: { provider: icu, locale: en_US.UTF-8, icu_locale: en-US }
+    settings: { TimeZone: Etc/UTC }
+    privileges:
+      PUBLIC: [CONNECT, TEMPORARY]
+
+  # Athena teamchat (epos-ai-teamchat-athena, scripts/athena-pg.sh).
+  athena:
+    owner: athena_owner
+    locale: { provider: libc, locale: C }
+    privileges:
+      athena_app: [CONNECT]
+    schemas:
+      athena: { owner: athena_owner, privileges: { athena_app: [USAGE] } }
+    default_privileges:
+      - { for: athena_owner, schema: athena, on: tables, to: athena_app, grant: [SELECT, INSERT] }
+      - { for: athena_owner, schema: athena, on: sequences, to: athena_app, grant: [SELECT, USAGE] }
+
+  # weatherorb V1. Its own app roles replace the superuser in weatherorb's Issue.
+  weatherorb:
+    owner: ${USER}
+    locale: { provider: libc, locale: en_US.UTF-8 }
+    privileges:
+      PUBLIC: [CONNECT, TEMPORARY]
+    extensions:
+      postgis: { schema: public }
+      pg_trgm: { schema: public }
+    schemas:
+      spots: { owner: "${USER}", privileges: { weatherorb_spots_ro: [USAGE] } }
+  weatherorb_dbos:
+    owner: ${USER}
+    locale: { provider: libc, locale: en_US.UTF-8 }
+    privileges:
+      PUBLIC: [CONNECT, TEMPORARY]
+    schemas:
+      dbos: { owner: "${USER}" }
+  weatherorb_accounts_test:
+    owner: ${USER}
+    locale: { provider: libc, locale: en_US.UTF-8 }
+    privileges:
+      PUBLIC: [CONNECT, TEMPORARY]

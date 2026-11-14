@@ -266,6 +266,15 @@ services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,
 `kickstart -k` not re-reading the plist, `com.colima.docker-socket` for the
 Raycast Docker extension: `docs/remote-dev.md` → *launchd on the dev host*.
 
+## Postgres (mini)
+
+One server, the bare Homebrew `postgresql@18`, as code: `config/postgres/cluster.yaml` declares
+settings, client auth, roles (passwords as `op://` refs via `secrets-run`), databases, grants,
+schemas, extensions. `make pg-plan` / `make pg-apply` converge it (idempotent, never drops);
+`make pg-fresh-build` proves a fresh cluster from it plus a restore equals the live one;
+`scripts/pg-cutover.sh` is the rehearsed move onto it (`--detach`: it stops the factory's own
+database). Never Docker, never on the external SSD. `docs/postgres.md`.
+
 ## Homebrew
 
 `Brewfile` (repo root) is the single source of truth — taps + formulae + casks —

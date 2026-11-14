@@ -2082,6 +2082,25 @@ _colima-supervise:
 		fi; \
 	fi
 
+# The mini's one Postgres, as code: config/postgres/cluster.yaml, docs/postgres.md.
+# PG_ARGS passes flags through (`PG_ARGS="--port 5433"` before the cutover).
+PG_ARGS ?=
+.PHONY: pg-plan pg-apply pg-fresh-build pg-rollback-drill pg-cutover
+pg-plan: ## What pg-apply would change on the one Postgres (no secrets shown)
+	@bun $(DOTFILES_DIR)/scripts/pg-cluster.ts plan $(PG_ARGS)
+
+pg-apply: ## Converge the one Postgres onto config/postgres/cluster.yaml (idempotent)
+	@bun $(DOTFILES_DIR)/scripts/pg-cluster.ts apply $(PG_ARGS)
+
+pg-fresh-build: ## Prove the declaration: a scratch cluster from it plus a restore of every database equals the live ones
+	@$(DOTFILES_DIR)/scripts/pg-cutover.sh fresh-build
+
+pg-rollback-drill: ## Cutover's stop-and-switch with an injected failure, so the rollback runs (detached; drains the queue)
+	@$(DOTFILES_DIR)/scripts/pg-cutover.sh rollback-drill --detach
+
+pg-cutover: ## The move onto the one Postgres (detached; drains the queue, rolls back on any failure)
+	@$(DOTFILES_DIR)/scripts/pg-cutover.sh cutover --detach
+
 .PHONY: colima-status
 colima-status:
 	@brew services list | grep -E '^colima' || echo "  colima service: not registered"

@@ -96,7 +96,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `sh.brew.caddy` | daemon (root) | local HTTPS + tailnet doors |
 | `sh.brew.dnsmasq` | daemon (root) | `*.test` DNS |
 | `sh.brew.tailscale` | daemon (root) | tailnet |
-| `sh.brew.postgresql@18` | KeepAlive | local Postgres |
+| `sh.brew.postgresql@18` | KeepAlive | the mini's one Postgres (weatherorb's today; takes the Docker container's and Athena's databases at the cutover, then 127.0.0.1:5432), declared in `config/postgres/cluster.yaml` — `docs/postgres.md` |
 | `sh.brew.sleepwatcher` | KeepAlive | runs `~/.wakeup` |
 | `com.jkrumm.brain-sync` | 300s | vault reconcile via GitHub |
 | `com.jkrumm.brain-backup` | 03:30 daily | vault backup |
