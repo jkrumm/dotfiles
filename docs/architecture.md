@@ -106,6 +106,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 900s | copytruncate, 16 MB cap; list derived from our plists; Chrome clone sweep bounded on one clock from script start (background priority, lsof 90 s, removal budget 300 s, `--timeout 840`) after rc=124 under load (issue 870) |
 | `com.jkrumm.fseventsd-watch` | 05:10 daily | restarts a leaking `fseventsd` (memory > 1.5 GB, or CPU >= 150 % for 10 min) with `sudo -n killall fseventsd`, allowed by one sudoers rule the owner installs once (`make fseventsd-sudoers` through ask-human); `make fseventsd-watch-dry` names what it would do |
+| `com.jkrumm.smb-keepalive` | 60 s + network change | mounts and heals the HomeLab Samba shares at `~/HomeLab/<share>` (`docs/macbook.md` §HomeLab Samba); HomeLab down = skipped, exit 0 |
 | `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, stale `$TMPDIR` entries, package caches, Lima IPSW downloads |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → ntfy chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.hc-events` | KeepAlive | the herdr-core event record: `events.subscribe` via `hc connect` (only while `lib/core-up.sh` says a launchd-born core answers: `hc connect` would start a core) into the same `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.snapshot` lines carry the terminal roster, `recorder.gap` lines (stream ended, `missed`, unparseable line, silence) mark holes; records only; `make hc-events-setup`, log `~/Library/Logs/hc-events.log` |
@@ -273,7 +274,7 @@ The agent-workflows host (`:7791`) has the same kind of door for the image studi
 | `ssh homelab` / `ssh vps` | Tailscale SSH (keyless) | tailnet ACL |
 | `tcp:445` (SMB `~/Shuttle`) | macOS smbd | tailnet `tag:mac → tag:mac` |
 | `https://s3.jkrumm.com` (HomeLab files, S3) | homelab Caddy → VersityGW over existing folders (`homelab/docs/s3.md`); agents via `hl` | tailnet, `tag:mac` on 443 |
-| `smb://samba.jkrumm.com` (`SSD`, `HDD`) | homelab Samba, bound to its Tailscale IP | tailnet, `tag:mac` + `tag:phone` on 445 |
+| `smb://samba.jkrumm.com` (`SSD`, `HDD`) | homelab Samba, bound to its Tailscale IP; mounted from the mini by `smb-keepalive` | tailnet, `tag:mac` + `tag:phone` on 445 |
 
 Live rows: `dotfiles-private/tailscale-serve.mini.conf` (serve/funnel) and
 `tailscale-acl.jsonc` (grants) — this table is a snapshot, that repo is the

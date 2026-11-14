@@ -112,6 +112,7 @@ setup:
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
+	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
 	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
@@ -802,7 +803,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1081,19 +1082,23 @@ db-tunnel-teardown:
 	rm -f "$$PLIST"; \
 	echo "  ✓ db-tunnel torn down (unloaded + plist removed)"
 
-# HomeLab Samba on the MacBook: a 60 s + on-network-change LaunchAgent that
+# HomeLab Samba on both Macs: a 60 s + on-network-change LaunchAgent that
 # remounts a stale share (macOS never reconnects SMB after sleep/roam), and a
 # managed ~/Library/Preferences/nsmb.conf. Shares: dotfiles-private/smb-shares.conf.
-# MacBook-only — refuses on the cache backend; agents on the mini use `hl`.
-.PHONY: smb-keepalive-setup smb-keepalive-status smb-keepalive-teardown
+# MacBook: Finder's Keychain entry + osascript, mounts in /Volumes. Mini (cache backend): the password
+# from the secrets cache (op://homelab/samba/PASSWORD), mount_smbfs, mounts in ~/HomeLab. Converged by
+# `make setup`; the teardown unloads the agent and removes the plist (shares are only mounts: unmount
+# them with `diskutil unmount force ~/HomeLab/<share>`).
+.PHONY: smb-keepalive-setup smb-keepalive-status smb-keepalive-teardown smb-keepalive-test
 smb-keepalive-setup:
-	@if [ "$(SECRETS_BACKEND)" = "cache" ]; then \
-		echo "  smb-keepalive: backend is 'cache' (the mini) — agents use hl, skipping."; exit 0; fi; \
-	chmod +x "$(DOTFILES_DIR)/smb/smb-keepalive.sh"; \
-	mkdir -p "$(LAUNCHAGENTS)"; \
+	@chmod +x "$(DOTFILES_DIR)/smb/smb-keepalive.sh"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
 	$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/smb/nsmb.conf" DST="$(HOME)/Library/Preferences/nsmb.conf" || exit 1; \
 	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.smb-keepalive" PLIST_DIR="$(DOTFILES_DIR)/smb" || exit 1; \
 	echo "    ↳ shares: $(SECRETS_PRIVATE_REPO)/smb-shares.conf · log: ~/Library/Logs/smb-keepalive.log"
+smb-keepalive-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/smb/smb-keepalive.sh $(DOTFILES_DIR)/smb/smb-keepalive.test.sh
+	@/bin/bash $(DOTFILES_DIR)/smb/smb-keepalive.test.sh
 smb-keepalive-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.smb-keepalive" 2>/dev/null | grep -E '^\s+(state|last exit code|runs) =' \
 		|| echo "  agent: NOT loaded — run 'make smb-keepalive-setup'"
@@ -3520,6 +3525,7 @@ help:
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir step)"
+	@echo "  make smb-keepalive-test Hermetic suite for smb/smb-keepalive.sh (hung-stat remount path)"
 	@echo "  make jobrun-canary-setup     Dev-host only: load the 300s canary job (exits 1 unless config/jobrun-canary.json is healthy)"
 	@echo "  make hooks-test         bun test hooks/ — run after any hook edit"
 	@echo "  make worktree-audit     List stale git worktrees across SourceRoot + IuRoot (read-only)"
