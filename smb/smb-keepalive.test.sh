@@ -67,7 +67,7 @@ CONF
 
 run() { # run the script as the mini; prints its output, sets $rc
   out=$(PATH="$FAKE:$PATH" SMB_HOST_KIND="${KIND:-mini}" SMB_SHARES_CONF="$CONF" SMB_MOUNT_ROOT="$HOME/HomeLab" \
-    SMB_PROBE_SECONDS=3 SMB_RETRY_SLEEP=0 SMB_UNMOUNT_SECONDS=6 SMB_MOUNT_SECONDS="${MOUNT_S:-10}" \
+    SMB_PROBE_SECONDS="${PROBE_S:-10}" SMB_RETRY_SLEEP=0 SMB_UNMOUNT_SECONDS=6 SMB_MOUNT_SECONDS="${MOUNT_S:-10}" \
     bash "$HERE/smb-keepalive.sh" 2>&1); rc=$?
   printf '%s\n' "$out" | sed 's/^/    | /'
 }
@@ -112,7 +112,7 @@ echo "# hanging stat: bounded probe, force-unmount, remount (no waiting on the h
 touch "$FIX/hang"
 SECONDS=0
 ( sleep 2; rm -f "$FIX/hang" ) &   # the server "comes back" once the stale mount is dropped
-run
+PROBE_S=3 run
 elapsed=$SECONDS
 wait
 check "exits 0" test "$rc" -eq 0
@@ -126,7 +126,7 @@ echo "# silent server (stat of the root answers from cache, the lookup never ret
 touch "$FIX/silent"
 SECONDS=0
 ( sleep 2; rm -f "$FIX/silent" ) &
-run
+PROBE_S=3 run
 elapsed=$SECONDS
 wait
 check "exits 0" test "$rc" -eq 0
