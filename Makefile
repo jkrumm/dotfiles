@@ -143,6 +143,7 @@ setup:
 	@$(MAKE) --no-print-directory drift-check-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@$(MAKE) --no-print-directory _setup-external-volume
+	@$(MAKE) --no-print-directory pg-process-type
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
 	@echo ""
@@ -839,7 +840,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -2162,7 +2163,14 @@ _colima-supervise:
 # The mini's one Postgres, as code: config/postgres/cluster.yaml, docs/postgres.md.
 # PG_ARGS passes flags through (`PG_ARGS="--port 5433"` before the cutover).
 PG_ARGS ?=
-.PHONY: pg-plan pg-apply pg-fresh-build pg-rollback-drill pg-cutover
+.PHONY: pg-plan pg-apply pg-fresh-build pg-rollback-drill pg-cutover pg-process-type pg-process-type-test
+pg-process-type: ## Pin ProcessType Interactive in Postgres's brew plist (brew rewrites it on restart/upgrade; file only, never reloads)
+	@bash $(DOTFILES_DIR)/scripts/pg-process-type.sh converge
+
+pg-process-type-test: ## Hermetic proof of the Postgres ProcessType converge (scratch plist dir, stub launchctl)
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/pg-process-type.sh $(DOTFILES_DIR)/scripts/pg-process-type.test.sh
+	@bash $(DOTFILES_DIR)/scripts/pg-process-type.test.sh
+
 pg-plan: ## What pg-apply would change on the one Postgres (no secrets shown)
 	@bun $(DOTFILES_DIR)/scripts/pg-cluster.ts plan $(PG_ARGS)
 
@@ -3835,6 +3843,7 @@ help:
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make pg-plan         What pg-apply would change on the one Postgres (PG_ARGS passes flags)"
 	@echo "  make pg-apply        Converge the one Postgres onto config/postgres/cluster.yaml"
+	@echo "  make pg-process-type Pin ProcessType Interactive in Postgres's brew plist (file only; the reload is docs/postgres.md)"
 	@echo "  make pg-fresh-build  Prove the declaration: scratch cluster + restore of every database equals live"
 	@echo "  make pg-rollback-drill  Cutover's switch with an injected failure (detached, drains the queue)"
 	@echo "  make pg-cutover      The move onto the one Postgres (detached, rolls back on any failure)"

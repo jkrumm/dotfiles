@@ -43,6 +43,7 @@ services:
 | `door` | The Caddy registry name(s) it serves, as `scripts/lib/caddy-registry.py` yields them |
 | `label` | launchd label. A brew service matches `sh.brew.<n>` and `homebrew.mxcl.<n>`; `daemon: true` for `/Library/LaunchDaemons` (read with `launchctl print system/<label>`, `process:` names its process for the footprint) |
 | `container`, `project`, `vm` | A compose service: the container, its compose project, the Colima profile (`default` if omitted) |
+| `process_type` | `interactive`, for a `core` launchd service others wait on: `make mini-ps` and the check fail while it runs lower (§Process type) |
 | `shared_memory` | Postgres: every process's footprint counts the shared buffers again (below) |
 | `start`, `stop`, `status` | The owner repo's own command (`make -C <repo> <target>`; `~/` expands). A launchd job without `start`/`stop` gets `launchctl bootstrap`/`kickstart` and `bootout`; anything else refuses the verb |
 | `note` | One line for whoever reads the table |
@@ -77,6 +78,45 @@ An unknown name is refused, and so is stopping a `core` service unless `FORCE=1`
 removes the whole dev project; an earlier version of the registry used them and started redis by accident.) A service with
 no such command has none registered and the verb refuses. `mini-profile` runs the commands of its members, one by one.
 
+## Process type
+
+A launchd job with no `ProcessType` gets "light resource limits ... throttling its CPU usage and I/O bandwidth"
+(`man launchd.plist`). Measured with `ps -o pri=` on 2026-11-14: such a job runs at priority **20**, a job with
+`ProcessType` Interactive at **31**, the same as everything a terminal starts (every agent and every test). With all
+cores taken by priority-31 work, the services those wait on get almost no CPU: at load 200 the factory Console answered 502,
+its stop took 27.9 s on Postgres lock timeouts and a read of Postgres timed out after 88 s.
+
+| Rule | |
+|-|-|
+| A core service others or a request path wait on | `ProcessType` Interactive, and `process_type: interactive` in its registry entry |
+| A scheduled job | unset or Background: it should yield |
+| A tenant app the owner uses | unchanged, unless it is measured to starve |
+
+`process_type` is only accepted on a `core` launchd service. It is a promise the check holds the plist to, twice:
+
+- **Running lower:** the main process of a running service (the job's pid; for a system daemon the oldest process named
+  `process:`) has a `ps -o pri=` below 31 → `FAIL runs below its declared process type`. The job was loaded before the key
+  was in its plist; reload it.
+- **The file lost the key:** the plist launchd will read at the next start has no `ProcessType` Interactive → `FAIL plist
+  has no ProcessType`. This is what a brew rewrite looks like while the process still runs at 31.
+
+`make mini-ps` shows the priority in a `PRI` column (`BELOW-BAND` marks a miss); `FORMAT=json` carries `pri`, `process_type` and
+`below_band`. A stopped service is not graded. Both findings are FAIL in `make doctor` and the heartbeat's `check_registry`.
+
+A repo declares it in its own `mini-services.yaml` and puts the key in the plist it renders; the registry never writes a plist.
+Postgres is the exception that proves why the check exists: brew writes its plist, so the key has a converge step
+(`docs/postgres.md` §Process type).
+
+Measured 2026-11-14 before this change (`ps -o pri=` of the main process, 31 = Interactive): the factory server, its
+door, agent-workflows-host, research-chrome (on demand) and Postgres at 31 (the factory's own plists and the owner's hand
+edit of Postgres had landed that evening); every other core job at 20 (a timer between runs has no process); `walkingpad` at 37.
+Declared Interactive here: Postgres, software-factory, factory-door, agent-workflows-host, kuma-door, collie, hc-events,
+hc-resume. Left at 20 on purpose: Caddy, dnsmasq and tailscaled (system daemons at 20; their plists are root-owned and a
+restart drops every door or the tailnet, so a sudo step of the owner's: `caddy/caddy.plist.template` carries the key and
+`make caddy-boot-order` applies it), colima (a restart takes Docker down), the agw gateway and audio (agent-workflows' plists:
+signal filed), hermes, argo, iris, modelpick, rb, finances, linewatch, the home jobs and the teamchat jobs (tenant apps, or
+another repo's plist, not measured to starve).
+
 ## Where the findings go
 
 | Finding | `make doctor` | Heartbeat `check_registry` (detail monitor, routed to dotfiles at the factory door) |
@@ -84,6 +124,7 @@ no such command has none registered and the verb refuses. `mini-profile` runs th
 | a loaded job the registry does not know | FAIL | FAIL, the factory files an Issue |
 | a job whose program is inside a worktree | FAIL | FAIL |
 | a registry that does not parse or validate | FAIL | FAIL |
+| a service running below its declared `process_type`, or whose plist lost it | FAIL | FAIL |
 | a footprint above its budget | WARN | WARN (named in the message) |
 
 A job installed by hand and never registered is exactly this FAIL: it turns the detail monitor DOWN until its row lands

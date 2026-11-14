@@ -51,6 +51,8 @@
 	<array>
 		<string>__WRAPPER__</string>
 	</array>
+	<key>ProcessType</key>
+	<string>Interactive</string>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StandardErrorPath</key>

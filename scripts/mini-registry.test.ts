@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Plist, type Snapshot, footprint, findings, grade, loadAll, normalizeLabel, parseContainers, parseDisabled,
-  hostRefusal, parseLaunchctlList, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
+  hostRefusal, parseLaunchctlList, parsePri, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
 } from "./mini-registry.ts"
 
 const HOME = "/home/u"
@@ -34,7 +34,7 @@ const load = () => {
 
 const plist = (label: string, program = "/bin/true", domain: "gui" | "system" = "gui"): Plist => ({ label, path: `/p/${label}.plist`, program, domain })
 const snap = (o: Partial<Snapshot> = {}): Snapshot => ({
-  uid: 501, procs: [], loaded: [], disabled: new Set(), plists: [], systemRunning: new Set(), vms: new Map(), containers: new Map(), doors: [], ...o,
+  uid: 501, procs: [], pri: new Map(), loaded: [], disabled: new Set(), plists: [], systemRunning: new Set(), vms: new Map(), containers: new Map(), doors: [], ...o,
 })
 
 describe("registry parsing", () => {
@@ -296,5 +296,69 @@ describe("verbs", () => {
     expect(stepFor(services.find((x) => x.name === "colima-default")!, "start", s)).toContain("no start command registered")
     expect(stepFor(services.find((x) => x.name === "job")!, "start", s)).toContain("no plist installed")
     expect(stepFor(services.find((x) => x.name === "job")!, "stop", s)).toContain("not loaded")
+  })
+})
+
+describe("process type", () => {
+  const reg = (extra: string) => parseRegistry(`services:\n  - ${extra}`, "t", undefined, HOME)
+  const pg = (type = "interactive") => `{ name: pg, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", process_type: ${type}, memory_mib: 1000 }`
+  const procs = parseTop("PID PPID MEM COMMAND\n10 1 150M postgres\n11 10 20M postgres\n")
+  const loaded = [{ pid: 10, status: 0, label: "sh.brew.postgresql@18" }]
+  const grading = (pri: string, processType?: string) => {
+    const services = reg(pg()).services
+    const g = grade(services, snap({ procs, pri: parsePri(pri), loaded, plists: [{ ...plist("sh.brew.postgresql@18"), processType }] }))
+    return { row: g.rows[0], f: findings(g.rows, g.drift) }
+  }
+
+  test("only interactive, only on a core launchd service", () => {
+    expect(reg(pg()).errors).toEqual([])
+    expect(reg(pg("background")).errors.join()).toContain("process_type must be one of interactive")
+    expect(reg("{ name: j, repo: r, kind: launchd, tier: manual, label: l, process_type: interactive, memory_mib: 1 }").errors.join()).toContain("only for a launchd service of tier core")
+    expect(reg("{ name: c, repo: r, kind: compose, tier: core, container: c, process_type: interactive, memory_mib: 1 }").errors.join()).toContain("only for a launchd service of tier core")
+  })
+
+  test("parsePri reads `ps -axo pid=,pri=`", () => {
+    expect([...parsePri("    1  20\n 4242  31\n")]).toEqual([[1, 20], [4242, 31]])
+  })
+
+  test("an Interactive entry running at the terminal band and with the key in its plist is clean", () => {
+    const { row, f } = grading("10 31\n11 31\n", "Interactive")
+    expect(row).toMatchObject({ state: "running", pri: 31, below_band: false })
+    expect(f).toEqual({ lines: [], rc: 0 })
+  })
+
+  test("an Interactive entry running lower fails, naming the priority", () => {
+    const { row, f } = grading("10 20\n11 20\n", "Interactive")
+    expect(row.below_band).toBe(true)
+    expect(f.rc).toBe(1)
+    expect(f.lines.join("\n")).toContain("FAIL runs below its declared process type: pg at priority 20")
+  })
+
+  test("a plist that lost the key fails even while the process still runs at 31 (brew rewrote it)", () => {
+    const { f } = grading("10 31\n", undefined)
+    expect(f.rc).toBe(1)
+    expect(f.lines.join("\n")).toContain("FAIL plist has no ProcessType interactive: pg (key missing")
+  })
+
+  test("a stopped service is not graded, and an entry without the field is never graded", () => {
+    const services = reg(pg()).services
+    const stopped = grade(services, snap({ procs, pri: parsePri("10 20\n"), loaded: [{ pid: null, status: 0, label: "sh.brew.postgresql@18" }], plists: [plist("sh.brew.postgresql@18")] }))
+    expect(stopped.rows[0]).toMatchObject({ state: "stopped", pri: null, below_band: false })
+    const plain = grade(load(), snap({ procs, pri: parsePri("10 20\n"), loaded: [{ pid: 10, status: 0, label: "com.jkrumm.web" }], plists: [plist("com.jkrumm.web")] }))
+    expect(plain.rows.find((r) => r.name === "web")).toMatchObject({ pri: 20, below_band: false })
+  })
+
+  test("a system daemon is read by its process name", () => {
+    const services = reg("{ name: caddy, repo: d, kind: launchd, tier: core, label: sh.brew.caddy, daemon: true, process: caddy, process_type: interactive, memory_mib: 1 }").services
+    const g = grade(services, snap({
+      procs: parseTop("PID PPID MEM COMMAND\n364 1 50M caddy\n"), pri: parsePri("364 20\n"),
+      plists: [{ ...plist("sh.brew.caddy", "/x", "system"), processType: "Interactive" }], systemRunning: new Set(["sh.brew.caddy"]),
+    }))
+    expect(g.rows[0]).toMatchObject({ state: "running", pri: 20, below_band: true })
+  })
+
+  test("the host registry declares the control plane Interactive", () => {
+    const declared = loadAll().services.filter((s) => s.process_type).map((s) => s.name)
+    for (const n of ["postgres", "software-factory", "factory-door", "kuma-door"]) expect(declared).toContain(n)
   })
 })

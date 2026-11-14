@@ -178,6 +178,36 @@ pending), then one detached restart on the pattern of `scripts/pg-cutover.sh`: d
 (`factory queue set drain`), stop its clients (`CLIENT_LABELS`), `pg_ctl -m fast stop`, kickstart the brew
 label, start the clients, `factory queue set run`. Never `launchctl kickstart -k` (a smart shutdown).
 
+## Process type
+
+The server runs at launchd's **Interactive** process type, priority 31 (`ps -o pri=` of the postmaster and every backend),
+the same band as every agent and test a terminal starts. Without the key launchd throttles the job's CPU and I/O (priority 20),
+and the factory, agw and every native app, which all wait on this server, starve with it when the host is loaded: on
+2026-11-14 at load 200 a factory capacity read timed out after 88 s, and after the key it took 1 s.
+
+Brew writes `~/Library/LaunchAgents/sh.brew.postgresql@18.plist` from the formula's `service` block, which has no
+`ProcessType`, on every `brew services start|restart` and every `brew upgrade postgresql@18`. So the file is converged, the
+way `make _colima-supervise` does for colima:
+
+| | |
+|-|-|
+| `make pg-process-type` | Writes `ProcessType Interactive` into the plist (idempotent; resolves `sh.brew.` or `homebrew.mxcl.`). **Never reloads.** Runs from `make setup`. Says whether the loaded job still runs the old definition (`launchctl print` shows `spawn type = interactive`). |
+| `make brew-upgrade` | Asserts it after an upgrade (`scripts/brew-upgrade.sh`). |
+| `make mini-ps` / `make doctor` / the heartbeat | The registry entry says `process_type: interactive`: FAIL when the running postmaster is below priority 31 or the plist file lost the key (`docs/mini-registry.md` §Process type). |
+
+After a `brew services restart` (or an upgrade) that rewrote the file, run `make pg-process-type`, then reload the job: a
+reload is the only way, `taskpolicy` on the running postmaster did not change its priority.
+
+**The reload is a host-lane step** (it stops the server every client waits on): only when the one-minute load is under 24
+(`uptime`), detached, on the pattern of `scripts/pg-cutover.sh` and of the `shared_buffers` restart in *Revert signal*:
+`factory queue set drain`; stop the clients (`CLIENT_LABELS` in `scripts/pg-cutover.sh`); `pg_ctl -m fast stop`;
+`launchctl bootout gui/$(id -u)/sh.brew.postgresql@18` and wait until `launchctl print` no longer finds it;
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/sh.brew.postgresql@18.plist`; wait for `pg_isready`; start the clients;
+`factory queue set run`. Never `launchctl kickstart -k` (a smart shutdown). The 2026-11-14 hand run took 77 s.
+
+Check: `ps -o pri= -p $(head -1 /opt/homebrew/var/postgresql@18/postmaster.pid)` and one backend
+(`ps -axo pri=,command= | grep 'postgres: '`) print 31, like `ps -o pri= -p $$` in a terminal.
+
 ## Data placement
 
 Internal disk: this server's data directory, Docker and the Colima VM disk, swap, everything the

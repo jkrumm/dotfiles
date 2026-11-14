@@ -40,16 +40,16 @@ services:
   - { name: brain-web-refresh, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-web-refresh, memory_mib: 50 }
   - { name: browser-reap, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.browser-reap, memory_mib: 50 }
   - { name: claude-accounts-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.claude-accounts-keepalive, memory_mib: 50 }
-  - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, memory_mib: 300 }
+  - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, process_type: interactive, memory_mib: 300 }
   - { name: devhost-health, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.devhost-health, memory_mib: 50 }
   - { name: disk-sweep, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-sweep, memory_mib: 50 }
-  - { name: factory-door, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.factory-door, memory_mib: 50 }
+  - { name: factory-door, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.factory-door, process_type: interactive, memory_mib: 50 }
   - { name: finances, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances, memory_mib: 50 }
   - { name: finances-backup-push, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances-backup-push, memory_mib: 50 }
   - { name: fseventsd-watch, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.fseventsd-watch, memory_mib: 50 }
-  - { name: hc-events, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-events, memory_mib: 50 }
+  - { name: hc-events, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-events, process_type: interactive, memory_mib: 50 }
   - { name: hc-reap, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-reap, memory_mib: 50 }
-  - { name: hc-resume, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-resume, memory_mib: 50 }
+  - { name: hc-resume, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-resume, process_type: interactive, memory_mib: 50 }
   - { name: herdr-core, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.herdr-core, memory_mib: 50 }
   - { name: hermes-backup, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-backup, memory_mib: 50 }
   - { name: hermes-liveness, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-liveness, memory_mib: 50 }
@@ -65,7 +65,7 @@ services:
   - { name: jobrun-canary, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.jobrun-canary, memory_mib: 50 }
   - { name: kiri, repo: dotfiles, kind: launchd, tier: manual, label: com.jkrumm.kiri, note: "the kiri trial (plan row kiri-trial): a container runtime beside Colima, manual; its VM budget is KIRI_MEMORY_MIB 2048", memory_mib: 2560 }
   - { name: kiri-sample, repo: dotfiles, kind: launchd, tier: manual, label: com.jkrumm.kiri-sample, note: "the kiri trial's 900 s sampler (~/.local/share/kiri/kiri-trial.sh sample); goes with the trial", memory_mib: 50 }
-  - { name: kuma-door, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.kuma-door, memory_mib: 50 }
+  - { name: kuma-door, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.kuma-door, process_type: interactive, memory_mib: 50 }
   - { name: linewatch, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-app, door: linewatch, stop: "make -C ~/SourceRoot/linewatch app-stop", note: "native since Issue 1219; health http://127.0.0.1:7731/health; start is launchctl bootstrap of the plist", memory_mib: 130 }
   - { name: linewatch-collector-agent, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-collector-agent, memory_mib: 50 }
   - { name: linewatch-heartbeat, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-heartbeat, memory_mib: 50 }
@@ -79,7 +79,7 @@ services:
   - { name: research-chrome, repo: agent-workflows, kind: launchd, tier: on-demand, label: com.jkrumm.research-chrome, memory_mib: 1024 }
   - { name: shared-chrome, repo: dotfiles, kind: launchd, tier: on-demand, label: com.jkrumm.shared-chrome, start: "~/.local/bin/shared-chrome ensure", stop: "~/.local/bin/shared-chrome stop", note: "the headless Chrome behind /browse: DevTools on 127.0.0.1:9223, one context per agent; a context idle 15 min is closed, Chrome stops 60 s after the last; budget is Chrome (~0.4 GiB) plus ~75 MiB per context", memory_mib: 900 }
   - { name: smb-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.smb-keepalive, memory_mib: 50 }
-  - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, memory_mib: 250 }
+  - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, process_type: interactive, memory_mib: 250 }
   - { name: soloist, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist, memory_mib: 80 }
   - { name: soloist-speaker, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist-speaker, memory_mib: 50 }
   - { name: usage-tracker, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker, memory_mib: 50 }
@@ -100,7 +100,7 @@ services:
   - { name: weatherorb-worker-round, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.worker-round, memory_mib: 200 }
   - { name: colima, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.colima, memory_mib: 50 }
   - { name: sleepwatcher, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.sleepwatcher, memory_mib: 50 }
-  - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, memory_mib: 1536 }
+  - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, process_type: interactive, memory_mib: 1536 }
   - { name: caddy, repo: dotfiles, kind: launchd, tier: core, label: sh.brew.caddy, daemon: true, process: caddy, memory_mib: 100, note: "root daemon; needs sudo to stop, no verb registered" }
   - { name: brain-web, repo: dotfiles, kind: static, tier: core, door: brain, memory_mib: 0, note: "Caddy file_server on 127.0.0.1:7733 over basalt-ui-obsidian/apps/demo/dist, rebuilt by brain-web-refresh; no container, no VM; state follows Caddy" }
   - { name: dnsmasq, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.dnsmasq, daemon: true, process: dnsmasq, memory_mib: 20, note: "root daemon; *.test DNS" }

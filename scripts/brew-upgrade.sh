@@ -488,6 +488,22 @@ else
   echo "  · colima brew service not registered here — skipping boot-path assertion"
 fi
 
+# postgres is the third silent-revert case: `brew upgrade postgresql@18` and every `brew services start|restart` rewrite
+# its plist from the formula, which has no ProcessType, so the job drops from launchd's Interactive band (priority 31)
+# to the throttled default (20) and the whole control plane that waits on it starves first under load (2026-11-14).
+# Converged by `make pg-process-type` (and from `make setup`), asserted here and by `make mini-ps` / `make doctor`
+# (the registry's process_type). docs/postgres.md §Process type.
+PG_PLIST=$(brew_service_plist postgresql@18) || PG_PLIST=""
+if [[ -z "$PG_PLIST" ]]; then
+  echo "  · postgres brew service not installed here — skipping ProcessType assertion"
+elif pg_out=$(bash "$(dirname "${BASH_SOURCE[0]}")/pg-process-type.sh" check 2>&1); then
+  echo "  ✓ postgres: ProcessType Interactive intact"
+else
+  echo "  ✗ postgres: ProcessType reverted or not loaded (fix: make pg-process-type, then docs/postgres.md §Process type):"
+  printf '%s\n' "$pg_out" | sed 's/^/      /'
+  assertion_failed=1
+fi
+
 # tcc-check must still classify every LaunchAgent program: an upgrade can move a program onto a versioned
 # path or swap its signature, and the grant silently stops covering it (docs/tcc.md). The herdr-core is not part of
 # this script: it is upstream's Herdr Core.app, updated only by `make herdr-core-update`, never by Homebrew.

@@ -14,6 +14,9 @@
   <!-- Plain `true` (not a SuccessfulExit dict): make doctor grades a KeepAlive job that is down. -->
   <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
+  <!-- Interactive: without a ProcessType launchd throttles CPU and I/O (priority 20 against a terminal's 31), and under load the
+       services that others wait on starve first. docs/mini-registry.md §Process type. -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>ThrottleInterval</key><integer>10</integer>
   <!-- bun's dir and hc (Homebrew) must be on launchd's minimal PATH. -->
   <key>EnvironmentVariables</key>

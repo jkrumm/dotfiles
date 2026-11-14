@@ -271,6 +271,23 @@ assert_contains "loaded without plist is the disarmed state" "$OUT" "brew servic
 reset; printf 'Label=homebrew.mxcl.colima\nKeepAlive=true\nProgram0=%s\n' "$WRAPPER" > "$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist"; run
 assert_contains "pre-Homebrew-6 plist name is resolved too" "$OUT" "✓ colima: supervised boot path intact"
 
+echo "post-upgrade: postgres ProcessType"
+# the sandbox has no pg-process-type.sh of its own (that script has its own suite): a stub that fails while $ST/pg_fail exists
+cat > "$SB/scripts/pg-process-type.sh" <<EOF
+#!/bin/sh
+[ -f "$ST/pg_fail" ] && { echo "plist ProcessType is 'missing'"; exit 1; }
+exit 0
+EOF
+reset; run
+assert_contains "no postgres service is a skip" "$OUT" "postgres brew service not installed here"
+reset; : > "$HOME/Library/LaunchAgents/sh.brew.postgresql@18.plist"; run
+assert_eq "intact ProcessType exits 0" "$RC" 0
+assert_contains "intact ProcessType" "$OUT" "✓ postgres: ProcessType Interactive intact"
+reset; : > "$HOME/Library/LaunchAgents/sh.brew.postgresql@18.plist"; touch "$ST/pg_fail"; run
+assert_eq "reverted ProcessType exits 1" "$RC" 1
+assert_contains "reverted ProcessType names the fix" "$OUT" "(fix: make pg-process-type"
+assert_contains "the check's own words are shown" "$OUT" "      plist ProcessType is 'missing'"
+
 echo "post-upgrade: tcc-check"
 reset; run
 assert_contains "tcc-check pass" "$OUT" "✓ tcc: tcc-check still classifies every LaunchAgent program"

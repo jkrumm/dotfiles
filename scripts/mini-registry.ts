@@ -26,8 +26,13 @@ const CHECK_DEADLINE_MS = 30000
 export const KINDS = ["launchd", "compose", "vm", "static", "dev-server"] as const
 export const TIERS = ["core", "on-demand", "manual"] as const
 export const PROFILES = ["work", "dev-db"] as const
+export const PROCESS_TYPES = ["interactive"] as const
+// `ps -o pri=` of a launchd job with ProcessType Interactive, measured on the mini 2026-11-14: the same 31 as a process
+// started in a terminal. A job with no ProcessType runs at 20 (launchd's "light resource limits"), a Background one lower.
+export const INTERACTIVE_PRI = 31
 export type Kind = (typeof KINDS)[number]
 export type Tier = (typeof TIERS)[number]
+export type ProcessType = (typeof PROCESS_TYPES)[number]
 
 export type Service = {
   name: string
@@ -49,6 +54,8 @@ export type Service = {
   process?: string
   // Postgres: every process's footprint counts the shared buffers again
   shared_memory?: boolean
+  // the launchd ProcessType the service must run at: a running service below its band fails the check
+  process_type?: ProcessType
   start?: string
   stop?: string
   status?: string
@@ -105,6 +112,11 @@ export function parseRegistry(text: string, source: string, repoDefault?: string
       vm: str(raw.vm), process: str(raw.process), shared_memory: raw.shared_memory === true,
       start: str(raw.start) && expand(str(raw.start)!, home), stop: str(raw.stop) && expand(str(raw.stop)!, home),
       status: str(raw.status) && expand(str(raw.status)!, home), note: str(raw.note),
+    }
+    if (raw.process_type != null) {
+      if (!PROCESS_TYPES.includes(raw.process_type as ProcessType)) err(`process_type must be one of ${PROCESS_TYPES.join(", ")}`)
+      else if (kind !== "launchd" || tier !== "core") err("process_type is only for a launchd service of tier core")
+      else s.process_type = raw.process_type as ProcessType
     }
     if (kind === "launchd" && !s.label) err("a launchd service needs a label")
     if (kind === "compose" && !s.container) err("a compose service needs a container")
@@ -265,11 +277,22 @@ export function parseContainers(ps: string, stats: string): Container[] {
   return out
 }
 
-export type Plist = { label: string; path: string; program: string; domain: "gui" | "system" }
+export type Plist = { label: string; path: string; program: string; domain: "gui" | "system"; processType?: string }
+
+// `ps -axo pid=,pri=`: the scheduler priority of every process.
+export function parsePri(out: string): Map<number, number> {
+  const pri = new Map<number, number>()
+  for (const line of out.split("\n")) {
+    const m = line.match(/^\s*(\d+)\s+(\d+)\s*$/)
+    if (m) pri.set(Number(m[1]), Number(m[2]))
+  }
+  return pri
+}
 
 export type Snapshot = {
   uid: number
   procs: Proc[]
+  pri: Map<number, number> // pid -> `ps -o pri=`
   loaded: LaunchctlRow[]
   disabled: Set<string>
   plists: Plist[]
@@ -294,6 +317,24 @@ export type Row = {
   over: boolean
   doors: string[]
   note?: string
+  // the scheduler priority of the main process and the band the entry declares
+  pri: number | null
+  process_type?: ProcessType
+  below_band: boolean
+  plist_process_type?: string | null // the plist file's ProcessType, for a declared service
+}
+
+// The main process of a launchd service: the job's pid, or for a system daemon the oldest process of that name.
+function mainPid(s: Service, snap: Snapshot): number | null {
+  if (s.kind !== "launchd" || !s.label) return null
+  const key = normalizeLabel(s.label)
+  if (s.daemon) return snap.procs.filter((p) => p.cmd === s.process).sort((a, b) => a.pid - b.pid)[0]?.pid ?? null
+  return snap.loaded.find((r) => normalizeLabel(r.label) === key)?.pid ?? null
+}
+
+function plistFileOf(s: Service, snap: Snapshot): Plist | undefined {
+  const key = s.label ? normalizeLabel(s.label) : ""
+  return snap.plists.find((p) => normalizeLabel(p.label) === key && p.domain === (s.daemon ? "system" : "gui"))
 }
 
 function containerFor(s: Service, snap: Snapshot): Container | undefined {
@@ -352,9 +393,14 @@ export type Drift = {
 export function grade(services: Service[], snap: Snapshot): { rows: Row[]; drift: Drift } {
   const rows: Row[] = services.map((s) => {
     const { state, mib } = stateOf(s, snap)
+    const pid = state === "running" ? mainPid(s, snap) : null
+    const pri = pid === null ? null : snap.pri.get(pid) ?? null
+    const plistFile = s.process_type ? plistFileOf(s, snap) : undefined
     return {
       name: s.name, tier: s.tier, kind: s.kind, profile: s.profile, state, footprint_mib: mib === null ? null : Math.round(mib),
       budget_mib: s.memory_mib, over: mib !== null && s.memory_mib > 0 && mib > s.memory_mib, doors: s.doors, note: s.note,
+      pri, process_type: s.process_type, below_band: s.process_type === "interactive" && pri !== null && pri < INTERACTIVE_PRI,
+      plist_process_type: s.process_type && plistFile ? plistFile.processType ?? null : undefined,
     }
   })
   const known = new Set(services.filter((s) => s.label).map((s) => normalizeLabel(s.label!)))
@@ -376,13 +422,20 @@ export function grade(services: Service[], snap: Snapshot): { rows: Row[]; drift
   return { rows, drift }
 }
 
-// check: 1 = fail (an unregistered loaded job, a program inside a worktree), 2 = warn (budget breach), 0 = clean
+// check: 1 = fail (an unregistered loaded job, a program inside a worktree, a service below its declared band or whose
+// plist lost its ProcessType), 2 = warn (budget breach), 0 = clean
 export function findings(rows: Row[], drift: Drift): { lines: string[]; rc: number } {
   const lines: string[] = []
   for (const l of drift.unknown_jobs) lines.push(`FAIL loaded job not in the registry: ${l}`)
   for (const l of drift.worktree_jobs) lines.push(`FAIL job program inside a worktree: ${l}`)
+  for (const r of rows.filter((r) => r.below_band)) lines.push(`FAIL runs below its declared process type: ${r.name} at priority ${r.pri}, ${r.process_type} is ${INTERACTIVE_PRI} (reload the job; docs/mini-registry.md §Process type)`)
+  // the running process can still be fine while the file launchd reads at the next boot is not: brew rewrites its plists on a restart
+  for (const r of rows.filter((r) => r.process_type && r.plist_process_type !== undefined && r.plist_process_type?.toLowerCase() !== r.process_type)) {
+    lines.push(`FAIL plist has no ProcessType ${r.process_type}: ${r.name} (${r.plist_process_type ?? "key missing"}; the next start loses the band)`)
+  }
   for (const r of rows.filter((r) => r.over)) lines.push(`WARN over budget: ${r.name} ${r.footprint_mib} MiB of ${r.budget_mib}`)
-  const rc = drift.unknown_jobs.length || drift.worktree_jobs.length ? 1 : rows.some((r) => r.over) ? 2 : 0
+  const failed = lines.some((l) => l.startsWith("FAIL"))
+  const rc = failed ? 1 : rows.some((r) => r.over) ? 2 : 0
   return { lines, rc }
 }
 
@@ -466,11 +519,13 @@ async function readPlists(): Promise<Plist[]> {
   return Promise.all(files.map(async ({ path, domain }) => {
     const { out } = await run(["/usr/bin/plutil", "-convert", "json", "-o", "-", path])
     let program = ""
+    let processType: string | undefined
     try {
       const j = JSON.parse(out)
       program = [j.Program, ...(j.ProgramArguments ?? []), j.WorkingDirectory].filter(Boolean).join(" ")
+      processType = typeof j.ProcessType === "string" ? j.ProcessType : undefined
     } catch { /* an unreadable plist has no program to grade */ }
-    return { label: path.split("/").pop()!.replace(/\.plist$/, ""), path, program, domain }
+    return { label: path.split("/").pop()!.replace(/\.plist$/, ""), path, program, domain, processType }
   }))
 }
 
@@ -494,8 +549,9 @@ async function readVms(procs: Proc[], vmNames: string[]): Promise<Map<string, { 
 export async function snapshot(services: Service[], { withDoors }: { withDoors: boolean } = { withDoors: false }): Promise<Snapshot> {
   const uid = process.getuid?.() ?? 501
   const docker = process.env.DOCKER_BIN ?? "/opt/homebrew/bin/docker"
-  const [top, list, disabled, plists, doors] = await Promise.all([
+  const [top, pri, list, disabled, plists, doors] = await Promise.all([
     run(["/usr/bin/top", "-l", "1", "-stats", "pid,ppid,mem,command"], {}, 25000),
+    run(["/bin/ps", "-axo", "pid=,pri="]),
     run(["/bin/launchctl", "list"]),
     run(["/bin/launchctl", "print-disabled", `gui/${uid}`]),
     readPlists(),
@@ -521,7 +577,7 @@ export async function snapshot(services: Service[], { withDoors }: { withDoors: 
     containers.set(name, parseContainers(ps.out, stats.out))
   }))
   return {
-    uid, procs, loaded: parseLaunchctlList(list.out), disabled: parseDisabled(disabled.out), plists, systemRunning, vms, containers,
+    uid, procs, pri: parsePri(pri.out), loaded: parseLaunchctlList(list.out), disabled: parseDisabled(disabled.out), plists, systemRunning, vms, containers,
     doors: doors.out.split("\n").map((l) => l.split("\t")[0]).filter(Boolean),
   }
 }
@@ -536,14 +592,15 @@ export function renderTable(rows: Row[], drift: Drift, services: Service[]): str
     const part = rows.filter((r) => r.tier === tier)
     if (!part.length) continue
     out.push("", `${tier.toUpperCase()}  (${part.length})`)
-    out.push(`  ${"NAME".padEnd(34)}${"KIND".padEnd(11)}${"PROFILE".padEnd(9)}${"STATE".padEnd(14)}${"FOOTPRINT".padStart(10)}${"BUDGET".padStart(9)}`)
+    out.push(`  ${"NAME".padEnd(34)}${"KIND".padEnd(11)}${"PROFILE".padEnd(9)}${"STATE".padEnd(14)}${"PRI".padStart(5)}${"FOOTPRINT".padStart(10)}${"BUDGET".padStart(9)}`)
     for (const r of part) {
-      const mark = r.over ? " OVER" : ""
-      out.push(`  ${r.name.padEnd(34)}${r.kind.padEnd(11)}${(r.profile ?? "").padEnd(9)}${r.state.padEnd(14)}${MIB(r.footprint_mib).padStart(10)}${MIB(r.budget_mib || null).padStart(9)}${mark}`)
+      const mark = (r.over ? " OVER" : "") + (r.below_band ? " BELOW-BAND" : "")
+      out.push(`  ${r.name.padEnd(34)}${r.kind.padEnd(11)}${(r.profile ?? "").padEnd(9)}${r.state.padEnd(14)}${String(r.pri ?? "-").padStart(5)}${MIB(r.footprint_mib).padStart(10)}${MIB(r.budget_mib || null).padStart(9)}${mark}`)
     }
     const used = part.reduce((a, r) => a + (r.footprint_mib ?? 0), 0)
-    out.push(`  ${"".padEnd(68)}${MIB(used).padStart(10)}${MIB(part.reduce((a, r) => a + r.budget_mib, 0)).padStart(9)}`)
+    out.push(`  ${"".padEnd(73)}${MIB(used).padStart(10)}${MIB(part.reduce((a, r) => a + r.budget_mib, 0)).padStart(9)}`)
   }
+  out.push("PRI is `ps -o pri=` of the main process: 31 = launchd ProcessType Interactive (a terminal's too), 20 = no ProcessType, lower = Background.")
   const shared = services.filter((s) => s.shared_memory).map((s) => s.name)
   out.push("", "Footprint is the physical footprint (top MEM), summed over a job's process tree; containers by docker stats; a VM by its Virtualization process.")
   if (shared.length) out.push(`${shared.join(", ")}: every process's footprint counts the shared buffers again, so this is the largest process plus the others' private part, each capped at ${PRIVATE_CAP_MIB} MiB (an estimate).`)
