@@ -66,6 +66,7 @@ services:
   - { name: iris-testflight-crashes, repo: iris, kind: launchd, tier: core, label: com.jkrumm.iris-testflight-crashes, memory_mib: 50 }
   - { name: jobrun-canary, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.jobrun-canary, memory_mib: 50 }
   - { name: kuma-door, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.kuma-door, memory_mib: 50 }
+  - { name: linewatch, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-app, door: linewatch, stop: "make -C ~/SourceRoot/linewatch app-stop", note: "native since Issue 1219; health http://127.0.0.1:7731/health; start is launchctl bootstrap of the plist", memory_mib: 130 }
   - { name: linewatch-collector-agent, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-collector-agent, memory_mib: 50 }
   - { name: linewatch-heartbeat, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-heartbeat, memory_mib: 50 }
   - { name: linewatch-watchdog, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-watchdog, memory_mib: 50 }
@@ -104,7 +105,6 @@ services:
   - { name: external-volume-unlock, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.external-volume-unlock, memory_mib: 50, note: "installed by its own target, not make setup (docs/external-ssd.md); 120 s, StartOnMount" }
   - { name: colima-default, repo: dotfiles, kind: vm, tier: core, vm: default, start: "make -C ~/SourceRoot/dotfiles colima-start", stop: "make -C ~/SourceRoot/dotfiles colima-stop", memory_mib: 4608, note: "core until row mini-docker-idle makes the VM start on demand" }
   - { name: colima-teamchat, repo: epos-ai-teamchat-athena, kind: vm, tier: on-demand, vm: teamchat, memory_mib: 4608, note: "kept up by teamchat-vm-watch; no verb until row teamchat-on-demand" }
-  - { name: linewatch, repo: linewatch, kind: compose, tier: core, container: linewatch, project: linewatch, needs: [vm], door: linewatch, start: "make -C ~/SourceRoot/linewatch up", stop: "make -C ~/SourceRoot/linewatch down", memory_mib: 100, note: "start is the repo's deploy; native under row linewatch-native" }
   - { name: rb-api, repo: rb, kind: compose, tier: core, container: rb-api, project: rb, needs: [vm], door: rb, memory_mib: 160, note: "always reachable (owner); no verb: rb's make up/down act on its whole compose project (rb-chromium too); native under row rb-native" }
   - { name: rb-chromium, repo: rb, kind: compose, tier: core, container: rb-chromium, project: rb, needs: [vm], memory_mib: 160, note: "no verb, see rb-api" }
   - { name: brain-web, repo: basalt-ui-obsidian, kind: compose, tier: core, container: brain-web, project: basalt-ui-obsidian, needs: [vm], door: brain, start: "make -C ~/SourceRoot/basalt-ui-obsidian up", stop: "make -C ~/SourceRoot/basalt-ui-obsidian down", memory_mib: 32, note: "nginx on a static dist; Caddy takes it over under row mini-docker-idle" }
