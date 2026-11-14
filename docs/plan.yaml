@@ -1,5 +1,107 @@
 version: 1
 rows:
+  - key: mini-registry
+    issue: 1177
+
+  - key: mini-apps-page
+    checkpoint: spec
+    title: The apps page starts and stops services - tier, state and footprint per service, a wake for a stopped on-demand door, an idle stop
+    after: [mini-registry]
+    facts:
+      why: |-
+        The apps page (docs/remote-dev.md, Dev-server doors) lists every door with live status but cannot start or stop anything, and a door whose app is down answers 502. The registry of row mini-registry knows each service's tier and its start and stop command. The owner wants to open a door and have the app come up, and to see and switch what runs on the mini from one page, so that dev servers and other on-demand services cost nothing while nobody uses them. The program is the Spec of Issue 1177 (section 2).
+      what: |-
+        scripts/caddy-tailnet.sh (the landing page and the generated include), a small local control endpoint as a bun service under launchd with its test (kuma-door/door.ts is the pattern), config/Caddyfile only where the wake route needs it, the registry entries for the endpoint and for the on-demand dev servers, docs/remote-dev.md. Not in scope: any app's own code, and the tiers of services that are not dev servers (their rows follow).
+      change: |-
+        1. The page shows per service its tier, state and footprint against budget (make mini-ps --format json) and a Start or Stop button. 2. The endpoint listens on 127.0.0.1 only and is reached through the wildcard tailnet site block and its ACL, as the page is today. It accepts start, stop and status for a registry name and runs only the registered command: no request value reaches a shell. A change needs POST and a same-origin check. It refuses to stop a core service and logs the caller address and the verb. 3. Wake: a request to a stopped on-demand door reaches the endpoint through Caddy's handle_errors on the upstream's 502, the endpoint starts the service and answers with a page that reloads until the door answers. A manual service gets the page with a Start button, never an automatic start. 4. Idle stop: a jobrun job stops an on-demand service whose door had no request for its idle window (30 minutes by default, a per-service value in the registry), read from Caddy's access log or a counter in the endpoint. 5. Register as on-demand the dev servers that have a .test door and a make target that starts them; name in the ship the doors that have none. The wake is for the owner's browser: leads keep validating against built output and never start a dev server.
+      acceptance: |-
+        With the basalt playground stopped, a plain request to its door starts it and the page loads within a minute; with the idle window shortened for the test it stops again. A request to a manual service's door does not start it. A request for an unknown name, or a verb the registry does not hold, is refused (a test). The ship has screenshots of the page at 1800x1200 and at 390 wide. make check passes and /review is clean.
+
+  - key: linewatch-native
+    repo: linewatch
+    title: Run the linewatch app under launchd on the mini instead of in the Colima VM
+    after: [mini-registry]
+    facts:
+      why: |-
+        The mini's Colima VM held 4 to 6 GiB of host memory on 2026-11-14 for containers that use 0.6 GiB, and a vz VM never returns memory while it runs (Lima attaches the balloon device and never drives it). The VM can only be off by default once nothing always-on needs it. linewatch is one of three always-on personal containers there, at about 50 MiB, and its collector and watchdog already run natively under launchd (com.jkrumm.linewatch-collector-agent, com.jkrumm.linewatch-watchdog). The program is the Spec of Issue 1177 (section 3).
+      what: |-
+        docker-compose.yml, Dockerfile, the Makefile (deploy, verify, up, down), a launchd plist with its launch script (collector/run-agent.sh is the pattern), the data in the named volume linewatch-data, AGENTS.md and docs. The registry file at the repo root in the format the dotfiles row mini-registry documented.
+      change: |-
+        The app runs under launchd on 127.0.0.1:7731, the port its Caddy door already proxies, with secrets through secrets-run as the collector has them. Move the data out of the Docker volume to a host directory: stop the container, copy, compare row counts and the newest sample time, start the native service. Keep the volume untouched for seven days as the rollback and say in the ship how to go back. Nothing on the mini starts the container afterwards; the compose file may stay for local use. Register the service as core in the repo's registry file.
+      acceptance: |-
+        The door answers with the container stopped. Row counts and the newest sample time are equal before and after the move, stated in the ship. The heartbeat and watchdog jobs stay green for an hour. make check passes and the repo's verify is green.
+
+  - key: rb-native
+    issue: 1184
+
+  - key: mini-docker-idle
+    title: Docker off by default on the mini - brain-web from Caddy, dev databases as a profile, one 2 GiB VM that runs only while a service needs it
+    after: [linewatch-native, rb-native]
+    after_needs: shipped
+    facts:
+      why: |-
+        A vz VM never returns memory while it runs: the Colima VM's host footprint climbs to its configured size and stays (5.6 GiB average on 2026-11-14 at a 6 GiB cap, for containers using 0.6 GiB). Only a stop returns it. With linewatch and rb native (the rows before this one), what is left in the VM is brain-web, the dev databases and the company's work services, none of which has to run all day. The program is the Spec of Issue 1177 (section 3); the container runtime is its open choice 2, so read that verdict first (Colima unless it says otherwise).
+      what: |-
+        config/Caddyfile (the brain door), colima/colima-start.sh and the homebrew.mxcl.colima job, the Makefile's COLIMA_MEMORY for the mini and the colima targets, the registry (needs vm, the dev-db profile), an idle check under jobrun, the devhost-health checks that expect Colima up, AGENTS.md, docs/remote-dev.md, docs/devhost-health.md, docs/brain-access.md. Other repos' compose files are theirs: file a signal where one should change.
+      change: |-
+        1. brain-web is nginx serving the static dist of ~/SourceRoot/basalt-ui-obsidian (apps/demo/dist, rebuilt every five minutes by com.jkrumm.brain-web-refresh). The brain door serves that directory with Caddy's file_server and reproduces what the repo's nginx.conf does (fallbacks, headers); the container is brought down through its repo's make target. 2. The dev databases of ~/SourceRoot/vps (mariadb is the only one running, about 100 MiB) become the manual profile dev-db: stopped now, started by make mini-profile NAME=dev-db UP=1. 3. The VM no longer starts at boot. make mini-up of a service with needs vm starts it first; an idle check stops it once no registered service that needs it has been up for 15 minutes. 4. COLIMA_MEMORY on the mini 4 to 2. The revert signal is the one docs/devhost-health.md names: a guest OOM kill or available under 1 GB, then 3. 5. The health checks treat a VM that is stopped because nothing needs it as healthy, and a VM that is down while a registered service needs it as a failure.
+      acceptance: |-
+        With no registered service that needs the VM up, no com.apple.Virtualization.VirtualMachine process of the default profile exists for 30 minutes and make doctor is green. The brain door answers from Caddy with the same page as before (status and a content hash of the index, and the iPhone path of docs/brain-access.md). make mini-up of one compose service brings the VM and the service up; the ship states the seconds it took. launchctl shows the Colima job does not start the VM at load. make check passes and /review is clean.
+
+  - key: mini-work-profile
+    title: The company's work services on the mini as one profile - down by default, one verb up and down
+    after: [mini-docker-idle]
+    facts:
+      why: |-
+        The company dashboard, the VPN container with its watcher, the token minters and the deploy gates run on the mini all day and are used a few times on a workday. They keep the VM up and hold launchd jobs that poll every 5 to 10 minutes. The owner wants them off unless he works with them. The program is the Spec of Issue 1177 (section 4). The teamchat sandbox is not part of this profile: it is on-demand and has its own row in its repo.
+      what: |-
+        The registry entries of the com.iu.* jobs and of the dashboard and VPN compose projects, the profile verb, docs/architecture.md and docs/remote-dev.md. The jobs and compose files belong to the company repos under ~/IuRoot: use their existing make targets and launchd labels, change none of their files, and file a signal to the owning repo where a stop target is missing.
+      change: |-
+        The profile work holds the dashboard, the VPN container and its watcher, the token minters, the deploy gates and the stack dashboard. make mini-profile NAME=work UP=0 stops the containers and boots the jobs out, and disables them so a boot does not bring them back; UP=1 enables and starts them in order (VM, VPN, minters, dashboard). A stale single sign-on session on the way up becomes an Errand through the existing ask-human path, not a silent failure. No page fires because the profile is down: list the monitors that watch these services in the ship, and file one signal to the repo that owns them if they cannot tell a planned stop from an outage. The profile is down after this row ships.
+      acceptance: |-
+        After UP=0 no process or container of the profile is left and, with nothing else needing it, the VM stops within its idle window. After UP=1 the dashboard door answers 200 given a valid session, and a stale session produces the Errand. launchctl print-disabled lists the profile's jobs while it is down. No monitor paged during a down period of an hour. make check passes and /review is clean.
+
+  - key: teamchat-on-demand
+    repo: epos-ai-teamchat-athena
+    title: The sandbox runs in the mini's one VM and only while a run needs it
+    after: [mini-docker-idle]
+    facts:
+      why: |-
+        The sandbox has its own Colima profile on the mini: a 4 GiB VM that held 3.9 GiB of host memory on 2026-11-14 for three containers using 0.15 GiB, idle most of the day. A vz VM never returns memory while it runs; only a stop does. The owner decided against the separate VM (his annotation on the Spec of Issue 1050: the isolation costs more than it brings). The program is the Spec of Issue 1177 (section 4).
+      what: |-
+        The sandbox compose project (sandbox/), the scripts that keep the profile up (scripts/teamchat-vm-watch.sh, vm_watch.py, the autostart script) and their launchd jobs, the Makefile, the docs, and a registry file at the repo root in the format the dotfiles row mini-registry documented. The api, the broker and the funnel stay as they are.
+      change: |-
+        1. The sandbox compose project runs in the mini's default Colima profile. Name in the ship what it needs mounted; the VM's mounts are written by dotfiles (colima/apply-mounts.sh), so file a signal there for a mount. 2. On demand: the api starts the sandbox when a run needs it, through make -C ~/SourceRoot/dotfiles mini-up NAME=<the sandbox's registry name>, which starts the VM first; the run waits for readiness and the user sees that the sandbox is starting. The api stops it through make mini-down after 30 minutes without a run. 3. The watcher no longer keeps a VM up. The teamchat profile is stopped; say which of its volumes are caches and which hold state, move the state, and delete the profile seven days after the move if nothing was rolled back. 4. Lower the agent container's memory limit from 3 GiB to what it needs (it used 84 to 294 MiB when measured), so the 2 GiB VM holds it beside the dashboard.
+      acceptance: |-
+        A message that needs the sandbox while it is down gets its answer; the ship states the extra seconds. Thirty minutes after the last run the sandbox is down, and the VM too when nothing else needs it. colima list shows no running teamchat profile. The repo's own check and verify are green.
+
+  - key: browser-shared
+    title: One shared headless Chrome for UI checks - started on demand, one context per agent, stopped when idle
+    after: [mini-registry]
+    facts:
+      why: |-
+        Every browser subagent launches its own chrome-devtools-mcp and its own Chrome: about 135 MiB for the server, its npm wrapper and its watchdog, and 0.35 to 0.45 GiB for Chrome before a page loads, per agent. The MCP's 30 tool schemas cost 5,914 tokens on every request against about 22 for a CLI (measured by Octomind on 2026-10-02 with chrome-devtools-mcp 1.10.1). chrome-devtools-mcp has no idle timeout and leaves Chrome trees behind when its server is killed (its issues 3427 and 2621). The owner judges UI at 1800x1200. The program is the Spec of Issue 1177 (section 5); the research is agw run 01a1daac-bf88-741f-b84d-93f1af33193d (read it with agw run wait <id> --format json).
+      what: |-
+        agents/browser.md, skills/browse/SKILL.md, a supervisor script for the shared Chrome with its test, its registry entry (on-demand, idle 15 minutes), the opencode parity in config/opencode/opencode.json if it applies, AGENTS.md section MCP servers, docs/global-reference.md. Not in scope: basalt-ui's own harness (its layout and quality suites start their own Chrome inside test slots) and the research Chrome on port 9222.
+      change: |-
+        1. One headless Chrome with its own --user-data-dir under ~/.local/share and remote debugging on 127.0.0.1 at a registered port. An ensure command starts it when the browse path needs it. 2. The browser agent drives it with playwright-cli: attach to the CDP endpoint, one isolated context per agent session, viewport 1800x1200 set for that context and checked in the first screenshot (the research found that Playwright's CDP path passes no context options when it isolates, so verify the size instead of trusting the flag). 3. chrome-devtools-mcp stays in the agent's frontmatter for console, network and performance work, attached with --browserUrl instead of launching its own Chrome. 4. The supervisor closes a context idle for 15 minutes and stops Chrome when none is left; a crashed Chrome is restarted by the next ensure. 5. Load the installed versions' --help and docs before relying on a flag (research-first): the research rates the playwright-cli and page-routing flags medium, and their names changed between versions. If playwright-cli cannot attach with an isolated context, use Playwright MCP in HTTP mode with --cdp-endpoint and --isolated and say so. 6. The debugging port drives the browser for anything on the machine that can reach it: bind it to 127.0.0.1 and never sign that profile in anywhere.
+      acceptance: |-
+        Two browser agents in parallel use one Chrome tree (ps), a cookie set by one is absent in the other, and both screenshots are 1800x1200. Twenty minutes after the last use no Chrome of that profile runs. The ship states the tool-schema tokens of the browse path before and after. make check passes and /review is clean.
+
+  - key: pg-buffers
+    kind: chore
+    title: Postgres shared_buffers 2 GB to 512 MB while weatherorb's jobs are disabled
+    after: [mini-registry]
+    facts:
+      why: |-
+        shared_buffers was sized for weatherorb's nearest-spot p95 (docs/postgres.md, docs/devhost-health.md section Memory budget). weatherorb's nine launchd jobs are disabled while V2 is built, and what is left is small: the databases shared (1.1 GB), agent_workflows (1.4 GB) and athena (115 MB) with about 20 connections. The buffers hold about 2 GiB that would come back as about 1.5 GiB. This is open choice 3 of the Spec of Issue 1177. Check its verdict before the change: if it keeps 2 GB, change nothing and close the Issue saying so.
+      what: |-
+        config/postgres/cluster.yaml (shared_buffers, and effective_cache_size if it should follow), docs/postgres.md, the table in docs/devhost-health.md. Applied with make pg-apply and one restart.
+      change: |-
+        shared_buffers 2GB to 512MB. The restart follows the stop-and-start pattern of scripts/pg-cutover.sh: detached, the factory's queue drained first and set back to run afterwards, the factory, agent-workflows and argo checked for a live connection after it. Write the revert signal into docs/postgres.md: weatherorb V2 states its own need when it serves again, and a rise in the factory API's latency goes back to 1 GB first.
+      acceptance: |-
+        SHOW shared_buffers answers 512MB. factory health get and the agent-workflows health are green after the restart and the queue state is run. The ship states the Postgres tree's footprint before and after, counted as the largest process plus the private rest, since every process's footprint counts the shared buffers again. make check passes.
+
   - key: core-restart-audit
     kind: docs
     title: Core restart audit - why hc-resume saw 18 core restarts since 2026-10-31, and whether recovery survives an app-triggered update
