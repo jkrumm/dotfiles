@@ -8,9 +8,37 @@ The volume can be absent, locked or half-mounted at boot or after a USB hiccup, 
 dependent gates itself**. The contract is path-agnostic: the volume's name is in `config/external-volume.json`, its mount point is read
 from `diskutil` at run time and appears in no tracked file. What the volume holds and why: `docs/storage.md`; its budget: `docs/disk.md`.
 
-**As attached (2026-11-14):** the drive is mounted, unlocked, APFS with FileVault, and weatherorb already writes to it, without the gate.
-`attached` in the config stays `false` until the plan row `ssd-adopt` writes the sentinel, installs the unlock job and turns the checks
-on. While it is `false` the gate, the check and the unlock job are silent no-ops.
+## As attached (2026-11-14, issue 1238)
+
+Read-only first, measured on the mini (`diskutil info`, `diskutil apfs list`, `du -xd1`):
+
+| Fact | Value |
+|-|-|
+| Volume | `EXT`, one APFS volume in its own container on a GPT USB disk (EFI + container), case-insensitive, owners disabled, SMART verified |
+| Encryption | FileVault (APFS native), one crypto user, hint `EXT SSD` |
+| Size | 931 GiB container; 526 GiB used, 406 GiB free (57 %) at 20:20 CET |
+| Top level (GiB) | `Bilder` 168.7, `weatherorb` 166.5 (weatherorb's, with its own marker `.weatherorb-data-root`), `Videos` 110.4, `usb-rescue` 11.2, `Steuer` 7.4, `mirror` 3.4 (the `ext-mirror` row has started it), `Dokumente` ~0, Spotlight and system dirs ~0.5 |
+| Not ours | `Bilder`, `Videos`, `Steuer`, `Dokumente`, `usb-rescue` are the owner's folders; they move to the HomeLab or become `mirror/fuji` in other rows. The end state is `weatherorb/` and `mirror/` only |
+| What unlocks it | The **login keychain**: it holds an "Encrypted Volume Password" item for the volume (created 2023-05), which macOS uses at login. There is no 1Password item for it that the secrets cache knows, so `passphraseRef` stays `null` and the unlock job is a no-op when the volume is locked (`skipped: passphrase ref not set`) |
+
+Changes made on the drive: the sentinel `.volume-gate`, and Spotlight turned off (`mdutil -i off`, which updates `.Spotlight-V100`). The
+Time Machine exclusion was already set (`tmutil isexcluded` says `[Excluded]`; no Time Machine destination exists). Nothing was moved,
+renamed or deleted. `attached` is `true`.
+
+**An unmount locks it.** `diskutil unmount EXT` on this FileVault volume leaves it locked, and `diskutil mount` then refuses ("encrypted
+and locked APFS Volume; use `diskutil apfs unlockVolume`"). Only an unlock brings it back, which is the unlock job's work and needs the
+passphrase from a ref, or the owner's hand (`ssh -t mini 'diskutil apfs unlockVolume <device>'`, typing it). Reading the keychain item
+with `security find-generic-password -w` from an agent blocks on an ACL dialog nobody sees. Proof on the real drive, 2026-11-14:
+
+| Step | Gate | `make external-volume-check` |
+|-|-|-|
+| mounted and unlocked | `present` | `external volume present`, rc 0 |
+| `diskutil unmount EXT` (no job open on it; weatherorb's are unloaded) | `locked`, a job skips with one line | WARN, rc 2 |
+| `diskutil mount EXT` | refused, still `locked` | WARN, rc 2 |
+| unlocked by the owner | `present` | OK, rc 0 |
+
+Open: the passphrase ref. Until a 1Password item holds it and `headless.refs` lists it (then `make secrets-reseal-request`), a lock or a
+reboot that the login keychain does not cover needs the owner. Do not repeat the unmount proof until then.
 
 ## Rules
 
@@ -59,8 +87,11 @@ counts the listed ones. Steps for a new program:
 4. Proof is the job's own log: no `skipped: volume unreadable` after its next run. A probe from a core terminal proves nothing: `Herdr Core.app`
    holds Full Disk Access (docs/tcc.md).
 
-Listed today: `com.jkrumm.devhost-health` (the check reads the sentinel). weatherorb's jobs and the mirror job join when `ssd-adopt` and
-`ext-mirror` put them behind the gate.
+Listed today: `com.jkrumm.devhost-health` (the check reads the sentinel) and weatherorb's `serve`, `watchdog`, `worker-ingest` and
+`worker-round` (their `data/`, `products/` and `var/` entries are symlinks onto the volume). weatherorb's jobs are unloaded (V1 frozen),
+so no grant could be probed for them; the first run after a revival raises the prompt. The heartbeat's grant is probed by its first run
+after this change merges (its log, `~/Library/Logs/devhost-health.log`, shows `external volume present` or `unreadable`). The mirror job
+joins when `ext-mirror` puts it behind the gate; weatherorb was asked by signal to put its jobs behind it.
 
 ## Keep off the volume
 
@@ -87,6 +118,7 @@ the owner's call), `vps_clickstack-ch-data` 9 GiB (likely waste), and outside Do
 
 ## Proving absent and locked tolerance on the real drive
 
-In a window where no dependent job runs, never by reboot or cable pull: `diskutil unmount` (absent: the gate skips, `make doctor` WARNs),
-`diskutil apfs lockVolume` then wait for the unlock job (locked, then unlocked again), `diskutil mount`. The hermetic proof is
-`make volume-gate-test` (a stub `diskutil`, a temp directory as the stand-in volume).
+In a window where no dependent job runs, never by reboot or cable pull: `diskutil unmount` (the volume reads `locked`: the gate skips,
+`make doctor` WARNs), then the unlock job re-unlocks it within 120 s, **only once `passphraseRef` is set**; a plain `diskutil mount` does
+not work on this drive (§As attached). The hermetic proof is `make volume-gate-test` (a stub `diskutil`, a temp directory as the
+stand-in volume).

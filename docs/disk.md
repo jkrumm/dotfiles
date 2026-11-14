@@ -17,7 +17,7 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | ↳ volume `vps_clickstack-ch-data` | 9 | local ClickStack telemetry, no container | ask owner (likely waste) |
 | `~/Library` | 36 | Chrome profile 6.3, Caches ~14, Notion, Teams, Slack, MacWhisper | needed (app state) |
 | `~/SourceRoot` other repos | 30 | node_modules (argo 2.9, basalt-ui 1.9, …), `shutterflow/target` 8.5 (active Rust build) | needed. Regenerable |
-| `EXT` volume (external USB SSD, 931 GiB, 526 used, 406 free, 2026-11-14) | 0 internal | `weatherorb/` (weatherorb's working data), later `mirror/` (the nightly pulled HomeLab copy) | **external**. Not part of the 926 GiB; it is on the internal budget's relief side. Read and written only behind the volume gate: `docs/external-ssd.md` |
+| `EXT` volume (external USB SSD, APFS + FileVault, 931 GiB, 526 used, 406 free, measured 2026-11-14 by issue 1238: `Bilder` 169, `weatherorb` 167, `Videos` 110, `usb-rescue` 11, `Steuer` 7, `mirror` 3) | 0 internal | `weatherorb/` (weatherorb's working data), `mirror/` (the nightly pulled HomeLab copy, row `ext-mirror`); the other top-level folders are the owner's and leave in rows `storage-consolidate` and `ext-mirror` | **external**. Not part of the 926 GiB; it is on the internal budget's relief side. Read and written only behind the volume gate: `docs/external-ssd.md` |
 | `~/.local` | 25 | usage-tracker 3.8, opencode 3.7, fnm 3.3 (16 node versions), IU `prometheus-scripts` state backups 6.8 (hourly 48 h + daily 30 d, bounded by `com.iu.prometheus-state-backup`) | needed |
 | `/private/var` | 20 | `$TMPDIR` 17 (Chrome code-sign clones, test-suite tmp dirs), system | swept |
 | `~/Pictures/Photos Library` | 19 | personal photos | ask owner |
