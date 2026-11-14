@@ -2475,9 +2475,16 @@ swapout-rate-test:
 # on PATH, DEVHOST_COMPONENTS narrows the composite. Runs on either machine.
 .PHONY: devhost-heartbeat-test
 devhost-heartbeat-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/devhost-health-check.sh $(DOTFILES_DIR)/scripts/lib/devhost-forensics.sh $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/devhost-health-check.sh $(DOTFILES_DIR)/scripts/lib/devhost-forensics.sh $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh $(DOTFILES_DIR)/scripts/recovery-check.sh $(DOTFILES_DIR)/scripts/recovery-check.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/recovery-check.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+
+# After a boot: how many kept Claude terminals are resumable, running claude, waiting, skipped (read-only; no core, no
+# measurement). `make recovery-check ARGS=--json` for the per-terminal rows. docs/devhost-health.md §Recovery after a boot.
+.PHONY: recovery-check
+recovery-check: ## Read-only: resumable vs running-claude terminals, with hc-resume's last verdict per terminal (ARGS=--json)
+	@/bin/bash $(DOTFILES_DIR)/scripts/recovery-check.sh $(ARGS)
 
 # Hermetic suites for the scripts whose logic guards real invariants: the brew upgrade invariants, the drift
 # classification, the ruleset tiers, the secrets-rotate rollback ordering and the opbackup run/skip gating.
