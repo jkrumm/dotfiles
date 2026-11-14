@@ -80,9 +80,23 @@ brew_pg_label() { # the launchd label brew gave postgresql@18 (sh.brew.* since H
   brew_service_label postgresql@18
 }
 
+# Never `launchctl kickstart -k`: its SIGTERM is Postgres's smart shutdown, which waits for every
+# client to leave; launchd then starts a second postmaster beside it ("pre-existing shared memory
+# block is still in use") and at last SIGKILLs the first, so the next start runs crash recovery
+# (drill of 2026-11-14). A fast shutdown ends the sessions and checkpoints cleanly; brew's plist
+# restarts only on a crash (KeepAlive Crashed), so the start is an explicit kickstart.
 restart_bare() {
-  log "restart the bare server ($(brew_pg_label))"
-  launchctl kickstart -k "$UID_GUI/$(brew_pg_label)"
+  local label i
+  label=$(brew_pg_label)
+  log "restart the bare server ($label): fast shutdown, then start"
+  if "$PGBIN/pg_ctl" -D "$BARE_DATA" status >/dev/null 2>&1; then
+    "$PGBIN/pg_ctl" -D "$BARE_DATA" -m fast -w -t 120 stop >/dev/null || return 1
+  fi
+  for ((i = 0; i < 30; i++)); do
+    launchctl print "$UID_GUI/$label" 2>/dev/null | grep -q 'state = running' || break
+    sleep 1
+  done
+  launchctl kickstart "$UID_GUI/$label"
 }
 
 # --------------------------------------------------------------- alias
@@ -217,8 +231,9 @@ undrain() {
   [ "$DRAINED" = 1 ] || return 0
   factory queue set run >/dev/null 2>&1 && { DRAINED=0; log "queue: run"; } || log "WARN: could not set the queue back to run"
 }
-trap 'rollback' ERR
-trap 'rollback; exit 1' INT TERM
+# Exit explicitly: a failure inside `a || { ...; false; }` runs the ERR trap but does not stop a
+# set -e script (drill of 2026-11-14 rolled back, then went on as if switched).
+trap 'rollback; log "FAILED after rollback (above)"; exit 1' ERR INT TERM
 
 log "preflight"
 [ "$(docker inspect -f '{{.State.Status}}' postgres)" = running ] || die "the Docker container is not running; nothing to cut over"
