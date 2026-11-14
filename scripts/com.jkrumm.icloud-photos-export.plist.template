@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.icloud-photos-export</string>
+  <!-- Nightly archive of the mini's iCloud Photos library to the HomeLab (Bilder/iCloud/<year>/<month>/, over
+       `hl`): new and changed assets only, nothing ever deleted. See scripts/icloud-photos-export.py and
+       docs/storage.md §iCloud Photos export. The program is plain python3: the osxphotos steps that read the
+       library run through `hc exec`, i.e. under Herdr Core.app's Full Disk Access, so this job holds no TCC grant. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.icloud-photos-export</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--timeout</string><string>7200</string>
+    <string>--lock</string><string>icloud-photos-export</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/icloud-photos-export.py</string>
+  </array>
+  <!-- --timeout 7200: the script stops starting batches after 6000 s itself; every osxphotos step is bounded
+       by `hc exec --timeout 600`. A held lock skips a run that overlaps a long one. -->
+  <!-- jobrun is a bun script and launchd's PATH is minimal: bun's dir, ~/.local/bin (hc, hl, osxphotos) and
+       Homebrew (python3) must be on it. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- 01:30, two hours before restic (03:30) so the snapshot has the night's photos; calendar interval, so a fire
+       missed asleep runs on wake. Not RunAtLoad: nothing here belongs on the boot path. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>1</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <key>Nice</key><integer>10</integer>
+  <key>ProcessType</key><string>Background</string>
+  <!-- ~/Library/Logs, rotated by log-rotate (which derives it from this plist). -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/icloud-photos-export.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/icloud-photos-export.log</string>
+</dict>
+</plist>
