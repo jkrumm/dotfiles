@@ -1322,10 +1322,11 @@ check_jobs() {
   esac
 }
 
-# Spotlight fenced (scripts/spotlight-fence.sh, docs/spotlight.md): the file index of the Data volume is off. WARN-only
-# (exit 2, never DOWN): it is CPU, not liveness, and a macOS update or a volume re-add can switch it on.
+# Spotlight indexing is off on every volume (scripts/spotlight-check.sh, docs/spotlight.md): FAIL when a volume has it on
+# again, which a macOS update can do. The owner switched it off on purpose (2026-11-14) because mds and its workers took CPU
+# from tests; the undo is in the docs.
 check_spotlight() {
-  /bin/bash "$(dirname "${BASH_SOURCE[0]}")/spotlight-fence.sh" check
+  /bin/bash "$(dirname "${BASH_SOURCE[0]}")/spotlight-check.sh" check
 }
 
 # The service registry (config/mini/services.yaml, docs/mini-registry.md): a loaded job the registry does not know and a

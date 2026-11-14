@@ -1,67 +1,78 @@
 # Spotlight on the dev host
 
-Issue 1273. The mini's Data volume has its Spotlight **file index switched off** (`make spotlight-fence`); the heartbeat's
-`spotlight` component (WARN-only) says when it is on again. This page is what was measured and why it is the whole
-volume and not a list of directories.
+Issue 1273. **Spotlight indexing is off on every volume of the mini**, by the owner's decision (2026-11-14, `sudo mdutil -a -i off`
+from the MacBook), not per directory. The heartbeat's `spotlight` component (`scripts/spotlight-check.sh check`) **fails** when
+`mdutil -sa` shows a volume with indexing on again, which a macOS update can do, or when `mdutil` gives no readable state.
 
-## What the filing assumed, and what is true (macOS 26.7.2, 2026-11-14)
+**Undo:** `sudo mdutil -a -i on` (the index rebuilds, which costs CPU for hours). **Fix after an update turned it on:**
+`sudo mdutil -a -i off`, a step that needs the owner's sudo, so an Errand with that command, never a sudoers rule.
+
+## Do not rely on `mdfind` or `mdls` on the mini
+
+They return nothing (or stale results) with the index off. Checked with `rg` over `~/SourceRoot` and `~/IuRoot` (2026-11-14): no
+script, skill, hook or service of the owner's repos calls them. Two mentions remain, both harmless: `tinycast-extensions`
+documents that Spotlight is disabled and does not use it, and `epos-tool-athena/bash/start-frontends.sh` tries `mdfind` as a
+fallback after the other lookups and treats an empty answer as "not found". An agent finds files with `rg`, `fd` or `ls` in a
+named directory, never by Spotlight.
+
+## What the filing assumed, and what was true (macOS 26.7.2)
 
 Probes: a file with a unique token per case, `mdfind -name` until it showed up (seconds) or not at all.
 
 | Case | Indexed |
 |-|-|
 | plain directory under `~/tmp` | yes |
-| directory named `x.noindex` | **no** — the name is honoured |
-| directory holding a `.metadata_never_index` file | **yes** — the marker is not honoured, nested or not |
-| dot-directory (`.dot`) | no |
-| `~/SourceRoot/…`, `~/IuRoot/…` | **no** — never indexed |
-| `.claude/worktrees`, `.software-factory/releases`, `.cache`, `.claude` | no (dot-directories, or under SourceRoot) |
+| directory named `x.noindex` | **no**, the name is honoured |
+| directory holding a `.metadata_never_index` file | **yes**, the marker is not honoured, nested or not |
+| dot-directory | no |
+| `~/SourceRoot/…`, `~/IuRoot/…` | **no**, never indexed |
+| `.claude/worktrees`, `.software-factory/releases`, `.cache`, `.claude` | no |
 
-So the worktrees, `node_modules` under SourceRoot and the factory releases were never what Spotlight indexed. What it indexes
-is everything else that churns: `~/orb/data` (1 046 changed files in 30 min), `~/cache/weatherorb`, `~/kiri-trial-dl`,
-`~/tmp`, `~/go`, `~/Library`. A per-directory fence would be a `*.noindex` rename of other repos' data directories (the
-`rb` repo's `~/.rb/data.noindex` already follows it) or an entry in the Search Privacy list, which is root-only
-(`mdutil -P` reads it as root) or a System Settings click, and neither survives a new directory by itself.
+So the worktrees, the factory releases and `node_modules` under SourceRoot were never what Spotlight indexed. It indexed
+what else churns: `~/orb/data` (1 046 changed files in 30 min), `~/cache/weatherorb`, `~/kiri-trial-dl`, `~/tmp`, `~/go`,
+`~/Library`. A per-directory fence is a `*.noindex` rename of other repos' data or a root-only Search Privacy entry;
+neither survives a new directory by itself, which is why the volume-wide switch is the right answer here.
 
-## What it costs
+## The measurement
 
-CPU as a share of one core, from the accumulated CPU time of each daemon over a window (`make spotlight-load SECS=300`):
+CPU as a share of one core, from the accumulated CPU time of each daemon over the same 300 s window (`make spotlight-load
+SECS=300`). The numbers swing by a factor of ten between windows, so only windows at a similar load are compared.
 
-| Window | load avg | fseventsd | mds + mds_stores | corespotlightd |
-|-|-|-|-|-|
-| 21:55, 60 s | 21 | 5 % | 8 % | 19 % |
-| 21:58, 60 s | 15 | 21 % | 14 % | 0 % |
-| 21:58, 300 s | 11 | 11 % | 5 % | 4 % |
-| 22:04, 300 s (control: nothing changed) | 10 | 15 % | 9 % | 5 % |
-| owner's reading, 21:50 | 48 | 17-31 % | ~10 % | 45 % |
+| 300 s window | load avg | mds_stores | mds | corespotlightd | fseventsd |
+|-|-|-|-|-|-|
+| 21:58, indexing on | 11 | 2.2 % | 2.7 % | 4.4 % | 11.0 % |
+| 22:04, indexing on (control) | 10 | 3.5 % | 5.2 % | 4.8 % | 14.7 % |
+| 22:16, indexing **off** | 10 | 0 | 3.2 % | 4.3 % | 8.9 % |
 
-The numbers swing by a factor of ten between windows, so one reading proves nothing: a before/after needs the same
-300 s window on both sides, and the control row shows the noise (the two 300 s windows differ by 4 points in `mds`).
-Steady state, the file index (mds, mds_stores, the mdworker_shared helpers) is 5-14 % of a core, not a core.
+At the load the owner measured at (48, a 60 s window at 21:50: corespotlightd 45 %, fseventsd 17-31 %, mds about 10 %, ten
+`mdworker_shared`) the daemons were far above these; shorter 60 s windows at load 15-21 read corespotlightd 0-19 %, fseventsd
+5-21 %, mds + mds_stores 8-14 %.
 
-## What was tried and cannot be fenced
+What the switch bought: `mds_stores` and the `mdworker_shared` helpers are gone, `mds` is down to a residue. That is about
+**3-6 % of a core** at load 10, not a core, plus the import bursts of the helpers when files change under load. What it did
+not touch: `corespotlightd` (4 % here, 45 % at the owner's peak) and `fseventsd`.
 
-- **`corespotlightd`** (the 45 % peak): its load is queries from `spotlightknowledged.updater` (pid in the log's `pid:`
-  field, about 84 searches a minute, "Processed 0 items"), not indexing of files. `launchctl disable
-  gui/<uid>/com.apple.spotlightknowledged.updater` is recorded but does not hold: launchd starts it again over Mach IPC (`runs`
-  went to 6), and `launchctl bootout` is refused by SIP (error 150). Left alone, the disable was reverted.
-- **`fseventsd`**: it serves every watcher on the host (agents, dev servers, Spotlight itself); the only lever is the daily
-  restart that already exists (`com.jkrumm.fseventsd-watch`). A `.fseventsd/no_log` file at the volume root would stop the
-  on-disk history, but it is root-only and its gain was not measurable here, so it is not done.
-- The Search Privacy list: root-only, one entry per directory, and invisible to the owner as a file in git.
+## `corespotlightd`
 
-## What is done
+Its load is queries, not file indexing: `spotlightknowledged.updater` (the Spotlight Knowledge embedding job) asks it about 84
+times a minute and processes 0 items. It cannot be fenced. `launchctl disable gui/<uid>/com.apple.spotlightknowledged.updater`
+is recorded but does not hold (launchd starts it again over Mach IPC, `runs` rose to 6), and `launchctl bootout` is refused by
+SIP (error 150). The disable was reverted. Nothing to do.
 
-`make spotlight-fence` runs `sudo -n mdutil -i off /System/Volumes/Data`, allowed by one sudoers rule
-(`scripts/sudoers.d/spotlight-index`, installed once by `make spotlight-sudoers`, which the owner runs through ask-human; the
-mini's sudo password is MacBook-only). `make setup` converges it; without the rule it says so and carries on.
-`make spotlight-check` is the read-only state.
+## `fseventsd`: who it serves under load
 
-**What the owner loses:** Spotlight, Finder and `mdfind` search of files on the mini. Nothing on the mini calls them (no
-script, skill or hook uses `mdfind`), the MacBook's Spotlight is a different machine, and CoreSpotlight (app items, Photos
-search) is a separate store that this does not touch. The external SSD already has indexing off (`docs/external-ssd.md`).
+It is not Spotlight's. `log show --predicate 'process == "fseventsd"'` records each client registration (`fsevent_add_client … for
+pid N`, no path): 50 registrations in 30 min, the top seven pids all `claude` sessions with 5-6 streams each (36 sessions were
+running), the rest short-lived processes already gone. Claude Code watches its directory tree, so every session is a client of
+every event under its checkout.
 
-**Rollback:** `sudo mdutil -i on /System/Volumes/Data`, then remove `/etc/sudoers.d/spotlight-index`.
+The event volume is the other factor: in a 3-minute window 3 272 files under `~/SourceRoot` changed (without `node_modules`):
+2 019 in one weatherorb worktree, 980 in one argo worktree, about 100 in all the rest. These are source files rewritten across
+a whole tree (a branch switch, a formatter or a generator run), which is agents' ordinary work. Each event is delivered to every
+client watching a parent directory.
 
-**New data directories** need no step while the index is off. If it is ever turned on again (the WARN says so), a churning data
-directory named `*.noindex` is the one per-directory form macOS honours.
+Is anything worth doing? No. The three levers are all poor: (1) stopping clients means stopping the agents' file watching;
+(2) a `.fseventsd/no_log` file at the volume root stops the on-disk event history, is root-only, and would not reduce the live
+delivery that drives the CPU; its gain could not be measured here; (3) the daily `com.jkrumm.fseventsd-watch` restart already
+exists for the leak case. At load 10 it costs 9-15 % of a core; the 40 % peaks come with the load, not before it. To look again
+when it peaks: `make spotlight-load SECS=60` and the `log show` line above name the same daemons and the registrations.
