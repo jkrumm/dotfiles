@@ -153,6 +153,8 @@ ATHENA_STOPPED=0
 DOCKER_STOPPED=0
 SWITCHED=0
 ALIAS=0
+SOURCE_READONLY=0
+docker_su() { docker exec postgres psql -U "$(docker_user)" -d postgres -At "$@"; }
 COPIED=()
 DONE=0
 
@@ -210,6 +212,11 @@ rollback() {
     docker start postgres
     for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' postgres)" = healthy ] && break; sleep 2; done
     DOCKER_STOPPED=0
+  fi
+  if [ "$SOURCE_READONLY" = 1 ]; then
+    log "make the Docker databases writable again"
+    for db in "${DOCKER_DBS[@]}"; do docker_su -c "ALTER DATABASE \"$db\" RESET default_transaction_read_only"; done
+    SOURCE_READONLY=0
   fi
   if [ "$ATHENA_STOPPED" = 1 ] && "$PGBIN/pg_ctl" -D "$ATHENA_DATA" status >/dev/null 2>&1; then
     # the read-only copy instance, or one still in a smart shutdown, holds the data dir;
@@ -284,9 +291,13 @@ fi
 
 if [ "$VERB" = cutover ]; then
   # A client outside the stopped jobs (an agw CLI call) would write after the copy's snapshot.
-  log "end the remaining client sessions on the Docker server"
-  docker exec postgres psql -U "$(docker_user)" -d postgres -Atc \
-    "SELECT datname, usename, pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()"
+  # Writers outside the stopped jobs exist (the second cutover attempt: lead sessions' hook events
+  # moved two factory sequences mid-copy, and their rows would have been lost). Make the source
+  # read-only, then end every session, so a stray write fails instead of vanishing.
+  log "make the Docker databases read-only and end their sessions"
+  SOURCE_READONLY=1
+  for db in "${DOCKER_DBS[@]}"; do docker_su -c "ALTER DATABASE \"$db\" SET default_transaction_read_only = on"; done
+  docker_su -c "SELECT datname, usename, pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()"
   # A full pg-apply before the cutover creates the declared databases with their schemas but no
   # tables (2026-11-14: one ran through the /tmp alias); a restore cannot create those schemas
   # again. Such a shell holds no data: drop it. A target with any table stops the cutover.
@@ -348,4 +359,4 @@ start_clients
 verify_clients || { log "client verification failed"; false; }
 undrain
 DONE=1
-log "cutover PASSED. Docker volume vps_postgres-dev-data and Athena's data dir are untouched (kept 7 days). Reports: $RUN"
+log "cutover PASSED. Docker volume vps_postgres-dev-data (its databases left read-only) and Athena's data dir are kept 7 days. Reports: $RUN"

@@ -103,7 +103,9 @@ install has a `simple_detail` type an upgraded one lacks).
    `postgresql.auto.conf`, `pg_hba.conf` and `pg_ident.conf` back, the bare server on 5433, the
    container started unchanged, Athena's server started, the clients started and verified (factory
    health and CLI, `make -C agent-workflows verify`), the queue back to `run`.
-3. `cutover`: the same, with the copies in the middle: the remaining client sessions on the
+3. `cutover`: the same, with the copies in the middle: the Docker databases made read-only
+   (`default_transaction_read_only`, so a writer outside the stopped jobs, such as a lead's hook
+   event, fails instead of writing after the copy's snapshot), the remaining client sessions on the
    container ended, `apply --no-schemas`, the four Docker databases and `athena` copied and proven
    (Athena's server started read-only for its copy), `plan` in sync, the container stopped, `apply
    --address`, the restart, both sockets answering, `plan` in sync on 5432, the clients started and
@@ -138,8 +140,10 @@ Kept after the cutover, untouched: the Docker volume `vps_postgres-dev-data` and
 directory `~/.local/state/athena/pg18` (its launchd job disabled, not removed). They are removed in a
 follow-up only after 7 days AND a restore from the HomeLab copy of the nightly dump is proven
 (owner's rule). Rollback within those 7 days: stop the bare server's clients, `docker start
-postgres`, `launchctl enable` and bootstrap `com.iu.athena-postgres`, restore the saved config from
-the cutover's run directory, restart the bare server.
+postgres`, `ALTER DATABASE <db> RESET default_transaction_read_only` for each of its four databases
+(the cutover left them read-only), `launchctl enable` and bootstrap `com.iu.athena-postgres`,
+restore the saved config from the cutover's run directory, restart the bare server. Writes made to
+the bare server since the cutover are not in the old copies.
 
 ## Settings
 
