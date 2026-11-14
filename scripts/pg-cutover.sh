@@ -154,7 +154,9 @@ DOCKER_STOPPED=0
 SWITCHED=0
 ALIAS=0
 SOURCE_READONLY=0
-docker_su() { docker exec postgres psql -U "$(docker_user)" -d postgres -At "$@"; }
+# template1, never a copied database: once `postgres` is read-only, a session there cannot ALTER
+# DATABASE any more, not even to reset it (third attempt locked itself out that way)
+docker_su() { docker exec postgres psql -U "$(docker_user)" -d template1 -v ON_ERROR_STOP=1 -At "$@"; }
 COPIED=()
 DONE=0
 
