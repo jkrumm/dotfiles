@@ -448,7 +448,14 @@ absent, and exporting it bills API credits instead.
 **MCP servers**: none registered at user scope. `chrome-devtools` is declared inline in
 `agents/browser.md` and runs only while that subagent does (`/browse` forks it); a
 user-scope server costs an `npx` + `node` pair (~124 MiB) in every session, 24 of them
-held 2978 MiB idle on the mini. `make setup` removes any leftover registration. Claude Code
+held 2978 MiB idle on the mini. `make setup` removes any leftover registration, project-local ones too
+(`projects[<dir>].mcpServers` in every account's `.claude.json`, which the user-scope remove and
+`claude mcp list` from this directory never see; `scripts/claude-project-mcp.sh`, backup
+`.claude.json.bak-chrome-devtools`), and `make doctor` §Browser debugging fails on one, naming account and
+project. Test-browser Chrome trees that outlive their launcher (Playwright/puppeteer temp profile, parent
+launchd, older than 30 min) are ended by `com.jkrumm.browser-reap` every 30 min
+(`scripts/browser-reap.py`, `make browser-reap-run ARGS=--dry-run`, log `~/Library/Logs/browser-reap.log`);
+never the owner's Chrome or a persistent profile. Claude Code
 reaches the platform through `agw` (`/check`, `/review`, `/prose`,
 `/excalidraw-diagram`, `/brain` lookups, `/otel` — mini-only). HyperDX is deliberately *not* registered — `/otel`
 speaks its endpoint through `agw hdx`. Keep project MCPs minimal.

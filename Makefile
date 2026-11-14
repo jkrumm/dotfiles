@@ -112,6 +112,7 @@ setup:
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
+	@$(MAKE) --no-print-directory browser-reap-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
 	@$(MAKE) --no-print-directory hc-events-setup
@@ -803,7 +804,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test colima-mounts-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test authorized-keys-sync-test gate-pin-notice-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1459,6 +1460,11 @@ CLAUDE_EACH_ACCOUNT = for d in $(CLAUDE_ACCOUNT_DIRS); do ( if [ "$$d" = "-" ]; 
 CLAUDE_EACH_END = ) || exit 1; done
 # registration only (doctor stays read-only): a never-used account dir must exist before `claude mcp add` writes into it
 CLAUDE_MKDIR = [ -z "$$CLAUDE_CONFIG_DIR" ] || mkdir -p "$$CLAUDE_CONFIG_DIR";
+# project-local chrome-devtools entries in the current account's .claude.json (see scripts/claude-project-mcp.sh);
+# run inside CLAUDE_EACH_ACCOUNT. The check prints ✗ lines and never aborts the doctor.
+CLAUDE_JSON_OF_ACCOUNT = "$${CLAUDE_CONFIG_DIR:-$$HOME}/.claude.json" "$${CLAUDE_CONFIG_DIR:-default account}"
+CLAUDE_CHECK_PROJECT_MCP = bash "$(DOTFILES_DIR)/scripts/claude-project-mcp.sh" check $(CLAUDE_JSON_OF_ACCOUNT) || true;
+CLAUDE_CLEAN_PROJECT_MCP = bash "$(DOTFILES_DIR)/scripts/claude-project-mcp.sh" clean $(CLAUDE_JSON_OF_ACCOUNT) || true;
 # doctor: is MCP server $(1) registered in every enabled account?
 CLAUDE_MCP_CHECK = $(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default account}"; if claude mcp list 2>/dev/null | grep -q "$(1)"; then echo "    ✓ $(1) MCP registered ($$a)"; else echo "    ✗ $(1) MCP [not registered for $$a — run make setup]"; fi; $(CLAUDE_EACH_END)
 
@@ -1572,6 +1578,9 @@ _setup-browser:
 	@# The server is declared inline in the `browser` subagent and lives only while it runs. A
 	@# user-scope registration starts an npx + node pair in every session, so drop any left over.
 	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_MKDIR) claude mcp remove chrome-devtools --scope user >/dev/null 2>&1 || true; $(CLAUDE_EACH_END)
+	@# A project-local registration (projects[<dir>].mcpServers in .claude.json) is invisible to the user-scope
+	@# remove above: every session in that project, worktrees included, then starts the pair.
+	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_CLEAN_PROJECT_MCP) $(CLAUDE_EACH_END)
 	@echo "    ✓ chrome-devtools MCP not registered per session (use via /browse)"
 
 .PHONY: _setup-opencode
@@ -1843,6 +1852,7 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.wakeup"
 	@echo "  Browser debugging"
 	@$(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default account}"; if claude mcp list 2>/dev/null | grep -q "chrome-devtools"; then echo "    ✗ chrome-devtools MCP still registered for $$a [starts in every session — run make setup]"; else echo "    ✓ chrome-devtools MCP not session-registered ($$a)"; fi; $(CLAUDE_EACH_END)
+	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_CHECK_PROJECT_MCP) $(CLAUDE_EACH_END)
 	@grep -q '^mcpServers:' "$(DOTFILES_DIR)/agents/browser.md" && echo "    ✓ browser agent declares chrome-devtools" || echo "    ✗ agents/browser.md lost its mcpServers"
 	@echo "  Colima (Docker runtime)"
 	@for tool in colima docker lazydocker; do \
@@ -2945,6 +2955,27 @@ hc-reap-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.hc-reap.json"; \
 	echo "  ✓ hc-reap torn down (unloaded, plist and jobrun state removed)"
 
+# Test-browser janitor (scripts/browser-reap.py), every 30 min under jobrun: ends Playwright/puppeteer Chrome trees
+# whose launcher is gone (ppid 1), temp profile, older than 30 min. Any machine. Log: ~/Library/Logs/browser-reap.log.
+.PHONY: browser-reap-setup browser-reap-teardown browser-reap-run browser-reap-test claude-project-mcp-test
+browser-reap-setup:
+	@chmod +x "$(DOTFILES_DIR)/scripts/browser-reap.py"
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.browser-reap" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ every 30 min → ends orphaned test-browser Chrome trees; log: ~/Library/Logs/browser-reap.log"
+browser-reap-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.browser-reap.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.browser-reap.json"; \
+	echo "  ✓ browser-reap torn down (unloaded, plist and jobrun state removed)"
+browser-reap-run: ## Run the test-browser reaper once now (ARGS=--dry-run to only print the plan)
+	@python3 $(DOTFILES_DIR)/scripts/browser-reap.py $(ARGS)
+browser-reap-test: ## Hermetic suite for browser-reap.py (real orphaned sleepers, temp profile names)
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/browser-reap.test.py
+claude-project-mcp-test: ## Hermetic suite for claude-project-mcp.sh (fixture .claude.json, fake claude)
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-project-mcp.sh $(DOTFILES_DIR)/scripts/claude-project-mcp.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/claude-project-mcp.test.sh
+
 # The Kuma door (kuma-door/): one tailnet port (8795) through which the homelab's Uptime Kuma pulls
 # the mini's service health — GET /h/<name> relays the loopback URL registered in
 # kuma-door/registry.json. Dev host only. The ACL grant (tag:homelab -> tag:devhost, tcp:8795) and
@@ -3646,6 +3677,7 @@ help:
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
+	@echo "  make browser-reap-setup         Load the 30-min reaper for orphaned Playwright/puppeteer Chrome trees (browser-reap-run ARGS=--dry-run, browser-reap-teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make fseventsd-watch-dry        Decide now what the fseventsd job would do (never restarts)"

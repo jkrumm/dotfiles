@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.browser-reap</string>
+  <!-- Ends test-browser Chrome trees (Playwright, puppeteer) that outlived their launcher: temp
+       --user-data-dir named playwright_chromiumdev_profile-* / puppeteer_dev_chrome_profile-*, parent
+       launchd, older than 30 min. Never the owner's Chrome or a persistent profile. See scripts/browser-reap.py. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.browser-reap</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>1800</string>
+    <string>--timeout</string><string>120</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/browser-reap.py</string>
+  </array>
+  <!-- jobrun is a bun script; launchd's minimal PATH needs bun's dir. python3 comes from /usr/bin or Homebrew. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><false/>
+  <!-- ~/Library/Logs, rotated by log-rotate (which derives it from this plist). -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/browser-reap.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/browser-reap.log</string>
+</dict>
+</plist>
