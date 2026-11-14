@@ -2650,6 +2650,42 @@ fseventsd-watch-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fseventsd-watch.sh $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh $(DOTFILES_DIR)/scripts/lib/fseventsd-mem.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fseventsd-watch.test.sh
 
+# kern.maxvnodes trial (issue 1059): the vnode table sat at its ceiling (263168 of 263168) on the dev host, so every new
+# file open recycled a vnode and the kernel burned CPU in class `system`. A root LaunchDaemon sets MAXVNODES (2x the
+# default) at every boot. Root-only: the owner installs it once through ask-human (the mini's sudo password is
+# MacBook-only): `ask-human.sh ask 'raise kern.maxvnodes' --cmd 'cd ~/SourceRoot/dotfiles && make maxvnodes-install'`.
+# NOT in `make setup`, so a converge never needs sudo for a trial. Rollback: `make maxvnodes-teardown` (same route);
+# it restores MAXVNODES_DEFAULT live and removes the daemon, so the next boot is stock again. Docs: docs/architecture.md.
+MAXVNODES ?= 526336
+MAXVNODES_DEFAULT ?= 263168
+MAXVNODES_DAEMON := /Library/LaunchDaemons/com.jkrumm.maxvnodes.plist
+.PHONY: maxvnodes-install maxvnodes-teardown maxvnodes-status
+maxvnodes-install: ## Raise kern.maxvnodes now and at every boot (needs sudo: run through ask-human)
+	@TMP=$$(mktemp); trap 'rm -f "$$TMP"' EXIT; \
+	sed "s|__MAXVNODES__|$(MAXVNODES)|g" "$(DOTFILES_DIR)/launchd/com.jkrumm.maxvnodes.plist.template" > "$$TMP"; \
+	plutil -lint "$$TMP" >/dev/null || { echo "  ✗ plist lint failed — nothing installed"; exit 1; }; \
+	sudo install -m 0644 -o root -g wheel "$$TMP" "$(MAXVNODES_DAEMON)" || exit 1; \
+	sudo launchctl bootout system "$(MAXVNODES_DAEMON)" 2>/dev/null; \
+	sudo launchctl bootstrap system "$(MAXVNODES_DAEMON)" 2>/dev/null; \
+	sudo sysctl -w kern.maxvnodes=$(MAXVNODES) >/dev/null; \
+	NOW=$$(sysctl -n kern.maxvnodes); \
+	[ "$$NOW" = "$(MAXVNODES)" ] || { echo "  ✗ kern.maxvnodes is $$NOW, not $(MAXVNODES) — the trial would measure a no-op"; exit 1; }; \
+	launchctl print system/com.jkrumm.maxvnodes >/dev/null 2>&1 \
+		|| { echo "  ✗ daemon not loaded — the ceiling is raised now but would not survive a reboot"; exit 1; }; \
+	$(MAKE) --no-print-directory maxvnodes-status
+maxvnodes-teardown: ## Roll back the trial: restore the stock ceiling and remove the daemon (needs sudo: run through ask-human)
+	@sudo launchctl bootout system "$(MAXVNODES_DAEMON)" 2>/dev/null; \
+	sudo rm -f "$(MAXVNODES_DAEMON)"; \
+	sudo sysctl -w kern.maxvnodes=$(MAXVNODES_DEFAULT) >/dev/null || true; \
+	echo "  ✓ maxvnodes daemon removed, ceiling back to $(MAXVNODES_DEFAULT) (the kernel never shrinks live vnodes, only the cap)"; \
+	$(MAKE) --no-print-directory maxvnodes-status
+maxvnodes-status: ## kern.num_vnodes vs kern.maxvnodes and whether the boot daemon is installed (read-only)
+	@N=$$(sysctl -n kern.num_vnodes); M=$$(sysctl -n kern.maxvnodes); \
+	PCT=$$((N * 100 / M)); \
+	if [ -f "$(MAXVNODES_DAEMON)" ]; then D="boot daemon installed"; else D="no boot daemon (stock)"; fi; \
+	if [ "$$N" -ge "$$M" ]; then S="✗ table FULL"; else S="· below the ceiling"; fi; \
+	echo "  $$S: kern.num_vnodes=$$N of kern.maxvnodes=$$M ($${PCT}%) — $$D"
+
 # The end-to-end probe for the job -> ntfy chain (docs/background-jobs.md §Canary). Dev host
 # only. Converged by `make setup`. Teardown removes its state file too, or
 # jobs-grade would grade the retired label `unloaded` forever.
@@ -3568,6 +3604,9 @@ help:
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make fseventsd-watch-dry        Decide now what the fseventsd job would do (never restarts)"
 	@echo "  make fseventsd-sudoers          Install the one NOPASSWD rule for killall fseventsd (sudo: through ask-human)"
+	@echo "  make maxvnodes-status           Read-only: kern.num_vnodes vs kern.maxvnodes (the issue 1059 trial)"
+	@echo "  make maxvnodes-install          Raise kern.maxvnodes to 2x now and at boot (sudo: through ask-human)"
+	@echo "  make maxvnodes-teardown         Roll the trial back: stock ceiling, daemon removed (sudo: through ask-human)"
 	@echo "  make hc-resume-setup            Dev-host only: load the Claude session resume for herdr-core (-status / -teardown)"
 	@echo "  make hc-reap-setup              Dev-host only: load the 30 min herdr-core janitor (-teardown); run once: rd reap [--dry-run]"
 	@echo "  make hc-events-setup            Dev-host only: load the herdr-core event recorder (-status / -teardown)"

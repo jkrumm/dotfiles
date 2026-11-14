@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Root LaunchDaemon that raises kern.maxvnodes at every boot (issue 1059 trial:
+      the table sat at its ceiling, 263168 of 263168, so every new file open recycled
+      a vnode). One-shot: sysctl -w, then exit. The value is rendered from the
+      Makefile's MAXVNODES by `make maxvnodes-install`; the kernel does not keep it
+      across a reboot, this daemon is what does. Roll back: `make maxvnodes-teardown`.
+    -->
+    <key>Label</key>
+    <string>com.jkrumm.maxvnodes</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/sbin/sysctl</string>
+        <string>-w</string>
+        <string>kern.maxvnodes=__MAXVNODES__</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>/var/log/com.jkrumm.maxvnodes.log</string>
+    <key>StandardOutPath</key>
+    <string>/var/log/com.jkrumm.maxvnodes.log</string>
+</dict>
+</plist>

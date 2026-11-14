@@ -92,6 +92,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 |-|-|-|
 | `sh.brew.colima` | KeepAlive | Docker VM, bounded-retry wrapper — **supervised boot path** |
 | `com.colima.docker-socket` | daemon (root) | `/var/run/docker.sock` symlink at boot |
+| `com.jkrumm.maxvnodes` | daemon (root), RunAtLoad one-shot | `sysctl -w kern.maxvnodes=526336` (2x stock) at boot — the issue 1059 trial, see §kern.maxvnodes trial; `make maxvnodes-status`, rollback `make maxvnodes-teardown` |
 | `sh.brew.caddy` | daemon (root) | local HTTPS + tailnet doors |
 | `sh.brew.dnsmasq` | daemon (root) | `*.test` DNS |
 | `sh.brew.tailscale` | daemon (root) | tailnet |
@@ -321,6 +322,8 @@ rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to
 | `com.iu.prometheus-vpn-watcher` | in-process self-heal ladder (IuRoot, read-only mention) | the VPN | a desktop notification per the archived note `docs/archive/background-jobs-2026-10-warden-era.md` | unspecified | IuRoot | not reviewed here |
 
 **`fseventsd` leak (2026-11-06):** the system daemon (pid 551, up 5 days) grew to 61 GiB, 55 GiB compressed, filled the 64 GiB swap and held `MacMini Dev Host - Push` DOWN. The heartbeat's memory component now names it above 10 GiB (WARN). The restart is `sudo killall fseventsd` (launchd respawns it at a few MiB; run it through `ask-human`, the mini's sudo password is MacBook-only). `launchctl kickstart -k system/com.apple.fseventsd` does **not** work: SIP refuses it. It recurred (2026-11-12: 2.1 GB, 260 % CPU, 5 days up, swapouts 5 GB per 300 s), so `com.jkrumm.fseventsd-watch` now restarts it daily when its memory is above 1.5 GB or its CPU stays at 150 % for 10 min, through one sudoers rule (`scripts/sudoers.d/fseventsd-restart`, installed once by `make fseventsd-sudoers` through `ask-human`; until it is installed the job logs that and exits 0). Whether worktree churn feeds the leak is unproven: only 6 worktrees exist now, too few to implicate them.
+
+**kern.maxvnodes trial (issue 1059, 2026-11-14):** `kern.num_vnodes` sat at its ceiling, 263168 of 263168, on the 32 GiB mini (~760 processes, 20+ worktrees, bun test, Playwright, two Colima VMs on virtiofs mounts of `$HOME`); every new file open then recycles a vnode, which shows up as kernel CPU, not memory: factory class `system` 1.82 cores, 6538 CPU s over the previous hour, the largest class. The trial raises the ceiling to 526336 (2x) through the root daemon `com.jkrumm.maxvnodes` (`launchd/com.jkrumm.maxvnodes.plist.template`, `make maxvnodes-install` through `ask-human`; deliberately not in `make setup`). Judged on the same 24 h before and after: class `system` cores and footprint, host CPU idle p50, pressure minutes, and `make maxvnodes-status` showing `num_vnodes` below its ceiling. Keep it only if the measure improves; roll back (`make maxvnodes-teardown`, same route) if the `system` footprint grows by more than the CPU falls. Before: `num_vnodes` 263168 = `maxvnodes` 263168 (100 %), class `system` 1.82 cores.
 
 Not a watcher: `com.jkrumm.hc-reap` is the janitor. It closes finished factory agent terminals and messages a dirty one; it grades nothing.
 
