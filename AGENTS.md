@@ -584,6 +584,8 @@ a short declared `EXTRA` list; it never globs `~/Library/Logs` (which also holds
 folder, for ad-hoc **human** file movement only (code → `rd`/git; vault pages →
 brain-sync; anything an agent reads must live on the mini). **A running `smbd` is not a working SMB server** (no NTLM hash, GUI-only fix). `docs/remote-dev.md`.
 
+**Host waste** — `make host-waste-check` (a `make doctor` section, WARN only): orphaned `sleep`s (a watchdog that kills its subshell, not its timer), `tailscaled` CPU (it follows bulk-copy throughput), `mediaanalysisd` (disabled by `make photos-analysis-off`, which `make setup` re-applies; `launchctl enable gui/$UID/com.apple.mediaanalysisd` undoes it), sshd sessions. Causes, numbers, what stays: `docs/host-waste.md`.
+
 **Disk** — the mini's budget per owner, the daily `com.jkrumm.disk-sweep` (`make
 disk-sweep-run` runs it once), what moved to the HomeLab and how to
 restore it: `docs/disk.md`. **Agents cannot see `~/.Trash`** (no Full Disk Access; it held

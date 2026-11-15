@@ -460,6 +460,21 @@ section_storage() {
   elif [ "$(printf '%s' "$out" | jq '.mirror.available')" = true ]; then ok "storage mirror" "finished $(printf '%s' "$out" | jq '(.mirror.age_seconds / 3600) | floor') h ago"; fi
 }
 
+# Host waste (docs/host-waste.md), the mini's only: orphaned sleeps, tailscaled CPU over 10 s, Photos analysis, sshd sessions.
+# Each is a yellow WARN (exit 2 from the check), never a failure: the causes are other jobs' work, not this repo's change.
+section_host_waste() {
+  hdr "Host waste (make host-waste-check)"
+  local c out rc
+  for c in orphan-sleeps tailscaled mediaanalysisd sshd-sessions; do
+    rc=0; out=$(bash "$DOTFILES_DIR/scripts/host-waste-check.sh" "$c" 2>&1) || rc=$?
+    case "$rc" in
+      0) ok "waste $c" "$out" ;;
+      2) skip "waste $c" "WARN: $out" ;;
+      *) skip "waste $c" "WARN: check failed (rc=$rc): $out" ;;
+    esac
+  done
+}
+
 # --- Run -----------------------------------------------------------------------
 
 section_launchagents
@@ -474,6 +489,7 @@ section_worktrees
 if [ "$BACKEND" = "cache" ]; then
   section_external_volume   # the mini's drive: never on the MacBook
   section_registry
+  section_host_waste
   section_drift
   section_claude_accounts
   section_devhost_heartbeat

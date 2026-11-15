@@ -134,6 +134,7 @@ setup:
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
 	@$(MAKE) --no-print-directory icloud-photos-export-setup
+	@$(MAKE) --no-print-directory photos-analysis-off
 	@$(MAKE) --no-print-directory shared-chrome-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
@@ -2830,6 +2831,19 @@ spotlight-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/spotlight-check.sh $(DOTFILES_DIR)/scripts/spotlight-check.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/spotlight-check.test.sh
 
+# The dev host's steady background waste (issue 1376, docs/host-waste.md): orphaned sleeps, tailscaled CPU, Photos analysis,
+# sshd sessions. `make doctor` shows each as a WARN line; nothing fails. `photos-analysis-off` is the one standing fix and runs in `make setup`.
+.PHONY: host-waste-check host-waste-test photos-analysis-off
+host-waste-check: ## The dev host's waste checks, one line each (orphaned sleeps, tailscaled CPU, Photos analysis, sshd sessions); a WARN never fails
+	@for c in orphan-sleeps tailscaled mediaanalysisd sshd-sessions; do bash $(DOTFILES_DIR)/scripts/host-waste-check.sh $$c || true; done
+host-waste-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/host-waste-check.sh $(DOTFILES_DIR)/scripts/host-waste-check.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/host-waste-check.test.sh
+photos-analysis-off: ## Dev host: keep Photos analysis (mediaanalysisd) off; the nightly export reads the library without it
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then echo "    · not the dev host (backend=$${BACKEND:-unset}) — photos analysis left alone"; exit 0; fi; \
+	bash $(DOTFILES_DIR)/scripts/host-waste-check.sh fix-mediaanalysisd | sed 's/^/    ✓ /'
+
 # kern.maxvnodes trial (issue 1059): the vnode table sat at its ceiling (263168 of 263168) on the dev host, so every new
 # file open recycled a vnode and the kernel burned CPU in class `system`. A root LaunchDaemon sets MAXVNODES (2x the
 # default) at every boot. Root-only, and the mini's sudo password is MacBook-only: the owner installs it once through
@@ -3925,6 +3939,7 @@ help:
 	@echo "  make shared-chrome-status        The shared headless Chrome behind /browse: up/down, supervisor, contexts (shared-chrome-setup, shared-chrome-teardown)"
 	@echo "  make browser-reap-setup         Load the 30-min reaper for orphaned Playwright/puppeteer Chrome trees (browser-reap-run ARGS=--dry-run, browser-reap-teardown)"
 	@echo "  make icloud-photos-export-setup Load the 01:30 iCloud Photos archive to the HomeLab (mini; -run, -status, -test, -teardown)"
+	@echo "  make host-waste-check          Host waste checks, one line each (orphaned sleeps, tailscaled CPU, Photos analysis, sshd); photos-analysis-off keeps mediaanalysisd off"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make storage-status             Shares, mounts, free space, mirror and backup age (ARGS=--json; docs/storage.md §Status)"
