@@ -8,7 +8,7 @@ source: elysiajs/skills@8fd8031 (2026-01-20)
 
 TypeScript framework for Bun-first, type-safe, high-performance backend servers.
 
-For latest API reference, fetch `https://elysiajs.com/llms.txt` and follow topic links.
+For latest API reference, fetch `https://elysiajs.com/llms.txt` and follow topic links. This text is the Elysia 1.x pin (every repo of ours is on 1.4.x); the upstream skills repo moved to Elysia 2 (rc) at `1466d85` (2026-10-19) and has no licence, so it is not vendored: for a 2.x project use `https://next.elysiajs.com/llms.txt`.
 
 ## Critical Concepts
 
