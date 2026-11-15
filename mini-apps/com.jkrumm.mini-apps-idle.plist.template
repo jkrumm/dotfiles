@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.mini-apps-idle</string>
+  <!-- The idle stop: every 120 s it reads Caddy's door log and stops an on-demand dev server whose door had no request for
+       its idle window (idle_minutes in the registry, 30 by default). Does nothing while the door log does not exist.
+       See mini-apps/idle.ts and docs/mini-registry.md §Apps page. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.mini-apps-idle</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>120</string>
+    <string>--timeout</string><string>100</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/mini-apps/idle.ts</string>
+  </array>
+  <!-- jobrun and idle.ts are bun scripts (`#!/usr/bin/env bun`); launchd's minimal PATH has no bun. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key><integer>120</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/mini-apps-idle.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/mini-apps-idle.log</string>
+</dict>
+</plist>

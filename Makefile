@@ -130,6 +130,7 @@ setup:
 	@$(MAKE) --no-print-directory claude-accounts-keepalive-setup
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
+	@$(MAKE) --no-print-directory mini-apps-setup
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
@@ -3175,6 +3176,56 @@ browser-reap-test: ## Hermetic suite for browser-reap.py (real orphaned sleepers
 claude-project-mcp-test: ## Hermetic suite for claude-project-mcp.sh (fixture .claude.json, fake claude)
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-project-mcp.sh $(DOTFILES_DIR)/scripts/claude-project-mcp.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-project-mcp.test.sh
+
+# The apps page control endpoint (mini-apps/): status, start and stop of a registry service on 127.0.0.1:7797, the wake of a
+# stopped door (Caddy's handle_errors, scripts/caddy-tailnet.sh) and the idle stop job. Dev host only. docs/mini-registry.md §Apps page.
+MINI_APPS_LABEL      := com.jkrumm.mini-apps
+MINI_APPS_IDLE_LABEL := com.jkrumm.mini-apps-idle
+
+.PHONY: mini-apps-test mini-apps-setup mini-apps-restart mini-apps-teardown mini-apps-check
+# its own prerequisite line: the long `check:` list is the line every other change edits
+check: mini-apps-test
+mini-apps-test: ## bun test for the apps page endpoint and the idle stop
+	@bun test $(DOTFILES_DIR)/mini-apps/
+# setup reloads the endpoint (bootout, then bootstrap): launchd keeps the definition from the first load.
+mini-apps-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — mini-apps skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/mini-apps/app.ts" "$(DOTFILES_DIR)/mini-apps/idle.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="$(MINI_APPS_LABEL) $(MINI_APPS_IDLE_LABEL)" PLIST_DIR="$(DOTFILES_DIR)/mini-apps" || exit 1; \
+	launchctl bootout "gui/$$(id -u)/$(MINI_APPS_LABEL)" 2>/dev/null || true; \
+	i=0; while launchctl print "gui/$$(id -u)/$(MINI_APPS_LABEL)" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -gt 40 ] && { echo "  ✗ old mini-apps job never went away"; exit 1; }; \
+		sleep 0.25; \
+	done; \
+	launchctl bootstrap "gui/$$(id -u)" "$(LAUNCHAGENTS)/$(MINI_APPS_LABEL).plist" \
+		|| { echo "  ✗ bootstrap failed"; exit 1; }; \
+	echo "    ↳ KeepAlive → 127.0.0.1:7797; idle stop every 120 s; logs: ~/Library/Logs/mini-apps*.log"
+mini-apps-restart:
+	@launchctl kickstart -k "gui/$$(id -u)/$(MINI_APPS_LABEL)" \
+		&& echo "  ✓ mini-apps restarted" \
+		|| { echo "  ✗ mini-apps is not loaded — run: make mini-apps-setup"; exit 1; }
+mini-apps-teardown:
+	@for L in $(MINI_APPS_LABEL) $(MINI_APPS_IDLE_LABEL); do \
+		PLIST="$(LAUNCHAGENTS)/$$L.plist"; launchctl unload "$$PLIST" 2>/dev/null || true; rm -f "$$PLIST"; \
+	done; \
+	rm -f "$(JOBRUN_STATE_DIR)/$(MINI_APPS_IDLE_LABEL).json"; \
+	echo "  ✓ mini-apps torn down (unloaded, plists and jobrun state removed)"
+mini-apps-check: ## The endpoint answers, refuses what it must, and the page reaches it (dev host; run after mini-apps-setup and make caddy-tailnet)
+	@BASE="http://127.0.0.1:7797"; FAIL=0; \
+	ok()  { echo "  ✓ $$1"; }; \
+	bad() { echo "  ✗ $$1"; FAIL=1; }; \
+	code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$$@" 2>/dev/null || true; }; \
+	[ "$$(code "$$BASE/healthz")" = "200" ] && ok "endpoint answers /healthz" || bad "endpoint not answering (make mini-apps-setup)"; \
+	[ "$$(code "$$BASE/_apps/status")" = "200" ] && ok "GET /_apps/status -> 200" || bad "status did not return 200"; \
+	[ "$$(code "$$BASE/_apps/start/no-such-service")" = "405" ] && ok "GET on a change -> 405" || bad "GET on a change did not return 405"; \
+	[ "$$(code -X POST -H 'Origin: http://127.0.0.1:7797' "$$BASE/_apps/start/no-such-service")" = "404" ] && ok "unknown name -> 404" || bad "unknown name did not return 404"; \
+	[ "$$(code -X POST -H 'Origin: https://evil.example' "$$BASE/_apps/stop/herdr-core")" = "403" ] && ok "cross-origin POST -> 403" || bad "cross-origin POST did not return 403"; \
+	[ "$$(code -X POST -H 'Origin: http://127.0.0.1:7797' "$$BASE/_apps/stop/herdr-core")" = "403" ] && ok "stopping a core service -> 403" || bad "stopping a core service did not return 403"; \
+	[ -r "$(BREW_PREFIX)/var/log/caddy-doors.log" ] && ok "door log exists and is readable" || echo "  - SKIP door log (make caddy-tailnet writes it)"; \
+	exit $$FAIL
 
 # The Kuma door (kuma-door/): one tailnet port (8795) through which the homelab's Uptime Kuma pulls
 # the mini's service health — GET /h/<name> relays the loopback URL registered in

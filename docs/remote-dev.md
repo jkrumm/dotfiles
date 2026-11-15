@@ -300,6 +300,11 @@ is a second subject on the same site block — a wildcard cert covers one label 
 so the apex gets its own cert and needs its own A record — and falls through the
 host matchers to the same landing page.
 
+The page also lists every registry service by tier with its state, footprint against budget and a Start or Stop button,
+and a stopped dev server's door wakes it: Caddy hands the door's 502 to the control endpoint, which starts the service and
+answers a page that reloads until the door answers (`docs/mini-registry.md` §Apps page). The wake never fires for the
+page's own `/_up` probes, which keep their 502.
+
 ## Phone
 
 Three tiers: notification hooks (outbound push when an agent needs input), Claude

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.mini-apps</string>
+  <!-- The apps page control endpoint on 127.0.0.1:7797: status, start and stop of a registry service and the
+       wake of a stopped door. Caddy's wildcard tailnet block is the only way in (scripts/caddy-tailnet.sh).
+       See mini-apps/app.ts and docs/mini-registry.md §Apps page. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/mini-apps/app.ts</string>
+  </array>
+  <!-- Plain `true` (not a SuccessfulExit dict): make doctor grades a KeepAlive job that is down. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <!-- Interactive: a wake waits on this job while the host may be loaded; without a ProcessType launchd throttles it
+       (priority 20 against a terminal's 31). docs/mini-registry.md §Process type. -->
+  <key>ProcessType</key><string>Interactive</string>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- The shebang is `env bun`; a start command it runs (a dev server) needs node, npx and the user's bin dirs. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/mini-apps.out.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/mini-apps.err.log</string>
+</dict>
+</plist>

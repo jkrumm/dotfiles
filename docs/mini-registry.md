@@ -20,9 +20,9 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 | `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), `research-chrome`, `shared-chrome` (the `/browse` Chrome) |
 | `manual` | started and stopped as a profile | `work` (student-enrolment, deploy gates), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs have no profile |
 
-A tier is a promise the registry holds, not yet one the host keeps: nothing is moved here. The on-demand wake, the idle
-stop and the VM that starts only when a service needs it are the rows that follow (`docs/plan.yaml`: `mini-apps-page`,
-`mini-docker-idle`, `mini-work-profile`).
+A tier is a promise the registry holds. For a dev server behind a tailnet door the host keeps it (§Apps page): the door
+starts it, the idle stop ends it. The wake of the other on-demand services and the VM that starts only when a service needs
+it are the rows that follow (`docs/plan.yaml`: `mini-docker-idle`, `mini-work-profile`).
 
 ## An entry
 
@@ -45,6 +45,7 @@ services:
 | `container`, `project`, `vm` | A compose service: the container, its compose project, the Colima profile (`default` if omitted) |
 | `process_type` | `interactive`, for a `core` launchd service others wait on: `make mini-ps` and the check fail while it runs lower (§Process type) |
 | `shared_memory` | Postgres: every process's footprint counts the shared buffers again (below) |
+| `idle_minutes` | A dev server: minutes with no request to its door before the idle stop ends it (default 30) |
 | `start`, `stop`, `status` | The owner repo's own command (`make -C <repo> <target>`; `~/` expands). A launchd job without `start`/`stop` gets `launchctl bootstrap`/`kickstart` and `bootout`; anything else refuses the verb |
 | `debt`, `exception` | A known breach of a run rule: `debt: { <rule>: <plan row or issue> }`, or `exception: { <rule>: <reason> }` when it is allowed. Rules: `restart-policy`, `no-memory-limit`, `port-binding`, `second-vm`, `shared-infrastructure`, `no-budget`, `worktree-program`, and the ones only a person can see (`keepalive-poll`, `docker-build-tool`) |
 | `oneshot` | `true` for a root job that runs once at boot: no process, so a budget of 0 is allowed |
@@ -78,7 +79,9 @@ footprint against its budget. A loaded interval job between runs is `stopped`; a
 - **Drift** lists loaded jobs of the label families the registry does not know, jobs whose program path contains
   `/.claude/worktrees/`, plists installed but neither loaded nor registered, registry entries with no plist or
   container (a manual compose service whose project is down is normal, not drift), containers the registry does not know, doors no service claims, and disabled leftovers whose plist is still installed.
-- `FORMAT=json make mini-ps` is the same data for the apps page.
+- **A dev server** is `running` when a process listens on the port of one of its doors (the port comes from `config/Caddyfile`
+  through `scripts/lib/caddy-registry.py`, never a second list); its footprint is the process tree of that listener.
+- `FORMAT=json make mini-ps` is the same data for the apps page, with `can_start`, `can_stop` and `idle_minutes` per row.
 - **Leftovers are findings.** `mini-registry check` (so `make doctor` and the heartbeat) warns on a container no row names and on a
   disabled job whose plist is still installed. A container counts by its name in any VM: one that runs in another VM than its row
   declares is the `second-vm` rule's finding, tracked by the VM-merge Issues, not an unknown container.
@@ -96,6 +99,55 @@ An unknown name is refused, and so is stopping a `core` service unless `FORCE=1`
 ~/SourceRoot/vps dev-mariadb-up` stops only mariadb with `dev-mariadb-down`. (`make up` there also starts redis, and `make down`
 removes the whole dev project; an earlier version of the registry used them and started redis by accident.) A service with
 no such command has none registered and the verb refuses. `mini-profile` runs the commands of its members, one by one.
+
+## Apps page
+
+`https://apps.mini.jkrumm.com` lists every registry service by tier with its state, footprint against budget and a Start or
+Stop button, and wakes a stopped door. Three pieces, none holding a service list of its own:
+
+| Piece | What it does |
+|-|-|
+| `mini-apps/app.ts` (`com.jkrumm.mini-apps`, `127.0.0.1:7797`, core) | `GET /_apps/status` (the rows of `mini-ps --format json`, cached 5 s), `POST /_apps/start/<name>` and `/_apps/stop/<name>`, `GET /_wake/` and `POST /_wake/start` |
+| `scripts/caddy-tailnet.sh` (generated include) | `/_apps/*` on the landing host, `/_wake/*` on every door host, `handle_errors` on a door's 502, the door log |
+| `mini-apps/idle.ts` (`com.jkrumm.mini-apps-idle`, every 120 s under `jobrun`) | stops an idle on-demand dev server |
+
+**The endpoint** runs `mini-registry up|down <name>` as an argv array: a request value picks a registry entry and nothing else,
+no value reaches a shell. A change needs `POST`, an `Origin` equal to `Host` (and `Sec-Fetch-Site` same-origin when sent), and a
+name the registry holds; a `core` service is never stopped from here and a verb with no registered command is refused (409).
+Each change logs the caller address (`X-Forwarded-For`, set by Caddy) and the verb. It listens on 127.0.0.1 only; the ACL of the
+wildcard tailnet door is the only way in, as for the page.
+
+**The wake.** An app that is not running makes its upstream answer 502; Caddy's `handle_errors` hands exactly that 502 (not a
+`/_up` probe, not the landing host) to the endpoint with the door's `Host`:
+
+| Service | Answer |
+|-|-|
+| `on-demand` with a `start` command | starts it (once, a second request joins the first) and answers a 503 page with `X-Wake: 1` that reloads when the door answers without the header; a failed start shows its log (`~/Library/Logs/mini-apps/<name>.log`) and is not retried for 30 s |
+| `manual` | the same page with a Start button; a manual service is never started by a request |
+| `core` | a plain 502, nothing starts |
+| no `start` command, or no service for that door | a page saying so, or a 502 |
+
+Only `GET` starts anything. A `GET` that starts a service is by design ("open the door and the app comes up"); the cost of a
+request from a page that should not send it is one idle window of a dev server. Only the tailnet doors wake: `.test` is the
+MacBook's own door and stays plain.
+
+**Starting a dev server** runs its registered `start` command detached (its own process group, output in
+`~/Library/Logs/mini-apps/<name>.log`) and waits up to 60 s for a door port to answer. A dev server with a `start` and no
+`stop` command ends by signal: its recorded process group, else the trees under the listeners of its doors, SIGKILL after 5 s.
+One with no `start` command is never signalled (a door port may belong to something else, a docker forwarder for `rollhook`),
+so neither the page, the idle stop nor `mini-down` stops it. `make mini-up
+NAME=<dev server>` and `mini-down` do the same from a terminal.
+
+**The idle stop** reads `caddy-doors.log`: the wildcard block writes one JSON line per request to a door (mode 0644, because
+Caddy's main access log is root-only), skipping the landing host, `/_up`, `/_wake` and `/_apps`. A running on-demand dev server
+whose newest request and first-seen time are both older than its `idle_minutes` is stopped. With no door log the job stops
+nothing. The check for the pieces: `make mini-apps-test` (hermetic), `make mini-apps-check` (live), `make caddy-tailnet-test`.
+
+**Which dev servers start.** Registered with a `start` command (the repo's own `package.json` script, no change to any app):
+`basalt-playground`, `basalt-marketing`, `jkrumm-com`, `sy-serendipity`, `sy-serendipity-codex`. Without one, so the door wakes
+nothing and the page says so: `argo-dev` (its dev API refuses to boot on the mini, `live-guard.sh`), `fpp` (four ports and
+logdy), `rollhook` (a docker compose stack), `plannotator` (started by `rv`). Leads still validate against built output and
+never start a dev server; the wake is for the owner's browser.
 
 ## Process type
 

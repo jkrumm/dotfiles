@@ -87,6 +87,7 @@ gen() {
     CADDY_TAILNET_CONF="$TMP/conf" CADDY_TAILNET_APPS="$TMP/none.apps" \
     CADDY_TAILNET_HOSTS="$1" CADDY_TAILNET_OUT="$OUT" \
     CADDY_TAILNET_PAGE_DIR="$TMP/page" CADDY_TAILNET_NO_RELOAD=1 \
+    CADDY_TAILNET_DOOR_LOG="$TMP/doors.log" CADDY_TAILNET_MINI_APPS_PORT=7797 \
     bash "$GEN" 2>&1)
   rc=$?
 }
@@ -155,6 +156,31 @@ dies "wildcard name"          "*.example.org plain"           "lowercase DNS nam
 dies "missing app column"     "web.example.org"               "expected '<fqdn> <app-name>'"
 dies "extra column"           "web.example.org plain more"    "expected '<fqdn> <app-name>'"
 dies "duplicate fqdn"         "$(printf 'web.example.org plain\nweb.example.org rew')" "listed twice"
+
+echo "apps page control: wake and door log"
+
+: > "$TMP/hosts"; gen "$TMP/hosts"
+wild=$(sed -n '/^\*\.dev\.example\.com, dev\.example\.com {/,/^}/p' "$OUT")
+has "door log is its own named logger"      "log doors {" "$wild"
+has "door log is world-readable"            "mode 0644" "$wild"
+has "door log path is the configured one"   "output file $TMP/doors.log" "$wild"
+has "the landing host is not logged"        "log_skip @landing" "$wild"
+has "probes, wake and status are not logged" "@control path /_up/* /_wake/* /_apps/*" "$wild"
+has "/_wake/* on every door reaches the endpoint" "handle /_wake/* {" "$wild"
+has "a 502 is the wake trigger"             "expression {err.status_code} == 502" "$wild"
+has "the probes keep their 502"             "not path /_up/* /_wake/* /_apps/*" "$wild"
+has "the landing host never wakes"          "not host apps.dev.example.com dev.example.com" "$wild"
+has "the error route rewrites to the wake"  "rewrite * /_wake/" "$wild"
+has "the endpoint is loopback only"         "reverse_proxy 127.0.0.1:7797" "$wild"
+has "the status route is on the landing page" "handle /_apps/* {" "$wild"
+lacks "the extra FQDN doors never wake"     "_wake" "$(extra)"
+guard=$(grep -n 'handle @guard_src' "$OUT" | head -1 | cut -d: -f1)
+wake=$(grep -n 'handle /_wake/\* {' "$OUT" | head -1 | cut -d: -f1)
+first=$(grep -n '^	@plain host' "$OUT" | head -1 | cut -d: -f1)
+[ -n "$guard" ] && [ -n "$wake" ] && [ -n "$first" ] && [ "$guard" -lt "$wake" ] && [ "$wake" -lt "$first" ] \
+  && ok "the wake route sits after the source guard and before the app hosts" || bad "wake route order ($guard/$wake/$first)"
+caddy validate --config "$OUT" --adapter caddyfile >/dev/null 2>&1 \
+  && ok "caddy validate accepts the wake and the door log" || bad "caddy validate rejects the wake and the door log"
 
 [ "$fails" = 0 ] && { echo "caddy-tailnet generator: all passed"; exit 0; }
 echo "caddy-tailnet generator: $fails failed"

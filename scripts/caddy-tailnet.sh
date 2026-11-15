@@ -78,6 +78,8 @@ CADDYFILE="${CADDY_TAILNET_CADDYFILE:-$BREW_PREFIX/etc/Caddyfile}"
 #   CADDY_TAILNET_OUT        the generated include
 #   CADDY_TAILNET_PAGE_DIR   the landing page directory
 #   CADDY_TAILNET_NO_RELOAD  skip validate + reload
+#   CADDY_TAILNET_MINI_APPS_PORT  the control endpoint's loopback port (7797)
+#   CADDY_TAILNET_DOOR_LOG   the door log the idle stop reads
 #
 # That completeness is not a convenience. The INPUTS were overridable long
 # before the output was, so the obvious way to test a change — point PORTS/CONF
@@ -90,6 +92,10 @@ OUT="${CADDY_TAILNET_OUT:-$BREW_PREFIX/etc/Caddyfile.d/tailnet.caddy}"
 # Landing page lives outside Caddyfile.d so the `*.caddy` include glob can never
 # pick it up. Caddy runs as root and reads it regardless of owner.
 PAGE_DIR="${CADDY_TAILNET_PAGE_DIR:-$BREW_PREFIX/var/caddy-tailnet}"
+# The apps page control endpoint (mini-apps/, com.jkrumm.mini-apps) and the door log the idle stop reads.
+# Caddy's own access log is root-only; this one is written world-readable (docs/mini-registry.md §Apps page).
+MINI_APPS_PORT="${CADDY_TAILNET_MINI_APPS_PORT:-7797}"
+DOOR_LOG="${CADDY_TAILNET_DOOR_LOG:-$BREW_PREFIX/var/log/caddy-doors.log}"
 REGISTRY_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/caddy-registry.py"
 # Tailscale CLI resolved by lib/tailscale-cli.sh, never hardcoded. On the mini
 # the app-bundle path still exists (dormant macsys extension, kept for rollback)
@@ -597,6 +603,43 @@ emit_app_upstream() {
   fi
 }
 
+# The wake and the door log of the wildcard block (mini-apps/, docs/mini-registry.md §Apps page).
+#  - /_wake/* on every door host reaches the control endpoint: the wake page's Start button and its polling.
+#  - handle_errors: an app that is not running answers 502 from its reverse_proxy; that 502 (and only that: not a
+#    /_up probe, not the landing host) is sent to the endpoint with the original Host, which starts an on-demand service and
+#    answers a page that reloads until the door answers. A manual service gets a Start button, a core one a plain 502.
+#  - the door log: one JSON line per request to a door, world-readable (mode 0644; the main access log is root-only), so the
+#    idle job can read when each door was last used. The landing host and the status, wake and page routes are skipped.
+emit_apps_control() {
+  echo "	# --- apps page control: wake + door log (mini-apps/) ---------------------"
+  echo "	log doors {"
+  echo "		output file $DOOR_LOG {"
+  echo "			mode 0644"
+  echo "			roll_size 5MiB"
+  echo "			roll_keep 2"
+  echo "		}"
+  echo "	}"
+  echo "	@landing host $LANDING_NAME.$DEV_DOMAIN $DEV_DOMAIN"
+  echo "	@control path /_up/* /_wake/* /_apps/*"
+  echo "	log_skip @landing"
+  echo "	log_skip @control"
+  echo "	handle /_wake/* {"
+  echo "		reverse_proxy 127.0.0.1:$MINI_APPS_PORT"
+  echo "	}"
+  echo "	handle_errors {"
+  echo "		@down {"
+  echo "			expression {err.status_code} == 502"
+  echo "			not path /_up/* /_wake/* /_apps/*"
+  echo "			not host $LANDING_NAME.$DEV_DOMAIN $DEV_DOMAIN"
+  echo "		}"
+  echo "		handle @down {"
+  echo "			rewrite * /_wake/"
+  echo "			reverse_proxy 127.0.0.1:$MINI_APPS_PORT"
+  echo "		}"
+  echo "	}"
+  echo ""
+}
+
 # Tighten the mode BEFORE a single byte of token is written, not after. A plain
 # `> "$OUT"` creates the file at the ambient umask — 644 here — so chmodding
 # only at the end leaves a window in which the Cloudflare token sits in a
@@ -671,6 +714,7 @@ fi
     echo "*.$DEV_DOMAIN, $DEV_DOMAIN {"
     emit_bind_tls
     emit_source_guard
+    emit_apps_control
 
     for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
       (( APP_EXCLUDED[i] )) && continue
@@ -701,6 +745,9 @@ fi
     echo "	# real status. dial_timeout bounds the worst case for a port that hangs"
     echo "	# rather than refusing (a refused connection 502s instantly)."
     echo "	handle {"
+    echo "		handle /_apps/* {"
+    echo "			reverse_proxy 127.0.0.1:$MINI_APPS_PORT"
+    echo "		}"
     for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
       (( APP_EXCLUDED[i] )) && continue
       echo "		handle /_up/${APP_NAME[$i]} {"
@@ -890,6 +937,30 @@ code {
 	color: var(--fg);
 }
 .k { color: var(--fg); }
+/* services: the registry's rows with their tier, state and footprint (mini-apps/, docs/mini-registry.md) */
+.btn {
+	font: inherit; font-size: .78rem; color: var(--fg); background: none; cursor: pointer;
+	border: 1px solid var(--line); border-radius: 4px; padding: .15rem .8rem; min-width: 4.5rem;
+}
+.btn:hover:not(:disabled) { border-color: var(--fg); }
+.btn:disabled { color: var(--faint); cursor: default; }
+table.svc { table-layout: fixed; }
+table.svc td { overflow-wrap: anywhere; }
+.mem { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--dim); }
+.mem.over { color: var(--bad); }
+.tier-total { color: var(--faint); font-size: .78rem; margin: 0 0 .6rem; }
+details.tier > summary { cursor: pointer; color: var(--dim); margin: 0 0 .6rem; }
+section.tier { margin-top: 1.4rem; }
+.err { color: var(--warn); }
+@media (max-width: 640px) {
+	body { padding: 1.5rem .75rem 3rem; }
+	th, td { padding-left: .4rem; padding-right: .4rem; }
+	.narrow { display: none; }
+	table.svc th:first-child { width: 5.5rem !important; }
+	table.svc th:nth-child(3) { width: 6.5rem !important; }
+	table.svc th:last-child { width: 5rem !important; }
+	.btn { min-width: 0; padding: .15rem .5rem; }
+}
 </style>
 <main>
 	<h1>dev apps</h1>
@@ -899,12 +970,20 @@ code {
 			<tr>
 				<th style="width:12rem">status</th>
 				<th>app</th>
-				<th style="width:5rem">port</th>
-				<th>doors</th>
+				<th class="narrow" style="width:5rem">port</th>
+				<th class="narrow">doors</th>
 			</tr>
 		</thead>
 		<tbody id="rows"></tbody>
 	</table>
+
+	<!-- The registry's services (mini-apps/): tier, state and footprint against budget, Start and Stop for an
+	     on-demand or manual service. Filled from /_apps/status; stays hidden when the endpoint does not answer. -->
+	<section id="services" hidden>
+		<h2 class="sec">services</h2>
+		<p class="sub" id="servicessub"></p>
+		<div id="tiers"></div>
+	</section>
 
 	<!-- Hidden until the script finds rows: a machine with no serve bindings
 	     shows nothing here, not an empty table under a heading. -->
@@ -1047,10 +1126,11 @@ for (const app of APPS) {
 	name.textContent = app.n;
 
 	const port = document.createElement("td");
-	port.className = "port";
+	port.className = "port narrow";
 	port.textContent = app.p;
 
 	const doors = document.createElement("td");
+	doors.className = "narrow";
 	const wrap = document.createElement("div");
 	wrap.className = "doors";
 	const primary = "https://" + app.n + "." + DOMAIN;
@@ -1151,6 +1231,145 @@ async function probe(app) {
 }
 
 APPS.forEach(probe);
+
+// ---- services: /_apps/status (mini-apps) -----------------------------------------------------
+// Same origin, so the POSTs below carry an Origin the endpoint checks against Host. The endpoint refuses to stop a
+// core service and runs only the registry's own command; this page just offers the buttons it would accept.
+const TIER_TITLE = { "on-demand": "on-demand", manual: "manual", core: "core" };
+const mib = (n) => (n == null ? "–" : n >= 1024 ? (n / 1024).toFixed(1) + "G" : n + "M");
+let busy = new Set();
+
+function stateBadge(state) {
+	const span = document.createElement("span");
+	span.className = "st " + (state === "running" ? "up" : "unknown");
+	span.textContent = state;
+	return span;
+}
+
+function serviceRow(svc, withButton) {
+	const tr = document.createElement("tr");
+	const st = document.createElement("td");
+	st.appendChild(stateBadge(svc.state));
+	const name = cell(svc.name, "name");
+	const mem = cell(mib(svc.footprint_mib) + " / " + mib(svc.budget_mib || null), "mem" + (svc.over ? " over" : ""));
+	const doors = document.createElement("td");
+	doors.className = "narrow";
+	const wrap = document.createElement("div");
+	wrap.className = "doors";
+	svc.doors.forEach((d, i) => wrap.appendChild(link("https://" + d + "." + DOMAIN, d + "." + DOMAIN, i ? "alt" : "")));
+	doors.appendChild(wrap);
+	const act = document.createElement("td");
+	if (withButton) {
+		const verb = svc.state === "running" ? "stop" : "start";
+		if (svc.state === "running" ? svc.can_stop : svc.can_start) {
+			const b = document.createElement("button");
+			b.className = "btn";
+			b.textContent = verb === "stop" ? "Stop" : "Start";
+			b.disabled = busy.has(svc.name);
+			b.addEventListener("click", () => change(svc.name, verb, b));
+			act.appendChild(b);
+		}
+	}
+	tr.append(st, name, mem, doors, act);
+	return tr;
+}
+
+function tierTable(list, withButton) {
+	const table = document.createElement("table");
+	table.className = "svc";
+	const head = document.createElement("thead");
+	const hr = document.createElement("tr");
+	for (const [text, cls, width] of [["state", "", "7.5rem"], ["service", "", ""], ["memory / budget", "", "9.5rem"], ["doors", "narrow", "40%"], ["", "", "6.5rem"]]) {
+		const th = document.createElement("th");
+		th.textContent = text;
+		if (cls) th.className = cls;
+		if (width) th.style.width = width;
+		hr.appendChild(th);
+	}
+	head.appendChild(hr);
+	const body = document.createElement("tbody");
+	for (const svc of list) body.appendChild(serviceRow(svc, withButton));
+	table.append(head, body);
+	return table;
+}
+
+function renderServices(list) {
+	const root = document.getElementById("tiers");
+	root.replaceChildren();
+	const running = list.filter((s) => s.state === "running");
+	document.getElementById("servicessub").textContent =
+		running.length + " of " + list.length + " running · " + mib(Math.round(running.reduce((a, s) => a + (s.footprint_mib || 0), 0))) +
+		" in use · registry: config/mini/services.yaml";
+	for (const tier of ["on-demand", "manual", "core"]) {
+		const part = list.filter((s) => s.tier === tier);
+		if (!part.length) continue;
+		const up = part.filter((s) => s.state === "running");
+		const total = tier + " · " + up.length + " of " + part.length + " running · " + mib(Math.round(up.reduce((a, s) => a + (s.footprint_mib || 0), 0))) +
+			" / " + mib(part.reduce((a, s) => a + s.budget_mib, 0));
+		if (tier === "core") {
+			const d = document.createElement("details");
+			d.className = "tier";
+			const sum = document.createElement("summary");
+			sum.textContent = total;
+			d.append(sum, tierTable(part, false));
+			root.appendChild(d);
+		} else {
+			const sec = document.createElement("section");
+			sec.className = "tier";
+			const p = document.createElement("p");
+			p.className = "tier-total";
+			p.textContent = total;
+			sec.append(p, tierTable(part, true));
+			root.appendChild(sec);
+		}
+	}
+	document.getElementById("services").hidden = false;
+}
+
+let openCore = false;
+async function loadServices() {
+	try {
+		const res = await fetch("/_apps/status", { cache: "no-store", signal: AbortSignal.timeout(70000) });
+		if (!res.ok) throw new Error(String(res.status));
+		const was = document.querySelector("details.tier");
+		openCore = !!(was && was.open) || openCore;
+		renderServices((await res.json()).services);
+		if (openCore) { const d = document.querySelector("details.tier"); if (d) d.open = true; }
+		return true;
+	} catch (err) {
+		const sub = document.getElementById("servicessub");
+		if (!document.getElementById("tiers").children.length) {
+			sub.textContent = "service control is not answering (mini-apps: make mini-apps-setup)";
+			sub.className = "sub err";
+			document.getElementById("services").hidden = false;
+		}
+		return false;
+	}
+}
+
+async function change(name, verb, button) {
+	busy.add(name);
+	button.disabled = true;
+	button.textContent = verb === "start" ? "Starting…" : "Stopping…";
+	try {
+		const res = await fetch("/_apps/" + verb + "/" + name, { method: "POST" });
+		if (!res.ok) { button.textContent = (await res.text()).trim().slice(0, 40) || "refused"; return; }
+		// a start returns at once and the server comes up in the background: look until the state changes
+		const want = verb === "start" ? "running" : "stopped";
+		for (let i = 0; i < 40; i++) {
+			await new Promise((r) => setTimeout(r, 2500));
+			if (!(await loadServices())) continue;
+			const now = [...document.querySelectorAll("#tiers tbody tr")].find((r) => r.children[1].textContent === name);
+			if (now && (now.children[0].textContent === "running") === (want === "running")) break;
+		}
+	} finally {
+		busy.delete(name);
+		loadServices();
+	}
+}
+
+loadServices();
+setInterval(() => { if (!document.hidden && !busy.size) loadServices(); }, 20000);
 </script>
 PAGE_TAIL
   } > "$PAGE_DIR/index.html"

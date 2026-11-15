@@ -256,7 +256,8 @@ and **after any `brew upgrade caddy`**, which silently reverts it.
 
 Gotchas (opt-out ports file, `caddy adapt` registry reads, `localhost` vs
 `127.0.0.1` upstreams, one site block per app, 502-vs-403, HTTP/3 off, DNS
-negative-caching at two layers): `docs/remote-dev.md` §Dev-server doors.
+negative-caching at two layers): `docs/remote-dev.md` §Dev-server doors. The apps page starts and stops registry
+services and a stopped dev server's door wakes it: `docs/mini-registry.md` §Apps page.
 
 ## Service registry (mini)
 
@@ -337,6 +338,7 @@ never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/ho
 | Command | Purpose |
 |-|-|
 | `make devhost-health-setup` / `-check` / `-teardown` | The 300 s composite heartbeat. `-check` runs it once, per-component. |
+| `make mini-apps-setup` / `-restart` / `-teardown` / `-check` / `-test` | The apps page control endpoint (`mini-apps/`, `com.jkrumm.mini-apps`, `127.0.0.1:7797`) and the 120 s idle stop (`com.jkrumm.mini-apps-idle`): start, stop and wake of registry services; `docs/mini-registry.md` §Apps page |
 | `make kuma-door-setup` / `-restart` / `-teardown` / `-gen` / `-check` | The Kuma door (below): one tailnet port Kuma pulls service health through; `-gen` writes the monitors from the registry |
 | `make drift-check-setup` / `-teardown` | Retires the old drift agent (run by `make setup`); drift is now a daily bounded side job of the heartbeat |
 | `make beszel-agent-setup` / `-status` / `-teardown` | Push-mode system-metrics agent → the homelab Beszel hub, pinned-release install (not Homebrew) |
