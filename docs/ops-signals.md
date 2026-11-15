@@ -15,9 +15,27 @@ description: How a background-job or service failure reaches a human today, on b
 |-|-|-|
 | Uptime Kuma monitor | status change → provider `Slack - Alerts` | Slack |
 | HyperDX alert | alert and OK → `Slack #alerts` | Slack `#alerts` |
-| Background job (`jobrun` / Hermes cron) | run record → `jobs-grade` (the only grader) → `jobs-grade --summary --report`, run inside the 300 s mini heartbeat | a factory **signal on the job's owner repo** once the job is not ok for 2 consecutive grades (at most one per job per day); ntfy topic `alerts` at priority 3 only as the fallback when `factory` is unreachable. A lead fixes it; the owner is not paged |
+| Background job (`jobrun` / Hermes cron) | run record → `jobs-grade` (the only grader) → `jobs-grade --summary --report`, run inside the 300 s mini heartbeat | a factory **signal on the job's owner repo** once the job is not ok for 2 consecutive grades (at most one per job per day; failures a line outage or restart caused are held first, below); an alert the factory did not take is spooled and replayed; ntfy topic `alerts` at priority 3 only as the fallback when `factory` is unreachable. A lead fixes it; the owner is not paged |
 | KeepAlive service | `services` and `check_launchd_restarts` components of the 300 s heartbeat → the **detail** Kuma push (`MacMini Dev Host Detail - Push`, opt-in URL file) | Dead port or restart loop: DOWN on the detail monitor → the factory door → a lead. Until that monitor and its URL file exist (homelab signal filed with issue 870) a component FAIL is WARN text on `MacMini Dev Host - Push` and **reaches nobody** |
 | MacBook | `~/.wakeup` runs `jobs-grade --notify` | macOS notification only |
+
+**A home-line outage or a host restart is not a job's fault.** `jobs-grade` reads linewatch on loopback only
+(`GET http://127.0.0.1:7731/api/outages`, 3 s, last 24 h; set `LINEWATCH_URL` to point elsewhere) and the host's boot time,
+and only when a row is not ok. A `failing` job whose whole current failure streak finished inside a line outage (±2 min) or
+the 10 minutes after boot is **held**: the row stays `failing` and shows `(held)`, but nothing counts towards a report and
+nothing is filed until the line has been back for one run of the job. That run green: the row is gone and no signal was ever
+filed. That run red: it is a failure outside the window, the hold ends and the usual two-grade rule files one signal. The hold
+also ends 60 minutes after the line returned (a daily job has not run again), so a failure that outlasts the outage is never
+suppressed. Failures inside a window do not count towards `flapping` either. linewatch down, slow or answering garbage means
+no line window, never "no outage": the job is graded as before (the restart window needs nothing external).
+
+**An alert the factory did not take is spooled, not lost.** When `factory signal file` fails (the factory down, or its loopback
+call timing out), the alert is written to `~/.local/state/jobs-grade/spool/` (one file per job or group key; a repeat keeps the
+original time). Every later run replays the spool first, oldest first, stopping at the first refusal, and the text of a replayed
+signal begins with when it was observed. After one refused call the factory is not tried again in that run, so a down factory
+costs one timeout, not one per alert. A spooled file older than 3 days is dropped. ntfy stays the fallback for a factory that is
+down while the line is up (once a day per job); while linewatch shows the line down it is skipped, because ntfy cannot leave
+the house either, and the spool carries the alert until the factory answers.
 
 The heartbeat stays WARN-only for jobs: a job failure shows up as a **WARN** line in the push message
 and never turns a monitor DOWN, so Kuma does not become a second reporting path for the same

@@ -14,6 +14,9 @@
 //                         (topic `alerts`, priority 3) is only the fallback when `factory` cannot be reached, also at most once a day
 //                         per job. Best-effort: a failed report writes one stderr line, never changes stdout or the exit code, and
 //                         is retried on the next tick (a job is only marked reported after it landed). Recovery sends nothing.
+//                         A job-grade alert the factory did not take is SPOOLED on disk (<report state dir>/spool, one file per job
+//                         or group key, the original time kept) and replayed oldest first, once, when the factory answers; ntfy stays
+//                         the fallback for a factory that is down while the line is up (skipped while linewatch shows the line down).
 //   jobs-grade --notify   MacBook wake hook: like --summary, plus a macOS notification for the bad rows.
 //                         A closed lid is not a stalled job, so `stale` is judged against AWAKE time:
 //                         a row is dropped unless the machine has been awake for its whole window.
@@ -39,15 +42,21 @@
 // host's problem, not the job's. jobrun records `host_overloaded` on the run and does not count it as a failure; the grade is
 // `overloaded` and `--report` files ONE signal per overload episode, however many jobs timed out.
 //
+// Line outage / host restart: failures a home-line outage (linewatch, loopback `GET /api/outages`) or a host restart (boot time)
+// caused are not the job's fault. A `failing` row whose whole streak finished inside such a window is HELD (`held` set, nothing
+// filed) until the line has been back for one run of the job: green = the row is gone, red = the next grade files as usual; the
+// hold also ends HOLD_AFTER_BACK_MS after the line returned, so a failure that outlasts the outage is never suppressed. Failures
+// inside a window do not count towards `flapping` either. linewatch unreadable = no windows = graded as before.
+//
 // Hermes cron jobs (~/.hermes/cron/jobs.json) are graded too, through an adapter below.
 //
 // Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
-// JOBRUN_HERMES_CRON overrides ~/.hermes/cron/jobs.json.
+// JOBRUN_HERMES_CRON overrides ~/.hermes/cron/jobs.json; LINEWATCH_URL overrides http://127.0.0.1:7731.
 // --report: JOBS_GRADE_REPORT_STATE (default ~/.local/state/jobs-grade/report.json), JOBS_GRADE_FACTORY_BIN (default `factory`);
 // the ntfy fallback reads JOBS_GRADE_NTFY_TOPIC (default `alerts`),
 // JOBS_GRADE_NTFY_TOKEN (default: `secrets-run read op://common/ntfy/TOKEN`), JOBS_GRADE_NTFY_URL or NTFY_URL (default: the
 // base-url in ~/SourceRoot/homelab/config/ntfy/server.yml, read at run time because the host is private; tests point it at a stub).
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { cpus, homedir, hostname, loadavg, uptime } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -88,6 +97,8 @@ export interface Graded {
   owner_sha?: string | null
   runs?: JobState["runs"]
   tail?: string[]
+  /** Set when the failures are a line outage's or a restart's doing and the finding is held back (never filed while set). */
+  held?: string
 }
 
 // T1 thresholds (ops-signals.md §3). Exported so the tests pin the numbers.
@@ -267,6 +278,81 @@ export function readCronStates(path: string, now: number = Date.now()): JobState
   return out
 }
 
+// --- Line outages and host restarts --------------------------------------------------------------
+export interface OutageWindow {
+  start: number // epoch ms
+  end: number | null // null = still going on
+  kind: "line" | "restart"
+}
+
+/** A failure finishing this close to a window counts as inside it (DNS caches and probe cycles blur the edges). */
+export const OUTAGE_SLACK_MS = 2 * 60_000
+/** After a boot the network stack, DNS and the services jobs talk to need this long to settle. */
+export const RESTART_WINDOW_MS = 10 * 60_000
+/** A held finding is released this long after the line returned even if the job has not run since (a daily job): it outlasted the outage. */
+export const HOLD_AFTER_BACK_MS = 60 * 60_000
+export const LINEWATCH_TIMEOUT_MS = 3000
+const LINEWATCH_DEFAULT_URL = "http://127.0.0.1:7731"
+
+const covers = (w: OutageWindow, t: number) => t >= w.start - OUTAGE_SLACK_MS && (w.end === null || t <= w.end + OUTAGE_SLACK_MS)
+
+/** linewatch's `GET /api/outages` body as line windows; null when it is not that shape (unknown, never "no outage"). */
+export function parseLineOutages(body: unknown): OutageWindow[] | null {
+  const rows = (body as { outages?: unknown } | null)?.outages
+  if (!Array.isArray(rows)) return null
+  const out: OutageWindow[] = []
+  for (const r of rows as Record<string, unknown>[]) {
+    if (typeof r?.startedAt !== "number" || !Number.isFinite(r.startedAt)) return null
+    const end = r.endedAt === null || r.endedAt === undefined ? null : r.endedAt
+    if (end !== null && (typeof end !== "number" || !Number.isFinite(end))) return null
+    out.push({ start: r.startedAt, end, kind: "line" })
+  }
+  return out
+}
+
+/** The window of the last boot: from `now - uptime` for RESTART_WINDOW_MS. */
+export const restartWindow = (now: number, uptimeS: number): OutageWindow => {
+  const start = now - uptimeS * 1000
+  return { start, end: start + RESTART_WINDOW_MS, kind: "restart" }
+}
+
+/** The last 24 h of line outages (linewatch, loopback only, 3 s) plus the host's restart window. linewatch down or odd = only the restart window. */
+export async function readOutageWindows(now: number = Date.now(), uptimeS: number = uptime()): Promise<OutageWindow[]> {
+  const windows = [restartWindow(now, uptimeS)]
+  try {
+    const base = (process.env.LINEWATCH_URL || LINEWATCH_DEFAULT_URL).replace(/\/+$/, "")
+    const res = await fetch(`${base}/api/outages?from=${now - 86400_000}&limit=50`, { signal: AbortSignal.timeout(LINEWATCH_TIMEOUT_MS) })
+    const line = res.ok ? parseLineOutages(await res.json()) : null
+    if (line) windows.push(...line)
+  } catch {
+    // unknown is not "no outage" and not "an outage": the rows are graded as before
+  }
+  return windows
+}
+
+/** Failures inside a window are the outage's doing: they do not count towards flapping. */
+function withoutOutageFailures(s: JobState, windows: OutageWindow[]): JobState {
+  const kept = s.fail_times.filter((t) => !windows.some((w) => covers(w, Date.parse(t))))
+  return kept.length === s.fail_times.length ? s : { ...s, fail_times: kept, fails_24h: kept.length }
+}
+
+/** Why a failing job's finding is held, or null. Held = the whole current failure streak finished inside one window and the job has
+ *  not run since the line came back (nor has the hold outlived HOLD_AFTER_BACK_MS). A failure before the outage, or any after it, breaks the hold. */
+export function outageHold(s: JobState, windows: OutageWindow[], now: number): string | null {
+  const streak = s.consecutive_fail
+  if (streak < 1 || streak > s.fail_times.length) return null // more failures than we can place: do not guess
+  const inside = s.fail_times.slice(-streak).map((t) => windows.find((w) => covers(w, Date.parse(t))))
+  if (inside.some((w) => !w)) return null
+  const ws = inside as OutageWindow[]
+  const ongoing = ws.find((w) => w.end === null)
+  if (ongoing) return "line outage still going on"
+  const back = Math.max(...ws.map((w) => w.end as number))
+  const kind = ws.some((w) => w.kind === "line") ? "line outage" : "host restart"
+  if ((s.runs ?? []).some((r) => Date.parse(r.started) > back)) return null // it ran since and is still red: that failure is its own
+  if (now > back + HOLD_AFTER_BACK_MS) return null
+  return `${kind} ended ${new Date(back).toISOString()}, waiting for one run since`
+}
+
 /** A label a plist promises to run through jobrun. */
 export interface Expected {
   label: string
@@ -283,6 +369,7 @@ export interface GradeOpts {
   retired?: Map<string, string> // label -> reason, from readRetired
   disabled?: Set<string> // labels launchd reports disabled: not graded at all
   host?: { overloaded: boolean } // the host right now; a timeout while it is true grades `overloaded`
+  outages?: OutageWindow[] // line outages and the host restart, from readOutageWindows: failures inside one are held
 }
 
 export const defaultPlistDir = () => process.env.JOBRUN_PLIST_DIR || join(homedir(), "Library/LaunchAgents")
@@ -346,6 +433,14 @@ function isOnDemand(s: JobState, o: GradeOpts): boolean {
 }
 
 export function gradeOne(s: JobState, o: GradeOpts): Graded {
+  if (!o.outages?.length) return gradeState(s, o)
+  const row = gradeState(withoutOutageFailures(s, o.outages), o)
+  if (row.grade !== "failing") return row
+  const why = outageHold(s, o.outages, o.now)
+  return why ? { ...row, reason: `${row.reason}; held: ${why}`, held: why } : row
+}
+
+function gradeState(s: JobState, o: GradeOpts): Graded {
   const base = {
     label: s.label,
     owner: s.owner,
@@ -444,7 +539,7 @@ const isBad = (r: Graded) => r.grade !== "ok" && r.grade !== "retired"
 export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
   const bad = rows.filter(isBad)
   if (bad.length === 0) return { line: `jobs ok (${rows.length})`, code: 0 }
-  return { line: `jobs WARN (${rows.length}): ${bad.map((r) => `${r.label}=${r.grade}`).join(", ")}`, code: 2 }
+  return { line: `jobs WARN (${rows.length}): ${bad.map((r) => `${r.label}=${r.grade}${r.held ? " (held)" : ""}`).join(", ")}`, code: 2 }
 }
 
 // --- Reporting: signals to the factory, ntfy only as the fallback -----------------------------------
@@ -546,6 +641,10 @@ export function reportPlan(prev: ReportState, rows: Graded[], now: number): { ne
   for (const r of rows) {
     if (GROUP_OF[r.grade]) continue // counted in its group, never as the job's own failure
     const old = prev[r.label] ?? { bad: 0, filedAt: null, ntfyAt: null }
+    if (r.held) {
+      next[r.label] = old // a line outage's or a restart's doing: the counters wait, nothing becomes due
+      continue
+    }
     if (!isBad(r)) {
       // history only: a job that recovered keeps its last-report stamps for a day so a quick relapse is still one signal a day
       next[r.label] = { bad: 0, filedAt: old.filedAt, ntfyAt: old.ntfyAt }
@@ -629,39 +728,130 @@ async function fileSignal(s: { repo: string; title: string; text: string }): Pro
   return code === 0
 }
 
+// --- The spool: an alert the factory did not take is kept, not lost -----------------------------------
+// One file per key (a job label or a group key) under `<report state dir>/spool`, named by the time it was first undeliverable so a
+// directory listing is oldest first. A repeat of the same key does not add a second file and does not move its time.
+export const SPOOL_MAX_AGE_MS = 3 * 24 * 3600_000
+export const SPOOL_MAX_ENTRIES = 50
+
+export interface Sig {
+  repo: string
+  title: string
+  text: string
+}
+export interface Spooled {
+  key: string
+  at: number // epoch ms the alert was first undeliverable
+  sig: Sig
+}
+interface SpoolFile {
+  path: string
+  entry: Spooled
+}
+
+export const defaultSpoolDir = (statePath: string) => join(dirname(statePath), "spool")
+
+/** The spooled alerts, oldest first. An unreadable, malformed or expired file is removed, never replayed. */
+export function readSpool(dir: string, now: number): SpoolFile[] {
+  if (!existsSync(dir)) return []
+  const out: SpoolFile[] = []
+  for (const f of readdirSync(dir).sort()) {
+    if (!f.endsWith(".json")) continue
+    const path = join(dir, f)
+    try {
+      const e = JSON.parse(readFileSync(path, "utf8")) as Spooled
+      const ok = typeof e.key === "string" && Number.isFinite(e.at) && typeof e.sig?.repo === "string" && typeof e.sig?.title === "string" && typeof e.sig?.text === "string"
+      if (ok && now - e.at < SPOOL_MAX_AGE_MS) {
+        out.push({ path, entry: e })
+        continue
+      }
+    } catch {
+      // torn or unreadable: dropped below
+    }
+    rmSync(path, { force: true })
+  }
+  return out
+}
+
+/** Keep the alert until the factory takes it. Same key already spooled = nothing to do (the first time is the original). Never throws. */
+function spoolAlert(dir: string, key: string, sig: Sig, now: number): void {
+  try {
+    const held = readSpool(dir, now)
+    if (held.some((s) => s.entry.key === key)) return
+    mkdirSync(dir, { recursive: true })
+    const name = `${String(now).padStart(14, "0")}-${key.replace(/[^A-Za-z0-9.-]+/g, "_").slice(0, 80)}.json`
+    const tmp = join(dir, `${name}.${process.pid}.tmp`)
+    writeFileSync(tmp, JSON.stringify({ key, at: now, sig } satisfies Spooled))
+    renameSync(tmp, join(dir, name))
+    for (const extra of held.slice(0, Math.max(0, held.length + 1 - SPOOL_MAX_ENTRIES))) rmSync(extra.path, { force: true }) // the oldest go first
+  } catch (e) {
+    console.error(`jobs-grade: spooling ${key} failed: ${(e as Error).message}`)
+  }
+}
+
+/** A replayed alert says when it was observed: `factory signal file` has no time flag. */
+const lateSignal = (e: Spooled, now: number): Sig => ({
+  ...e.sig,
+  text: clip(`Observed ${new Date(e.at).toISOString()}, delivered ${new Date(now).toISOString()}: the factory was unreachable in between.\n${e.sig.text}`, 8000),
+})
+
 export interface ReportDeps {
   now?: number
-  file?: (s: { repo: string; title: string; text: string }) => Promise<boolean>
+  file?: (s: Sig) => Promise<boolean>
   ntfy?: (text: string) => Promise<void>
   /** Labels launchd reports disabled: their stored counters are dropped. */
   disabled?: Set<string>
+  /** Where undelivered alerts wait (default: `spool` beside the report state). */
+  spoolDir?: string
+  /** linewatch shows the home line down right now: ntfy cannot get out either, so the fallback is skipped and the spool keeps the alert. */
+  lineDown?: boolean
 }
 
-/** Best-effort: file a signal for every job that is due, ntfy (priority 3, once a day per job) only for a job the
- *  factory would not take, then persist the counters. Never throws. "failed" = a report or the state write failed. */
+/** Best-effort: replay the spool (oldest first, stopping at the first refusal), file a signal for every job that is due, spool what the
+ *  factory did not take and send ntfy (priority 3, once a day per job) for it, then persist the counters. After one refusal the factory is
+ *  not tried again in the same run. Never throws. "failed" = a report or the state write failed. */
 export async function reportJobs(rows: Graded[], statePath: string = defaultReportState(), deps: ReportDeps = {}): Promise<"ok" | "unchanged" | "failed"> {
   const now = deps.now ?? Date.now()
   const file = deps.file ?? fileSignal
   const ntfy = deps.ntfy ?? postNtfy
+  const spoolDir = deps.spoolDir ?? defaultSpoolDir(statePath)
   let failed = false
   let reported = false
+  let factoryDown = false
   const prev = readReportState(statePath)
   const { next, due, dueGroups } = reportPlan(prev, rows, now)
   const items = [
     ...due.map((r) => ({ key: r.label, sig: signalFor(r), what: `${r.label}=${r.grade} (${r.reason})` })),
     ...dueGroups.map((g) => ({ key: g.key, sig: signalForGroup(g), what: `${g.key}: ${g.rows.map((r) => r.label).join(", ")}` })),
   ]
-  for (const { key, sig, what } of items) {
+  const tryFile = async (sig: Sig): Promise<boolean> => {
+    if (factoryDown) return false
     try {
-      if (await file(sig)) {
-        next[key].filedAt = now
-        reported = true
-        continue
-      }
+      if (await file(sig)) return true
     } catch (e) {
       console.error(`jobs-grade: factory signal failed: ${(e as Error).message}`)
     }
+    factoryDown = true
+    return false
+  }
+  const landed = new Set<string>()
+  for (const { path, entry } of readSpool(spoolDir, now)) {
+    if (!(await tryFile(lateSignal(entry, now)))) break
+    rmSync(path, { force: true })
+    landed.add(entry.key)
+    if (next[entry.key]) next[entry.key].filedAt = now
+    reported = true
+  }
+  for (const { key, sig, what } of items) {
+    if (landed.has(key)) continue // the replay just filed this very item
+    if (await tryFile(sig)) {
+      next[key].filedAt = now
+      reported = true
+      continue
+    }
+    spoolAlert(spoolDir, key, sig, now)
     // factory unreachable: the fallback, at most once a day per job (a group: once per episode, see reportPlan)
+    if (deps.lineDown) continue
     const ntfyAt = next[key].ntfyAt
     if (ntfyAt !== null && now - ntfyAt < REPORT_EVERY_MS) continue
     try {
@@ -690,15 +880,23 @@ const readAwakeSeconds = () => awakeSeconds(Bun.spawnSync(["/usr/sbin/sysctl", "
 
 if (import.meta.main) {
   const disabled = readDisabled()
-  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), retired: readRetired(defaultStateDir()), cron: readCronStates(defaultCronJobs()), disabled, host: { overloaded: isHostOverloaded(readHostLoad()) } })
-  if (process.argv.includes("--notify")) {
+  const gradeNow = (outages?: OutageWindow[]) => gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), retired: readRetired(defaultStateDir()), cron: readCronStates(defaultCronJobs()), disabled, host: { overloaded: isHostOverloaded(readHostLoad()) }, outages })
+  let rows = gradeNow()
+  const notifying = process.argv.includes("--notify")
+  // linewatch is asked only when a row is not ok, and only to hold a failure back: an unreadable answer changes nothing.
+  let outages: OutageWindow[] = []
+  if (!notifying && rows.some(isBad)) {
+    outages = await readOutageWindows()
+    rows = gradeNow(outages)
+  }
+  if (notifying) {
     const { line, code } = summarize(judgeAgainstAwake(rows, readAwakeSeconds()))
     if (code !== 0) notify(line)
     console.log(line)
     process.exit(code)
   }
   const reportStatus = process.argv.includes("--report") && (process.argv.includes("--summary") || process.argv.includes("--table"))
-    ? await reportJobs(judgeAgainstAwake(rows, readAwakeSeconds()), defaultReportState(), { disabled })
+    ? await reportJobs(judgeAgainstAwake(rows, readAwakeSeconds()), defaultReportState(), { disabled, lineDown: outages.some((w) => w.kind === "line" && w.end === null) })
     : null
   const failedNote = reportStatus === "failed" ? " [report failed]" : ""
   if (process.argv.includes("--summary")) {
