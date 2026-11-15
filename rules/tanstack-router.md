@@ -1,38 +1,44 @@
 ---
 description: TanStack Router — type-safe routing, search params, loaders, code splitting, navigation patterns
 paths: ["**/routeTree.gen.ts", "**/routes/**/*.ts", "**/routes/**/*.tsx", "**/router.tsx"]
-source: DeckardGer/tanstack-agent-skills@0e8bcdc (2026-04-03)
+source: DeckardGer/tanstack-agent-skills@b2fc14c (2026-09-09)
 ---
 
 # TanStack Router Best Practices
 
-Guidelines for TanStack Router — type safety, data loading, navigation, and code organization. 15 rules across 10 categories.
+> Official, version-locked skills ship in the npm packages: read `node_modules/@tanstack/react-router/skills/*/SKILL.md` first for API facts of the installed version (`npx @tanstack/intent@latest list` shows them). The rules below are community heuristics (not TanStack-owned); where they disagree with the installed skill, the skill wins.
+
+Comprehensive guidelines for implementing TanStack Router patterns in React applications. These rules optimize type safety, data loading, navigation, and code organization.
 
 ## Rule Categories by Priority
 
 | Priority | Category | Rules | Impact |
-|-|-|-|-|
-| CRITICAL | Type Safety | 4 | Prevents runtime errors and enables refactoring |
-| CRITICAL | Route Organization | 5 | Ensures maintainable route structure |
-| HIGH | Router Config | 1 | Global router defaults |
-| HIGH | Data Loading | 6 | Optimizes data fetching and caching |
-| HIGH | Search Params | 5 | Enables type-safe URL state |
-| HIGH | Error Handling | 1 | Handles 404 and errors gracefully |
-| MEDIUM | Navigation | 5 | Improves UX and accessibility |
-| MEDIUM | Code Splitting | 3 | Reduces bundle size |
-| MEDIUM | Preloading | 3 | Improves perceived performance |
-| LOW | Route Context | 3 | Enables dependency injection |
+|----------|----------|-------|--------|
+| CRITICAL | Type Safety | 4 rules | Prevents runtime errors and enables refactoring |
+| CRITICAL | Route Organization | 5 rules | Ensures maintainable route structure |
+| HIGH | Router Config | 1 rule | Global router defaults |
+| HIGH | Data Loading | 6 rules | Optimizes data fetching and caching |
+| HIGH | Search Params | 5 rules | Enables type-safe URL state |
+| HIGH | Error Handling | 1 rule | Handles 404 and errors gracefully |
+| MEDIUM | Navigation | 5 rules | Improves UX and accessibility |
+| MEDIUM | Code Splitting | 3 rules | Reduces bundle size |
+| MEDIUM | Preloading | 3 rules | Improves perceived performance |
+| LOW | Route Context | 3 rules | Enables dependency injection |
 
 ## Quick Reference
 
-### Type Safety — CRITICAL (Prefix: `ts-`)
+### Type Safety (Prefix: `ts-`)
 
 - `ts-register-router` — Register router type for global inference
 - `ts-use-from-param` — Use `from` parameter for type narrowing
 - `ts-route-context-typing` — Type route context with createRootRouteWithContext
 - `ts-query-options-loader` — Use queryOptions in loaders for type inference
 
-### Route Organization — CRITICAL (Prefix: `org-`)
+### Router Config (Prefix: `router-`)
+
+- `router-default-options` — Configure router defaults (scrollRestoration, defaultErrorComponent, etc.)
+
+### Route Organization (Prefix: `org-`)
 
 - `org-file-based-routing` — Prefer file-based routing for conventions
 - `org-route-tree-structure` — Follow hierarchical route tree patterns
@@ -40,11 +46,7 @@ Guidelines for TanStack Router — type safety, data loading, navigation, and co
 - `org-index-routes` — Understand index vs layout routes
 - `org-virtual-routes` — Understand virtual file routes
 
-### Router Config — HIGH (Prefix: `router-`)
-
-- `router-default-options` — Configure router defaults (scrollRestoration, defaultErrorComponent, etc.)
-
-### Data Loading — HIGH (Prefix: `load-`)
+### Data Loading (Prefix: `load-`)
 
 - `load-use-loaders` — Use route loaders for data fetching
 - `load-loader-deps` — Define loaderDeps for cache control
@@ -53,7 +55,7 @@ Guidelines for TanStack Router — type safety, data loading, navigation, and co
 - `load-error-handling` — Handle loader errors appropriately
 - `load-parallel` — Leverage parallel route loading
 
-### Search Params — HIGH (Prefix: `search-`)
+### Search Params (Prefix: `search-`)
 
 - `search-validation` — Always validate search params
 - `search-type-inheritance` — Leverage parent search param types
@@ -61,11 +63,11 @@ Guidelines for TanStack Router — type safety, data loading, navigation, and co
 - `search-defaults` — Provide sensible defaults
 - `search-custom-serializer` — Configure custom search param serializers
 
-### Error Handling — HIGH (Prefix: `err-`)
+### Error Handling (Prefix: `err-`)
 
 - `err-not-found` — Handle not-found routes properly
 
-### Navigation — MEDIUM (Prefix: `nav-`)
+### Navigation (Prefix: `nav-`)
 
 - `nav-link-component` — Prefer Link component for navigation
 - `nav-active-states` — Configure active link states
@@ -73,19 +75,19 @@ Guidelines for TanStack Router — type safety, data loading, navigation, and co
 - `nav-relative-paths` — Understand relative path navigation
 - `nav-route-masks` — Use route masks for modal URLs
 
-### Code Splitting — MEDIUM (Prefix: `split-`)
+### Code Splitting (Prefix: `split-`)
 
 - `split-lazy-routes` — Use .lazy.tsx for code splitting
 - `split-critical-path` — Keep critical config in main route file
 - `split-auto-splitting` — Enable autoCodeSplitting when possible
 
-### Preloading — MEDIUM (Prefix: `preload-`)
+### Preloading (Prefix: `preload-`)
 
 - `preload-intent` — Enable intent-based preloading
 - `preload-stale-time` — Configure preload stale time
 - `preload-manual` — Use manual preloading strategically
 
-### Route Context — LOW (Prefix: `ctx-`)
+### Route Context (Prefix: `ctx-`)
 
 - `ctx-root-context` — Define context at root route
 - `ctx-before-load` — Extend context in beforeLoad

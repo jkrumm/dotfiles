@@ -1,31 +1,33 @@
 ---
 description: TanStack Start SSR + integration patterns — server functions, middleware, auth, hydration, query-router coordination
 paths: ["**/routeTree.gen.ts", "**/routes/**/*.ts", "**/routes/**/*.tsx", "**/router.tsx"]
-source: DeckardGer/tanstack-agent-skills@0e8bcdc (2026-04-03)
+source: DeckardGer/tanstack-agent-skills@b2fc14c (2026-09-09)
 ---
 
 # TanStack Start Best Practices
 
-Guidelines for TanStack Start full-stack patterns — server functions, middleware, SSR, auth, deployment. 13 rules across 10 categories.
+> Official, version-locked skills ship in the npm packages: read `node_modules/@tanstack/react-start/skills/*/SKILL.md` first for API facts of the installed version (`npx @tanstack/intent@latest list` shows them). The rules below are community heuristics (not TanStack-owned); where they disagree with the installed skill, the skill wins.
+
+Comprehensive guidelines for implementing TanStack Start patterns in full-stack React applications. These rules cover server functions, middleware, SSR, authentication, and deployment.
 
 ## Rule Categories by Priority
 
 | Priority | Category | Rules | Impact |
-|-|-|-|-|
-| CRITICAL | Server Functions | 5 | Core data mutation patterns |
-| CRITICAL | Security | 4 | Prevents vulnerabilities |
-| HIGH | Middleware | 4 | Request/response handling |
-| HIGH | Authentication | 4 | Secure user sessions |
-| MEDIUM | API Routes | 1 | External endpoint patterns |
-| MEDIUM | SSR | 6 | Server rendering patterns |
-| MEDIUM | Error Handling | 3 | Graceful failure handling |
-| MEDIUM | Environment | 1 | Configuration management |
-| LOW | File Organization | 3 | Maintainable code structure |
-| LOW | Deployment | 2 | Production readiness |
+|----------|----------|-------|--------|
+| CRITICAL | Server Functions | 5 rules | Core data mutation patterns |
+| CRITICAL | Security | 4 rules | Prevents vulnerabilities |
+| HIGH | Middleware | 4 rules | Request/response handling |
+| HIGH | Authentication | 4 rules | Secure user sessions |
+| MEDIUM | API Routes | 1 rule | External endpoint patterns |
+| MEDIUM | SSR | 5 rules | Server rendering patterns |
+| MEDIUM | Error Handling | 3 rules | Graceful failure handling |
+| MEDIUM | Environment | 1 rule | Configuration management |
+| LOW | File Organization | 3 rules | Maintainable code structure |
+| LOW | Deployment | 2 rules | Production readiness |
 
 ## Quick Reference
 
-### Server Functions — CRITICAL (Prefix: `sf-`)
+### Server Functions (Prefix: `sf-`)
 
 - `sf-create-server-fn` — Use createServerFn for server-side logic
 - `sf-input-validation` — Always validate server function inputs
@@ -33,32 +35,32 @@ Guidelines for TanStack Start full-stack patterns — server functions, middlewa
 - `sf-error-handling` — Handle errors in server functions
 - `sf-response-headers` — Customize response headers when needed
 
-### Security — CRITICAL (Prefix: `sec-`)
+### Security (Prefix: `sec-`)
 
 - `sec-validate-inputs` — Validate all user inputs with schemas
 - `sec-auth-middleware` — Protect routes with auth middleware
 - `sec-sensitive-data` — Keep secrets server-side only
 - `sec-csrf-protection` — Implement CSRF protection for mutations
 
-### Middleware — HIGH (Prefix: `mw-`)
+### Middleware (Prefix: `mw-`)
 
 - `mw-request-middleware` — Use request middleware for cross-cutting concerns
 - `mw-function-middleware` — Use function middleware for server functions
 - `mw-context-flow` — Properly pass context through middleware
 - `mw-composability` — Compose middleware effectively
 
-### Authentication — HIGH (Prefix: `auth-`)
+### Authentication (Prefix: `auth-`)
 
 - `auth-session-management` — Implement secure session handling
 - `auth-route-protection` — Protect routes with beforeLoad
 - `auth-server-functions` — Verify auth in server functions
 - `auth-cookie-security` — Configure secure cookie settings
 
-### API Routes — MEDIUM
+### API Routes (Prefix: `api-`)
 
 - `api-routes` — Create API routes for external consumers
 
-### SSR — MEDIUM (Prefix: `ssr-`)
+### SSR (Prefix: `ssr-`)
 
 - `ssr-data-loading` — Load data appropriately for SSR
 - `ssr-hydration-safety` — Prevent hydration mismatches
@@ -66,23 +68,23 @@ Guidelines for TanStack Start full-stack patterns — server functions, middlewa
 - `ssr-selective` — Apply selective SSR when beneficial
 - `ssr-prerender` — Configure static prerendering and ISR
 
-### Error Handling — MEDIUM (Prefix: `err-`)
+### Environment (Prefix: `env-`)
+
+- `env-functions` — Use environment functions for configuration
+
+### Error Handling (Prefix: `err-`)
 
 - `err-server-errors` — Handle server function errors
 - `err-redirects` — Use redirects appropriately
 - `err-not-found` — Handle not-found scenarios
 
-### Environment — MEDIUM
-
-- `env-functions` — Use environment functions for configuration
-
-### File Organization — LOW (Prefix: `file-`)
+### File Organization (Prefix: `file-`)
 
 - `file-separation` — Separate server and client code
 - `file-functions-file` — Use .functions.ts pattern
 - `file-shared-validation` — Share validation schemas
 
-### Deployment — LOW (Prefix: `deploy-`)
+### Deployment (Prefix: `deploy-`)
 
 - `deploy-env-config` — Configure environment variables
 - `deploy-adapters` — Choose appropriate deployment adapter
@@ -91,9 +93,7 @@ Guidelines for TanStack Start full-stack patterns — server functions, middlewa
 
 For full explanations with code examples, read individual rules in `~/SourceRoot/dotfiles/reference/tanstack-start/`
 
----
-
-# TanStack Integration Patterns
+## Integration Patterns (Query + Router + Start)
 
 Guidelines for integrating TanStack Query + Router + Start together. 4 rules across 3 categories.
 
