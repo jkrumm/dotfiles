@@ -497,7 +497,21 @@ run_bounded() {  # $1=seconds  $2..=command ; stdout passes through untouched
   # The watchdog's own stdout goes to /dev/null: it must not hold the command
   # substitution's pipe open, or the caller would block until the sleep elapsed
   # even on a fast success.
-  { sleep "$secs"; kill -TERM -"$cmd_pid" 2>/dev/null; sleep 5; kill -KILL -"$cmd_pid" 2>/dev/null; } >/dev/null 2>&1 &
+  #
+  # The watchdog reaps its own `sleep`. Killing only the group that runs it left the
+  # sleep behind, reparented to launchd for the full $secs: one `make secrets-seed-test`
+  # left 41 `sleep 180` and 20 `sleep 30` behind (measured 2026-11-15). So the sleep is
+  # a child the group waits on, and a TERM to the group kills it on the way out.
+  {
+    sp=""
+    trap '[[ -n "$sp" ]] && kill "$sp" 2>/dev/null; exit 0' TERM
+    sleep "$secs" & sp=$!
+    wait "$sp" || exit 0
+    kill -TERM -"$cmd_pid" 2>/dev/null
+    sleep 5 & sp=$!
+    wait "$sp" || exit 0
+    kill -KILL -"$cmd_pid" 2>/dev/null
+  } >/dev/null 2>&1 &
   wd_pid=$!
   wait "$cmd_pid" || rc=$?
   kill "$wd_pid" 2>/dev/null || true

@@ -26,6 +26,9 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEED="$HERE/secrets-seed.sh"
+# Watchdog deadlines no real run uses, so the leak check at the end can tell this suite's sleeps from anyone else's.
+MARK_BATCH_S=7311
+MARK_READ_S=7312
 
 pass=0
 fail=0
@@ -240,7 +243,7 @@ run_seed() {
   PATH="$TESTREPO/bin:$PATH" SECRETS_PRIVATE_REPO="$TESTREPO" \
     SECRETS_SEED_BACKEND_MARKER="${SECRETS_SEED_BACKEND_MARKER:-$TESTREPO/backend-cache}" SECRETS_SEED_AGE_KEY_FILE="$TESTREPO/key.txt" \
     SECRETS_SEED_OP_BATCH="${SECRETS_SEED_OP_BATCH:-1}" \
-    SECRETS_SEED_OP_BATCH_TIMEOUT="${SECRETS_SEED_OP_BATCH_TIMEOUT:-180}" \
+    SECRETS_SEED_OP_BATCH_TIMEOUT="${SECRETS_SEED_OP_BATCH_TIMEOUT:-$MARK_BATCH_S}" SECRETS_SEED_OP_READ_TIMEOUT="$MARK_READ_S" \
     "$SEED" ${SEED_ARGS[@]+"${SEED_ARGS[@]}"} >/dev/null 2>"$errf"
   SEED_CODE=$?
   SEED_ERR="$(cat "$errf")"
@@ -805,6 +808,13 @@ assert_eq "24. after the incremental seal nothing is missing" "1" "$(needed)"
 # - the post-encrypt ciphertext sanity checks (missing `ENC[` marker / missing key):
 #   would require sops itself to misbehave, not reproducible by a black-box op stub;
 #   cases 2/5/6/10 already prove every declared key round-trips into the ciphertext.
+
+# === 99. the watchdog reaps its own timer ====================================
+# run_bounded's `sleep $secs` used to outlive every run that finished early, reparented to launchd for the full deadline:
+# one suite left 41 `sleep 180` and 20 `sleep 30` behind (2026-11-15, docs/host-waste.md). Every run above used the marked
+# deadlines, so a surviving marked sleep is a leak.
+leaked="$(ps -Ao args= | awk -v a="$MARK_BATCH_S" -v b="$MARK_READ_S" '($1 == "sleep" || $1 == "/bin/sleep") && ($2 == a || $2 == b) { n++ } END { print n + 0 }')"
+assert_eq "99. no watchdog sleep outlives its run" "0" "$leaked"
 
 # --- summary -----------------------------------------------------------------
 echo
