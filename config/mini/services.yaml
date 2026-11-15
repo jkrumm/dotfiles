@@ -85,7 +85,7 @@ services:
   - { name: usage-tracker-report, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker-report, memory_mib: 50 }
   - { name: vps-pg-backup, repo: vps, kind: launchd, tier: core, label: com.jkrumm.vps-pg-backup, memory_mib: 50 }
   - { name: walkingpad, repo: king-smith-walkingpad-mac, kind: launchd, tier: core, label: com.jkrumm.walkingpad, memory_mib: 50 }
-  - { name: weatherorb-corpus-extend, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.orb.corpus-extend, note: "V2 corpus daily holdout extension, 07:30; installed by `make v2-corpus-install` from the default-branch checkout", memory_mib: 50 }
+  - { name: weatherorb-site-record, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.orb.site-record, note: "V2 site record, every 3 h (replaces corpus-extend); installed by `make v2-corpus-install JOB=sites` from the default-branch checkout", memory_mib: 50 }
   - { name: weatherorb-corpus-obs, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.orb.corpus-obs, note: "V2 corpus observation, hourly; installed by `make v2-corpus-install` from the default-branch checkout", memory_mib: 50 }
   - { name: weatherorb-public, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.public, memory_mib: 200 }
   - { name: weatherorb-retention, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.retention, memory_mib: 50 }

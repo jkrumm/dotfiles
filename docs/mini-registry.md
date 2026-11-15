@@ -144,7 +144,7 @@ another repo's plist, not measured to starve).
 | a footprint above its budget | WARN | WARN (named in the message) |
 
 A job installed by hand and never registered is exactly this FAIL: it turns the detail monitor DOWN until its row lands
-(2026-11-14: `kiri-sample`, `orb.corpus-extend`, `orb.corpus-obs`). Register at install time, in the same commit as the
+(2026-11-14: `kiri-sample`, `orb.corpus-extend`, `orb.corpus-obs`; 2026-11-15: `orb.site-record`). Register at install time, in the same commit as the
 architecture row.
 
 ## Budgets
