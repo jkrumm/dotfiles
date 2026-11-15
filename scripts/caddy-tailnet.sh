@@ -961,6 +961,10 @@ section.tier { margin-top: 1.4rem; }
 	table.apps th:first-child { width: 6.5rem !important; }
 	table.apps td { overflow-wrap: anywhere; }
 	table.apps .st { white-space: normal; }
+	table.serve { table-layout: fixed; }
+	table.serve th:first-child { width: 6.5rem !important; }
+	table.serve td { overflow-wrap: anywhere; }
+	table.serve .reach { white-space: normal; }
 	table.svc th:first-child { width: 5.5rem !important; }
 	table.svc th:nth-child(3) { width: 6.5rem !important; }
 	table.svc th:last-child { width: 5rem !important; }
@@ -995,12 +999,12 @@ section.tier { margin-top: 1.4rem; }
 	<section id="serve" hidden>
 		<h2 class="sec">tailscale serve</h2>
 		<p class="sub" id="servesub"></p>
-		<table>
+		<table class="serve">
 			<thead>
 				<tr>
 					<th style="width:12rem">reach</th>
 					<th>binding</th>
-					<th style="width:5rem">port</th>
+					<th class="narrow" style="width:5rem">port</th>
 					<th>door</th>
 				</tr>
 			</thead>
@@ -1188,7 +1192,7 @@ if (SERVE.length) {
 		doorCell.appendChild(wrap);
 
 		rowLink(tr, door);
-		tr.append(reach, what, cell(row.p, "port"), doorCell);
+		tr.append(reach, what, cell(row.p, "port narrow"), doorCell);
 		sbody.appendChild(tr);
 	}
 	document.getElementById("serve").hidden = false;
