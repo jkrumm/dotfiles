@@ -395,9 +395,10 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
   return done("ok", s.consecutive_fail > 0 ? `last run failed (rc=${s.rc}), retrying` : "ok")
 }
 
+// An undelivered push (rc 75) is not a failure (jobrun does not count it), so it does not break a recovery either.
 function recovered(s: JobState): boolean {
   const last = (s.runs ?? []).slice(-RECOVERED_RUNS)
-  return last.length === RECOVERED_RUNS && last.every((r) => r.rc === 0)
+  return last.length === RECOVERED_RUNS && last.every((r) => r.rc === 0 || r.rc === PUSH_UNDELIVERED_RC)
 }
 
 export function gradeAll(dir: string, o: GradeOpts): Graded[] {

@@ -60,6 +60,11 @@ describe("jobs-grade", () => {
     expect(grade({ fails_24h: 12, runs: [0, 1, 0, 0].map(run) })).toBe("flapping")
     expect(grade({ fails_24h: 12, runs: [0, 0].map(run) })).toBe("flapping")
   })
+  test("undelivered pushes (rc 75) in the latest runs do not keep a recovered job flapping", () => {
+    const run = (rc: number, i: number) => ({ run_id: `r${i}`, started: ago(900 - i * 300), rc, duration_ms: 1 })
+    expect(grade({ fails_24h: 13, runs: [0, 75, 75, 0, 0].map(run) })).toBe("ok")
+    expect(grade({ fails_24h: 13, runs: [1, 75, 0].map(run) })).toBe("flapping")
+  })
   test("failing outranks flapping; stale outranks flapping", () => {
     expect(grade({ fails_24h: 5, rc: 1, consecutive_fail: 3 })).toBe("failing")
     expect(grade({ fails_24h: 5, started: ago(9999) })).toBe("stale")
