@@ -843,7 +843,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1326,6 +1326,11 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/hl" \
 		DST="$(HOME)/.local/bin/hl"
+	@# cargo-target-seed: the one warm-cargo-target tool for every Rust repo (docs/cargo-target-seed.md)
+	@chmod +x $(DOTFILES_DIR)/scripts/cargo-target-seed.sh
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/cargo-target-seed.sh" \
+		DST="$(HOME)/.local/bin/cargo-target-seed"
 	@# jobrun + jobs-grade: bun/TS (shebang `env bun`; launchd plists must put bun on PATH)
 	@chmod +x $(DOTFILES_DIR)/scripts/jobrun.ts $(DOTFILES_DIR)/scripts/lib/jobs-grade.ts
 	@$(MAKE) --no-print-directory _link \
@@ -1906,6 +1911,7 @@ status:
 		$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/skills/$$name"; \
 	done
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.local/bin/imgcli"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.local/bin/cargo-target-seed"
 	@echo "  Tools"
 	@for tool in jq gh fzf zoxide wtp fnm bun uv age fallow; do \
 		command -v $$tool >/dev/null 2>&1 \
@@ -2783,6 +2789,11 @@ volume-gate-test: ## Hermetic test for the volume gate, the unlock job and the c
 
 # One storage page: shares, mounts, free space, the keepalive's grade, the external volume, the mirror and the restic age
 # (docs/storage.md §Status). Read-only and bounded. `ARGS=--json` is the contract the Tinycast command reads.
+.PHONY: cargo-target-seed-test
+cargo-target-seed-test: ## Hermetic test for cargo-target-seed (a temp git repo, a fake toolchain): the touch rule, the key, fallback, build, prune
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/cargo-target-seed.sh $(DOTFILES_DIR)/scripts/cargo-target-seed.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/cargo-target-seed.test.sh
+
 .PHONY: storage-status storage-status-test
 storage-status: ## Shares, mounts, free space, mirror and backup age (ARGS=--json for the contract, --no-remote skips Kuma)
 	@bash $(DOTFILES_DIR)/scripts/storage-status.sh $(ARGS)
@@ -3932,6 +3943,7 @@ help:
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir step)"
 	@echo "  make volume-gate-test   Hermetic suite for the external volume gate, unlock job and check"
+	@echo "  make cargo-target-seed-test Hermetic suite for cargo-target-seed (the touch rule, key, clone, build, prune)"
 	@echo "  make smb-keepalive-test Hermetic suite for smb/smb-keepalive.sh (hung-stat remount path)"
 	@echo "  make jobrun-canary-setup     Dev-host only: load the 300s canary job (exits 1 unless config/jobrun-canary.json is healthy)"
 	@echo "  make hooks-test         bun test hooks/ — run after any hook edit"

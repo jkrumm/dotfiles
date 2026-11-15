@@ -28,6 +28,7 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | `/Applications` | 11 | apps | needed |
 | `/Library` | 7.5 | system-wide | needed |
 | `~/.hermes` | 7.2 | Hermes agent: install, `state.db` 1.6 | needed |
+| `~/cache/<repo>/seed` | ~9 per Rust repo | cargo-target-seed seeds (`docs/cargo-target-seed.md`); an old one goes a day after its successor | pruned by the tool |
 | `~/.cache` | 4.5 | uv 2.3, puppeteer, … | swept |
 | everything else | ~15 | `~/go` 2.7, `.rustup` 2.1, … | needed |
 
