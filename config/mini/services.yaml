@@ -12,6 +12,7 @@
 #   door        the Caddy registry name(s) it serves, as scripts/lib/caddy-registry.py yields them
 #   label       launchd label (a brew service matches sh.brew.<n> and homebrew.mxcl.<n>); daemon: true for /Library/LaunchDaemons
 #   container   compose container name (vm: the Colima profile, default if omitted)
+#   idle_minutes  a dev server stops after this long with no request to its door (default 30; mini-apps/idle.ts)
 #   start/stop  the owner's command; a launchd job without one gets launchctl bootstrap/bootout, a service with
 #               neither refuses the verb. status: the owner's own status command, for the apps page
 services:
@@ -70,6 +71,8 @@ services:
   - { name: linewatch-watchdog, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-watchdog, memory_mib: 50 }
   - { name: lock-at-boot, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.lock-at-boot, memory_mib: 50 }
   - { name: log-rotate, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.log-rotate, memory_mib: 50 }
+  - { name: mini-apps, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.mini-apps, process_type: interactive, memory_mib: 100, note: "the apps page control endpoint on 127.0.0.1:7797 behind the wildcard tailnet door; core because a wake and a Start button wait on it" }
+  - { name: mini-apps-idle, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.mini-apps-idle, memory_mib: 50, note: "120 s: stops an on-demand dev server whose door had no request for its idle window" }
   - { name: modelpick-refresh, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-refresh, memory_mib: 50 }
   - { name: modelpick-web, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-web, door: modelpick, memory_mib: 60 }
   - { name: obsidian-autostart, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.obsidian-autostart, memory_mib: 50 }
@@ -115,14 +118,14 @@ services:
   - { name: teamchat-relay, repo: epos-ai-teamchat-athena, kind: compose, tier: core, vm: teamchat, container: teamchat-relay-1, project: teamchat, needs: [vm], memory_mib: 256, note: "core: colleagues reach the sandbox, so it runs always; Issue 1239 moves it into the default VM" }
   - { name: teamchat-egress, repo: epos-ai-teamchat-athena, kind: compose, tier: core, vm: teamchat, container: teamchat-egress-1, project: teamchat, needs: [vm], memory_mib: 256, note: "core: colleagues reach the sandbox, so it runs always; Issue 1239 moves it into the default VM" }
   - { name: argo-dev, repo: argo, kind: dev-server, tier: on-demand, door: argo, memory_mib: 400 }
-  - { name: basalt-marketing, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt, memory_mib: 400 }
-  - { name: basalt-playground, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt-playground, memory_mib: 400 }
+  - { name: basalt-marketing, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt, start: "cd ~/SourceRoot/basalt-ui && bun run dev:marketing", memory_mib: 400 }
+  - { name: basalt-playground, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt-playground, start: "cd ~/SourceRoot/basalt-ui && bun run dev:playground", memory_mib: 400 }
   - { name: fpp, repo: free-planning-poker, kind: dev-server, tier: on-demand, door: [fpp, fpp-server, fpp-analytics, fpp-logdy], memory_mib: 800 }
-  - { name: jkrumm-com, repo: jkrumm.com, kind: dev-server, tier: on-demand, door: jkrumm, memory_mib: 400 }
+  - { name: jkrumm-com, repo: jkrumm.com, kind: dev-server, tier: on-demand, door: jkrumm, start: "cd ~/SourceRoot/jkrumm.com && bun run start", memory_mib: 400 }
   - { name: plannotator, repo: dotfiles, kind: dev-server, tier: on-demand, door: plannotator, memory_mib: 200, note: "the interim review backend behind rv" }
   - { name: rollhook, repo: rollhook, kind: dev-server, tier: on-demand, door: [rollhook, rollhook-dashboard, rollhook-marketing], memory_mib: 600 }
-  - { name: sy-serendipity, repo: sy-serendipity, kind: dev-server, tier: on-demand, door: sy-serendipity, memory_mib: 400 }
-  - { name: sy-serendipity-codex, repo: sy-serendipity, kind: dev-server, tier: on-demand, door: sy-serendipity-codex, memory_mib: 400 }
+  - { name: sy-serendipity, repo: sy-serendipity, kind: dev-server, tier: on-demand, door: sy-serendipity, start: "cd ~/SourceRoot/sy-serendipity && bun run dev", memory_mib: 400 }
+  - { name: sy-serendipity-codex, repo: sy-serendipity, kind: dev-server, tier: on-demand, door: sy-serendipity-codex, start: "cd ~/SourceRoot/sy-serendipity && PORT=7736 bun run dev", memory_mib: 400 }
 
 # Breaches that belong to no service above: make targets that run docker as a build tool (rules/run-on-mini.md, Docker as a build tool).
 debt:

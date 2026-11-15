@@ -15,7 +15,9 @@
 // A verb runs only a command the registry holds (or launchctl for a launchd job without one): a name
 // from the command line selects an entry, it never reaches a shell.
 
-import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { spawn } from "node:child_process"
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { connect } from "node:net"
 import { homedir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 
@@ -28,6 +30,8 @@ const CHECK_DEADLINE_MS = 30000
 export const KINDS = ["launchd", "compose", "vm", "static", "dev-server"] as const
 export const TIERS = ["core", "on-demand", "manual"] as const
 export const PROFILES = ["work", "dev-db"] as const
+// the window an on-demand dev server stays up with no request to its door
+export const IDLE_MINUTES = 30
 export const PROCESS_TYPES = ["interactive"] as const
 // `ps -o pri=` of a launchd job with ProcessType Interactive, measured on the mini 2026-11-14: the same 31 as a process
 // started in a terminal. A job with no ProcessType runs at 20 (launchd's "light resource limits"), a Background one lower.
@@ -69,6 +73,8 @@ export type Service = {
   stop?: string
   status?: string
   note?: string
+  // an on-demand dev server stops after this many minutes with no request to its door (the idle job; default IDLE_MINUTES)
+  idle_minutes?: number
   // a breach of a run rule that is known and has a plan row (debt), or is allowed for a stated reason (exception); rule -> row | reason
   debt: Record<string, string>
   exception: Record<string, string>
@@ -149,6 +155,7 @@ export function parseRegistry(text: string, source: string, repoDefault?: string
       vm: str(raw.vm), process: str(raw.process), shared_memory: raw.shared_memory === true,
       start: str(raw.start) && expand(str(raw.start)!, home), stop: str(raw.stop) && expand(str(raw.stop)!, home),
       status: str(raw.status) && expand(str(raw.status)!, home), note: str(raw.note),
+      idle_minutes: typeof raw.idle_minutes === "number" ? raw.idle_minutes : undefined,
       debt: ruleMap(raw.debt, "debt", err), exception: ruleMap(raw.exception, "exception", err), oneshot: raw.oneshot === true,
     }
     if (raw.process_type != null) {
@@ -156,6 +163,7 @@ export function parseRegistry(text: string, source: string, repoDefault?: string
       else if (kind !== "launchd" || tier !== "core") err("process_type is only for a launchd service of tier core")
       else s.process_type = raw.process_type as ProcessType
     }
+    if (raw.idle_minutes != null && !(typeof raw.idle_minutes === "number" && raw.idle_minutes > 0)) err("idle_minutes must be a positive number of minutes")
     if (kind === "launchd" && !s.label) err("a launchd service needs a label")
     if (kind === "compose" && !s.container) err("a compose service needs a container")
     if (kind === "compose" && !s.vm) s.vm = "default"
@@ -340,6 +348,32 @@ export function parseContainers(ps: string, stats: string): Container[] {
   return out
 }
 
+// `caddy-registry.py` lines: `<door>\t<port>\t<rewrite>\t<paths>`.
+export function parseDoorPorts(out: string): Map<string, number> {
+  const ports = new Map<string, number>()
+  for (const line of out.split("\n")) {
+    const [door, port] = line.split("\t")
+    if (door && Number(port) > 0) ports.set(door, Number(port))
+  }
+  return ports
+}
+
+// `lsof -Fpn`: `p<pid>` opens a process, each `n<addr>:<port>` line after it is one of its listening sockets.
+export function parseListeners(out: string): Map<number, number[]> {
+  const byPort = new Map<number, number[]>()
+  let pid = 0
+  for (const line of out.split("\n")) {
+    if (line.startsWith("p")) { pid = Number(line.slice(1)); continue }
+    const m = line.match(/^n.*:(\d+)$/)
+    if (!m || !pid) continue
+    const port = Number(m[1])
+    const list = byPort.get(port) ?? []
+    if (!list.includes(pid)) list.push(pid)
+    byPort.set(port, list)
+  }
+  return byPort
+}
+
 export type Plist = { label: string; path: string; program: string; domain: "gui" | "system"; processType?: string }
 
 // `ps -axo pid=,pri=`: the scheduler priority of every process.
@@ -363,6 +397,9 @@ export type Snapshot = {
   vms: Map<string, { running: boolean; mib: number }>
   containers: Map<string, Container[]> // by colima profile; a profile with a stopped VM is absent
   doors: string[]
+  // the Caddyfile's door -> upstream port, and the pids listening on a port: a dev server is running when its door's port has a listener
+  doorPorts?: Map<string, number>
+  listeners?: Map<number, number[]>
 }
 
 // ---------------------------------------------------------------- state
@@ -385,6 +422,11 @@ export type Row = {
   process_type?: ProcessType
   below_band: boolean
   plist_process_type?: string | null // the plist file's ProcessType, for a declared service
+  // what the apps page may offer: a verb the registry can run for this service
+  can_start: boolean
+  can_stop: boolean
+  idle_minutes?: number // an on-demand dev server
+  repo: string
 }
 
 // The main process of a launchd service: the job's pid, or for a system daemon the oldest process of that name.
@@ -402,6 +444,16 @@ function plistFileOf(s: Service, snap: Snapshot): Plist | undefined {
 
 function containerFor(s: Service, snap: Snapshot): Container | undefined {
   return snap.containers.get(s.vm ?? "default")?.find((c) => c.name === s.container)
+}
+
+// The pids listening on the ports of a service's doors.
+export function listenerPids(s: Service, snap: Pick<Snapshot, "doorPorts" | "listeners">): number[] {
+  const out = new Set<number>()
+  for (const door of s.doors) {
+    const port = snap.doorPorts?.get(door)
+    for (const pid of (port === undefined ? [] : snap.listeners?.get(port) ?? [])) out.add(pid)
+  }
+  return [...out]
 }
 
 export function stateOf(s: Service, snap: Snapshot): { state: State; mib: number | null } {
@@ -435,8 +487,15 @@ export function stateOf(s: Service, snap: Snapshot): { state: State; mib: number
     const vm = snap.vms.get(s.vm ?? "")
     return { state: vm?.running ? "running" : "stopped", mib: vm?.running ? vm.mib : null }
   }
-  // static and dev-server: served through a door; running when a process answers for it is not knowable without
-  // a probe, so a registered launch label or process decides, else the state is unknown (shown as stopped).
+  // a dev server is running when a process listens on the port of one of its doors (the Caddyfile is the one port list)
+  if (s.kind === "dev-server" && !s.process) {
+    const pids = listenerPids(s, snap)
+    if (!pids.length) return { state: "stopped", mib: null }
+    const tree = new Map<number, Proc>()
+    for (const pid of pids) for (const p of treePids(pid, snap.procs)) tree.set(p.pid, p)
+    return { state: "running", mib: footprint([...tree.values()]) }
+  }
+  // static: served by Caddy itself; a registered process decides, else it follows Caddy
   if (s.process) {
     const procs = snap.procs.filter((p) => p.cmd === s.process)
     return { state: procs.length ? "running" : "stopped", mib: procs.length ? footprint(procs) : null }
@@ -465,6 +524,8 @@ export function grade(services: Service[], snap: Snapshot): { rows: Row[]; drift
       budget_mib: s.memory_mib, over: mib !== null && s.memory_mib > 0 && mib > s.memory_mib, doors: s.doors, note: s.note,
       pri, process_type: s.process_type, below_band: s.process_type === "interactive" && pri !== null && pri < INTERACTIVE_PRI,
       plist_process_type: s.process_type && plistFile ? plistFile.processType ?? null : undefined,
+      can_start: canVerb(s, "start"), can_stop: canVerb(s, "stop"), repo: s.repo,
+      idle_minutes: s.kind === "dev-server" ? s.idle_minutes ?? IDLE_MINUTES : undefined,
     }
   })
   const known = new Set(services.filter((s) => s.label).map((s) => normalizeLabel(s.label!)))
@@ -639,7 +700,18 @@ export function pruneActions(services: Service[], rows: Row[], snap: Snapshot, d
 
 // ---------------------------------------------------------------- verbs
 
-export type Step = { service: string; argv: string[]; shell: boolean; label: string }
+// mode "detach": a dev server's start command runs in a process group of its own, its output in a log, and the verb waits for
+// its door's port; mode "kill": a dev server with no stop command ends by signal (its recorded group, then the listeners' trees).
+export type Step = { service: string; argv: string[]; shell: boolean; label: string; mode?: "detach" | "kill" }
+
+// Whether the registry can run the verb for a service: what the apps page may offer a button for.
+export function canVerb(s: Service, verb: "start" | "stop"): boolean {
+  if (verb === "start" ? s.start : s.stop) return true
+  if (s.kind === "launchd") return !!s.label && !s.daemon
+  // a dev server with no stop command ends by signal, and only when the registry starts it (a start command): whatever else listens
+  // on a door port (a docker forwarder, a server the owner runs by hand under another name) is not ours to kill
+  return s.kind === "dev-server" && verb === "stop" && s.doors.length > 0 && !!s.start
+}
 
 export function startOrder(s: Service, all: Service[], running: (n: string) => boolean): Service[] {
   const out: Service[] = []
@@ -670,8 +742,15 @@ export function refusal(services: Service[], verb: "up" | "down", name: string |
 }
 
 // A command from the registry runs through sh; a launchd job without one gets launchctl, argv only.
-export function stepFor(s: Service, verb: "start" | "stop", snap: Pick<Snapshot, "uid" | "plists" | "loaded">): Step | string {
+export function stepFor(s: Service, verb: "start" | "stop", snap: Pick<Snapshot, "uid" | "plists" | "loaded"> & Partial<Pick<Snapshot, "doorPorts" | "listeners">>): Step | string {
   const cmd = verb === "start" ? s.start : s.stop
+  if (s.kind === "dev-server") {
+    if (cmd) return { service: s.name, argv: ["sh", "-c", cmd], shell: true, label: cmd, mode: verb === "start" ? "detach" : undefined }
+    if (verb === "start") return `${s.name}: no start command registered (dev-server, owner ${s.repo})`
+    if (!s.start) return `${s.name}: no stop command registered, and with no start command the registry does not signal what listens on its doors (dev-server, owner ${s.repo})`
+    if (!listenerPids(s, snap).length) return `${s.name}: not running`
+    return { service: s.name, argv: [], shell: false, label: `signal the process group of ${s.name}`, mode: "kill" }
+  }
   if (cmd) return { service: s.name, argv: ["sh", "-c", cmd], shell: true, label: cmd }
   if (s.kind === "launchd" && s.label && !s.daemon) {
     const key = normalizeLabel(s.label)
@@ -749,15 +828,17 @@ async function readVms(procs: Proc[], vmNames: string[]): Promise<Map<string, { 
 export async function snapshot(services: Service[], { withDoors }: { withDoors: boolean } = { withDoors: false }): Promise<Snapshot> {
   const uid = process.getuid?.() ?? 501
   const docker = process.env.DOCKER_BIN ?? "/opt/homebrew/bin/docker"
-  const [top, pri, list, disabled, plists, doors] = await Promise.all([
+  const needDoors = withDoors || services.some((s) => s.kind === "dev-server" && s.doors.length)
+  const [top, pri, list, disabled, plists, doors, lsof] = await Promise.all([
     run(["/usr/bin/top", "-l", "1", "-stats", "pid,ppid,mem,command"], {}, 25000),
     run(["/bin/ps", "-axo", "pid=,pri="]),
     run(["/bin/launchctl", "list"]),
     run(["/bin/launchctl", "print-disabled", `gui/${uid}`]),
     readPlists(),
-    withDoors
+    needDoors
       ? run(["/usr/bin/python3", "-I", join(DOTFILES, "scripts", "lib", "caddy-registry.py"), "--caddyfile", join(DOTFILES, "config", "Caddyfile"), "--caddy-bin", process.env.CADDY_BIN ?? "/opt/homebrew/bin/caddy", "--quiet"])
       : Promise.resolve({ out: "", rc: 0 }),
+    needDoors ? run(["/usr/sbin/lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"]) : Promise.resolve({ out: "", rc: 0 }),
   ])
   const procs = parseTop(top.out)
   const vmNames = [...new Set(services.filter((s) => s.kind === "vm").map((s) => s.vm!))]
@@ -787,7 +868,87 @@ export async function snapshot(services: Service[], { withDoors }: { withDoors: 
   return {
     uid, procs, pri: parsePri(pri.out), loaded: parseLaunchctlList(list.out), disabled: parseDisabled(disabled.out), plists, systemRunning, vms, containers,
     doors: doors.out.split("\n").map((l) => l.split("\t")[0]).filter(Boolean),
+    doorPorts: parseDoorPorts(doors.out), listeners: parseListeners(lsof.out),
   }
+}
+
+// ---------------------------------------------------------------- dev servers: detached start, signal stop
+
+// the recorded process groups and the start logs; the env overrides are for the tests
+const stateDir = () => process.env.MINI_APPS_STATE_DIR ?? join(HOME, ".local", "state", "mini-apps")
+const logDir = () => process.env.MINI_APPS_LOG_DIR ?? join(HOME, "Library", "Logs", "mini-apps")
+const START_WAIT_MS = 60000
+const STOP_GRACE_MS = 5000
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export function portOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = connect({ port, host })
+    sock.once("connect", () => { sock.destroy(); resolve(true) })
+    sock.once("error", () => resolve(false))
+  })
+}
+
+// A dev server's door port is open on 127.0.0.1 or ::1 (Vite falls back to ::1 alone, docs/remote-dev.md).
+export async function doorUp(s: Service, snap: Pick<Snapshot, "doorPorts">): Promise<boolean> {
+  for (const d of s.doors) {
+    const port = snap.doorPorts?.get(d)
+    if (port && ((await portOpen(port)) || (await portOpen(port, "::1")))) return true
+  }
+  return false
+}
+
+// Starts the registered command in a process group of its own (it outlives this verb), its output in a log, and waits for a door.
+export async function startDetached(s: Service, step: Step, snap: Pick<Snapshot, "doorPorts">, waitMs = START_WAIT_MS): Promise<number> {
+  mkdirSync(logDir(), { recursive: true })
+  mkdirSync(stateDir(), { recursive: true })
+  const log = join(logDir(), `${s.name}.log`)
+  const fd = openSync(log, "a")
+  const child = spawn(step.argv[0], step.argv.slice(1), { detached: true, stdio: ["ignore", fd, fd] })
+  closeSync(fd)
+  let exited: number | null = null
+  child.once("exit", (code) => { exited = code ?? 1 })
+  child.unref()
+  if (!child.pid) { console.error(`${s.name}: could not spawn the start command`); return 1 }
+  writeFileSync(join(stateDir(), `${s.name}.pgid`), `${child.pid}\n`)
+  const deadline = Date.now() + waitMs
+  while (Date.now() < deadline) {
+    if (await doorUp(s, snap)) return 0
+    if (exited !== null) { console.error(`${s.name}: the start command exited ${exited} before its door answered (${log})`); return 1 }
+    await sleep(500)
+  }
+  console.error(`${s.name}: no door answered within ${waitMs / 1000} s (${log}); it keeps running`)
+  return 1
+}
+
+const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
+
+// The group the start verb recorded, only while its leader still leads that group (a reused pid is not ours).
+async function recordedGroup(name: string): Promise<number | null> {
+  const file = join(stateDir(), `${name}.pgid`)
+  if (!existsSync(file)) return null
+  const pid = Number(readFileSync(file, "utf8").trim())
+  if (!pid || !alive(pid)) return null
+  const { out } = await run(["/bin/ps", "-o", "pgid=", "-p", String(pid)])
+  return Number(out.trim()) === pid ? pid : null
+}
+
+// A dev server ends by signal: its recorded group, else the trees under whatever listens on its doors; SIGKILL after a grace period.
+export async function stopListeners(s: Service, snap: Pick<Snapshot, "procs" | "doorPorts" | "listeners">): Promise<number> {
+  const group = await recordedGroup(s.name)
+  const pids = new Set<number>()
+  for (const pid of listenerPids(s, snap)) for (const p of treePids(pid, snap.procs)) pids.add(p.pid)
+  const signal = (sig: NodeJS.Signals) => {
+    if (group) { try { process.kill(-group, sig) } catch { /* gone */ } }
+    for (const pid of pids) { try { process.kill(pid, sig) } catch { /* gone */ } }
+  }
+  signal("SIGTERM")
+  const deadline = Date.now() + STOP_GRACE_MS
+  while (Date.now() < deadline && ([...pids].some(alive) || (group && alive(group)))) await sleep(200)
+  if ([...pids].some(alive) || (group && alive(group))) signal("SIGKILL")
+  rmSync(join(stateDir(), `${s.name}.pgid`), { force: true })
+  return 0
 }
 
 // ---------------------------------------------------------------- output
@@ -934,6 +1095,9 @@ async function main(argv: string[]) {
   const running = (n: string) => rows.find((r) => r.name === n)?.state === "running"
   const exec = async (step: Step) => {
     console.log(`  $ ${step.label}`)
+    const svc = find(step.service)!
+    if (step.mode === "detach") return startDetached(svc, step, snap)
+    if (step.mode === "kill") return stopListeners(svc, snap)
     const p = Bun.spawn(step.argv, { stdout: "inherit", stderr: "inherit" })
     return p.exited
   }

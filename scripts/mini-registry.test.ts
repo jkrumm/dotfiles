@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Container, type Plist, type Snapshot, footprint, findings, grade, loadAll, normalizeLabel, parseContainers, parseDisabled,
+  canVerb, listenerPids, parseDoorPorts, parseListeners, startDetached, stopListeners,
   debtLines, gradeRules, hostRefusal, parseInspect, pruneActions, parseLaunchctlList, parsePri, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
 } from "./mini-registry.ts"
 
@@ -561,5 +562,108 @@ describe("run rules", () => {
     expect(listed.length).toBeGreaterThan(0)
     const r = gradeRules(services, snap(), listed)
     expect(r.failures.filter((b) => b.rule !== "worktree-program").map((b) => `${b.service}:${b.rule}`)).toEqual([])
+  })
+})
+
+describe("dev servers: listeners are the state", () => {
+  const DEV = parseRegistry(`
+services:
+  - { name: pg, repo: basalt-ui, kind: dev-server, tier: on-demand, door: [pg-door, pg-api], start: "cd ~/basalt-ui && bun run dev", idle_minutes: 10, memory_mib: 400 }
+  - { name: bare, repo: r, kind: dev-server, tier: on-demand, door: bare-door, memory_mib: 400 }
+  - { name: stopcmd, repo: r, kind: dev-server, tier: on-demand, door: stop-door, stop: "make -C ~/r down", memory_mib: 400 }
+  - { name: nodoor, repo: r, kind: dev-server, tier: on-demand, memory_mib: 400 }
+`, "t", undefined, HOME)
+  const [pg, bare, stopcmd, nodoor] = DEV.services
+  const live = snap({
+    doorPorts: new Map([["pg-door", 7710], ["pg-api", 7711], ["bare-door", 7712]]),
+    listeners: new Map([[7711, [300]]]),
+    procs: [{ pid: 300, ppid: 1, mib: 200, cmd: "bun" }, { pid: 301, ppid: 300, mib: 150, cmd: "node" }, { pid: 9, ppid: 1, mib: 999, cmd: "other" }],
+  })
+
+  test("the registry parses idle_minutes and refuses a bad one", () => {
+    expect(DEV.errors).toEqual([])
+    expect(pg.idle_minutes).toBe(10)
+    expect(parseRegistry("services:\n  - { name: x, repo: r, kind: dev-server, tier: on-demand, idle_minutes: 0, memory_mib: 1 }", "t", undefined, HOME).errors[0]).toContain("idle_minutes")
+  })
+
+  test("running when any door port has a listener; the footprint is the listener's tree", () => {
+    const rows = grade(DEV.services, live).rows
+    expect(rows.find((r) => r.name === "pg")).toMatchObject({ state: "running", footprint_mib: 350, can_start: true, can_stop: true, idle_minutes: 10 })
+    expect(rows.find((r) => r.name === "bare")).toMatchObject({ state: "stopped", can_start: false, can_stop: false, idle_minutes: 30 })
+    expect(rows.find((r) => r.name === "nodoor")).toMatchObject({ state: "stopped", can_stop: false })
+  })
+
+  test("listenerPids follows the doors only", () => {
+    expect(listenerPids(pg, live)).toEqual([300])
+    expect(listenerPids(bare, live)).toEqual([])
+  })
+
+  test("parsers: caddy-registry lines and lsof -Fpn", () => {
+    expect(parseDoorPorts("a\t7710\t0\t-\nb\t7711\t1\t/x/*\n\n")).toEqual(new Map([["a", 7710], ["b", 7711]]))
+    const m = parseListeners("p10\nf5\nn*:7710\nf6\nn[::1]:7710\np11\nf3\nn127.0.0.1:7711\nn*:7712\n")
+    expect(m.get(7710)).toEqual([10])
+    expect(m.get(7711)).toEqual([11])
+    expect(m.get(7712)).toEqual([11])
+  })
+
+  test("start is a detached step, stop with no command is a signal step, a missing command is refused", () => {
+    expect(stepFor(pg, "start", live)).toMatchObject({ mode: "detach", argv: ["sh", "-c", "cd /home/u/basalt-ui && bun run dev"] })
+    expect(stepFor(pg, "stop", live)).toMatchObject({ mode: "kill", argv: [] })
+    expect(stepFor(bare, "start", live)).toContain("no start command")
+    expect(stepFor(bare, "stop", snap({ doorPorts: new Map([["bare-door", 7712]]), listeners: new Map([[7712, [77]]]) }))).toContain("does not signal")
+    expect(stepFor(stopcmd, "stop", live)).toMatchObject({ argv: ["sh", "-c", "make -C /home/u/r down"] })
+  })
+
+  test("canVerb: a dev server stops with no command and starts only with one", () => {
+    expect(canVerb(pg, "start")).toBe(true)
+    expect(canVerb(bare, "start")).toBe(false)
+    // a dev server the registry does not start is never signalled: its door port may belong to something else (a docker forwarder)
+    expect(canVerb(bare, "stop")).toBe(false)
+    expect(canVerb(pg, "stop")).toBe(true)
+    expect(canVerb(stopcmd, "stop")).toBe(true)
+    expect(canVerb(nodoor, "stop")).toBe(false)
+    expect(canVerb(load().find((x) => x.name === "web")!, "start")).toBe(true)
+    expect(canVerb(load().find((x) => x.name === "db")!, "stop")).toBe(true)
+  })
+})
+
+describe("dev servers: a real detached start and a signal stop", () => {
+  // the pgid record and the start log of these tests go to a scratch directory, never the live ones
+  const scratch = mkdtempSync(join(tmpdir(), "mini-apps-state-"))
+  process.env.MINI_APPS_STATE_DIR = join(scratch, "state")
+  process.env.MINI_APPS_LOG_DIR = join(scratch, "logs")
+
+  // the start command is a tiny listener on a free port; the door "t-door" maps to it
+  async function freePort(): Promise<number> {
+    const s = Bun.serve({ port: 0, fetch: () => new Response("") })
+    const port = s.port as number
+    await s.stop(true)
+    return port
+  }
+
+  test("startDetached waits for the door, the process outlives the verb, stopListeners ends its group", async () => {
+    const port = await freePort()
+    const script = join(mkdtempSync(join(tmpdir(), "mini-apps-")), "serve.ts")
+    writeFileSync(script, `Bun.serve({ port: ${port}, hostname: "127.0.0.1", fetch: () => new Response("up") }); setInterval(() => {}, 1000)`)
+    const svc = parseRegistry(`services:\n  - { name: itest-dev, repo: r, kind: dev-server, tier: on-demand, door: t-door, start: "exec ${process.execPath} ${script}", memory_mib: 1 }`, "t", undefined, HOME).services[0]
+    const doorPorts = new Map([["t-door", port]])
+    const step = stepFor(svc, "start", snap({ doorPorts }))
+    expect(typeof step).not.toBe("string")
+    expect(await startDetached(svc, step as Parameters<typeof startDetached>[1], { doorPorts }, 15000)).toBe(0)
+    expect((await fetch(`http://127.0.0.1:${port}/`).then((r) => r.text()))).toBe("up")
+
+    const listeners = new Map([[port, [Number((await Bun.$`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`.text()).trim().split("\n")[0])]]])
+    const procs = parseTop(await Bun.$`top -l 1 -stats pid,ppid,mem,command`.text())
+    expect(await stopListeners(svc, { procs, doorPorts, listeners })).toBe(0)
+    await Bun.sleep(300)
+    await expect(fetch(`http://127.0.0.1:${port}/`)).rejects.toBeDefined()
+  }, 40000)
+
+  test("a start command that exits at once is reported, not waited out", async () => {
+    const svc = parseRegistry(`services:\n  - { name: itest-dead, repo: r, kind: dev-server, tier: on-demand, door: t-door, start: "exit 3", memory_mib: 1 }`, "t", undefined, HOME).services[0]
+    const step = stepFor(svc, "start", snap()) as Parameters<typeof startDetached>[1]
+    const t0 = Date.now()
+    expect(await startDetached(svc, step, { doorPorts: new Map([["t-door", 1]]) }, 20000)).toBe(1)
+    expect(Date.now() - t0).toBeLessThan(5000)
   })
 })
