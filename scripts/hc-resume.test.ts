@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, pacingFromEnv, tailnetRunning, waitForTailnet, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, pacingFromEnv, tailnetRunning, waitForTailnet, coreAvailable, isSubscribeError, listHc, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -205,7 +205,7 @@ for await (const chunk of Bun.stdin.stream()) {
     const q = JSON.parse(l)
     appendFileSync(process.env.FAKE_LOG!, q.method + "\\n")
     if (process.env.FAKE_HANG) continue
-    const result = q.method === "terminal.get" ? JSON.parse(process.env.FAKE_TERMINAL!) : { turn: 0 }
+    const result = q.method === "terminal.get" ? JSON.parse(process.env.FAKE_TERMINAL!) : q.method === "terminal.list" ? { terminals: JSON.parse(process.env.FAKE_TERMINALS!) } : { turn: 0 }
     console.log(JSON.stringify({ id: q.id, result }))
   }
 }
@@ -426,4 +426,155 @@ test("tailnetRunning: Running only when the resolved CLI says so; no CLI throws"
     use(null)
     await expect(tailnetRunning(lib)).rejects.toThrow("no tailscale CLI")
   } finally { rmSync(dir, { recursive: true }) }
+})
+
+// --- rescan (issue 1367) ---------------------------------------------------------------------
+
+/** A subscribed link that yields the first snapshot and then stays open until closed (a core that never says another word). */
+function quietLink(first: Msg): Link {
+  let release!: () => void
+  const hold = new Promise<void>((r) => { release = r })
+  return { messages: (async function* () { yield first; await hold })(), close: () => release() }
+}
+async function until(cond: () => boolean, ms = 3000) {
+  const t0 = Date.now()
+  while (!cond() && Date.now() - t0 < ms) await Bun.sleep(5)
+}
+
+test("rescan: unknown foregrounds in the only snapshot are resumed by a later read, with no new snapshot or restarted event; every skip is logged once with its reason", async () => {
+  const live = { app: "claude-code", state: "done" }
+  const label = (id: string) => ({ "jk.claude.session": id })
+  // the boot snapshot: t1 foreground null, t2 foreground absent, t3 another program, t4 a login shell with a reporting agent
+  const first = { kind: "snapshot", terminals: [
+    term({ address: "t1", foreground: null }),
+    term({ address: "t2", labels: label(ID2) }),
+    term({ address: "t3", foreground: { argv: ["/usr/bin/vim", "x"] } }),
+    term({ address: "t4", foreground: { argv: shell }, status: live }),
+  ] } satisfies Msg
+  let reads = 0
+  const roster = (): Terminal[] => {
+    reads++
+    const known = reads >= 3 // the foreground facts arrive on the third read
+    return [
+      known ? fg(term({ address: "t1" })) : term({ address: "t1", foreground: null }),
+      known ? fg(term({ address: "t2", labels: label(ID2) })) : term({ address: "t2", labels: label(ID2) }),
+      term({ address: "t3", foreground: { argv: ["/usr/bin/vim", "x"] } }),
+      term({ address: "t4", foreground: { argv: shell }, status: live }),
+    ]
+  }
+  const ac = new AbortController()
+  const sent: string[] = []
+  const logs: string[] = []
+  const done = run({
+    open: async () => quietLink(first),
+    list: async () => roster(),
+    rescan: { fastMs: 5, slowMs: 5, windowMs: 60 },
+    send: async (a) => { sent.push(a) },
+    log: (l) => logs.push(l),
+    pacing: { staggerMs: 0 },
+    signal: ac.signal,
+  })
+  await until(() => sent.length >= 2 && reads >= 12)
+  ac.abort()
+  await done
+  expect(sent.sort()).toEqual(["t1", "t2"])
+  for (const l of ["skip t1: foreground unknown", "skip t2: foreground unknown", "skip t3: foreground is vim", "skip t4: live claude-code session (agent status)"]) {
+    expect(logs.filter((x) => x === l)).toHaveLength(1)
+  }
+  expect(logs.filter((x) => x.startsWith("resume t1 ") || x.startsWith("resume t2 "))).toHaveLength(2)
+  // t1 and t2 resumed once although every later read still shows the login shell
+  expect(logs.filter((x) => x.startsWith("skip t1") || x.startsWith("skip t2"))).toHaveLength(2)
+})
+
+test("rescan: after the window it keeps reading while a foreground is unknown and stops once every terminal is running or skipped on purpose", async () => {
+  let unknown = true
+  let reads = 0
+  const roster = (): Terminal[] => {
+    reads++
+    return [unknown ? term({ address: "t1", foreground: null }) : fg(term({ address: "t1" })), term({ address: "t2", foreground: { argv: ["vim"] } })]
+  }
+  const ac = new AbortController()
+  const sent: string[] = []
+  const logs: string[] = []
+  const done = run({
+    open: async () => quietLink({ kind: "snapshot", terminals: roster() }),
+    list: async () => roster(),
+    rescan: { fastMs: 5, slowMs: 10, windowMs: 40 },
+    send: async (a) => { sent.push(a) },
+    log: (l) => logs.push(l),
+    pacing: { staggerMs: 0 },
+    signal: ac.signal,
+  })
+  await Bun.sleep(150) // well past the window: t1 is still unknown, so the slow reads continue
+  const during = reads
+  await Bun.sleep(60)
+  expect(reads).toBeGreaterThan(during)
+  expect(sent).toEqual([])
+  unknown = false
+  await until(() => logs.some((l) => l.startsWith("rescan done")))
+  expect(sent).toEqual(["t1"])
+  const after = reads
+  await Bun.sleep(80)
+  expect(reads).toBe(after) // settled: no more reads on this connection
+  ac.abort()
+  await done
+})
+
+test("rescan: a failing read is logged once per streak, and the rescan ends with the connection", async () => {
+  let reads = 0
+  const logs: string[] = []
+  const ac = new AbortController()
+  const link = quietLink({ kind: "snapshot", terminals: [] })
+  const done = run({
+    open: async () => link,
+    list: async () => { reads++; throw new Error("hc connect exited 2") },
+    rescan: { fastMs: 5, slowMs: 5, windowMs: 1000 },
+    send: async () => {},
+    log: (l) => logs.push(l),
+    signal: ac.signal,
+  })
+  await until(() => reads >= 4)
+  expect(logs.filter((l) => l.startsWith("rescan failed"))).toEqual(["rescan failed: hc connect exited 2"])
+  ac.abort()
+  await done
+  const stopped = reads
+  await Bun.sleep(40)
+  expect(reads).toBe(stopped)
+})
+
+test("a login shell whose foreground is claude is running, not a skip: nothing logged, nothing typed", async () => {
+  const logs: string[] = []
+  const r = createResumer(async () => { throw new Error("must not send") }, (l) => logs.push(l), { staggerMs: 0 })
+  r.handle(snap(term({ foreground: { argv: ["/Users/x/.local/share/claude/versions/2.1.0/claude", "--resume", ID] } })))
+  await r.settled()
+  expect(logs).toEqual([])
+  expect(r.outstanding()).toBe(0)
+})
+
+test("a skip reason that changes is logged again; a resumed terminal is not logged as skipped afterwards", async () => {
+  const logs: string[] = []
+  const r = createResumer(async () => {}, (l) => logs.push(l), { staggerMs: 0 })
+  r.handle({ kind: "snapshot", terminals: [term({ foreground: null })] })
+  r.handle({ kind: "snapshot", terminals: [term({ foreground: null })] })
+  r.handle({ kind: "snapshot", terminals: [term({ foreground: { argv: ["/bin/zsh"] } })] })
+  expect(r.outstanding()).toBe(0)
+  r.handle(snap(term()))
+  await r.settled()
+  r.handle({ kind: "snapshot", terminals: [term({ foreground: { argv: ["claude"] } })] })
+  expect(logs.filter((l) => l.startsWith("skip"))).toEqual(["skip t1: foreground unknown", "skip t1: foreground is zsh, not a login shell"])
+})
+
+test("listHc: live kept terminals only; a refused guard never spawns hc", async () => {
+  const roster = [fg(term()), { ...fg(term({ address: "t2" })), state: "finished" }, { ...fg(term({ address: "t3" })), keep: false }, { ...fg(term({ address: "t4" })), state: "live", keep: true }]
+  await withFake({ FAKE_TERMINAL: "{}", FAKE_TERMINALS: JSON.stringify(roster) }, async (log) => {
+    expect((await listHc(5000, () => true)).map((t) => t.address)).toEqual(["t1", "t4"])
+    expect(log()).toEqual(["terminal.list"])
+  })
+  await withFake({ FAKE_TERMINAL: "{}", FAKE_TERMINALS: "[]", FAKE_HANG: "1" }, async () => {
+    await expect(listHc(300, () => true)).rejects.toThrow("terminal.list timed out")
+  })
+  await withFake({ FAKE_TERMINAL: "{}", FAKE_TERMINALS: "[]" }, async (log) => {
+    await expect(listHc(1000, () => false)).rejects.toThrow("not connecting")
+    expect(log()).toEqual([])
+  })
 })
