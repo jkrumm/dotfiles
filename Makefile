@@ -2787,13 +2787,13 @@ volume-gate-test: ## Hermetic test for the volume gate, the unlock job and the c
 	@/bin/bash $(DOTFILES_DIR)/scripts/volume-gate.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/external-volume-share.test.sh
 
-# One storage page: shares, mounts, free space, the keepalive's grade, the external volume, the mirror and the restic age
-# (docs/storage.md §Status). Read-only and bounded. `ARGS=--json` is the contract the Tinycast command reads.
 .PHONY: cargo-target-seed-test
 cargo-target-seed-test: ## Hermetic test for cargo-target-seed (a temp git repo, a fake toolchain): the touch rule, the key, fallback, build, prune
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/cargo-target-seed.sh $(DOTFILES_DIR)/scripts/cargo-target-seed.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/cargo-target-seed.test.sh
 
+# One storage page: shares, mounts, free space, the keepalive's grade, the external volume, the mirror and the restic age
+# (docs/storage.md §Status). Read-only and bounded. `ARGS=--json` is the contract the Tinycast command reads.
 .PHONY: storage-status storage-status-test
 storage-status: ## Shares, mounts, free space, mirror and backup age (ARGS=--json for the contract, --no-remote skips Kuma)
 	@bash $(DOTFILES_DIR)/scripts/storage-status.sh $(ARGS)
