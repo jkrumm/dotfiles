@@ -288,7 +288,7 @@ describe("the repo comes from the working directory when the command names none"
     }
   });
 
-  test("a cd, --chdir or GH_REPO means the directory proves nothing: denied with the hint", () => {
+  test("a cd, --chdir, GH_REPO or GIT_DIR means the directory proves nothing: denied with the hint", () => {
     for (const cmd of [
       "cd /elsewhere && gh pr merge 64 --admin",
       "(cd /elsewhere; gh pr merge 64 --admin)",
@@ -297,6 +297,9 @@ describe("the repo comes from the working directory when the command names none"
       "env -C /elsewhere gh pr merge 64 --admin",
       "GH_REPO=someone/else gh pr merge 64 --admin",
       "export GH_REPO=someone/else; gh pr merge 64 --admin",
+      "GIT_DIR=/x/.git gh pr merge 64 --admin",
+      "GIT_WORK_TREE=/x gh pr merge 64 --admin",
+      "GH_HOST=ghe.example gh pr merge 64 --admin",
     ]) {
       const reason = reasonOf(cmd, [TEAMCHAT]);
       expect(reason).toContain("-R <owner>/<repo>");

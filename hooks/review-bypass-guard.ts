@@ -36,7 +36,7 @@
  * PR's URL); a command that names none gets it from the hook's working
  * directory — every remote there (and each `gh-resolved` override) must be a
  * listed repo — but only when nothing in the command can move gh elsewhere: no
- * `cd` / `pushd` / `--chdir`, no `GH_REPO`. Then it is denied with the hint to
+ * `cd` / `pushd` / `--chdir`, no `GH_REPO` / `GH_HOST` / `GIT_*` variable. Then it is denied with the hint to
  * name the repo (incident 2026-11-15: Issue 1239's `gh pr merge 125 --admin` was
  * sent to the owner and waited eight hours). `gh api` stays denied on them too.
  *
@@ -123,7 +123,9 @@ export const gitRepoResolver: RepoResolver = (cwd) => {
 };
 
 /** Anything in the command that can make gh run in, or target, another repo than the hook's working directory. */
-const MOVES_GH = /(?:^|[^\w-])(?:cd|pushd|popd)(?![\w-])|--chdir|\benv\s+(?:\S+\s+)*-C\b|\bGH_REPO\b/;
+const MOVES_GH = /(?:^|[^\w-])(?:cd|pushd|popd)(?![\w-])|--chdir|\benv\s+(?:\S+\s+)*-C\b|\bGH_(?:REPO|HOST)\b|\bGIT_[A-Z_]+/;
+/** The same variables set in the hook's own environment, which the Bash call inherits. */
+const MOVING_ENV = ["GH_REPO", "GH_HOST", "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"];
 
 interface Context {
   cwd?: string;
@@ -136,7 +138,7 @@ function adminMergeDenial(command: string, args: string[], ctx: Context): string
   const named = namedRepos(args);
   if (named.length > 0) return named.every((r) => ADMIN_MERGE_REPOS.has(r)) ? null : NOT_LISTED;
 
-  if (MOVES_GH.test(command) || process.env.GH_REPO) {
+  if (MOVES_GH.test(command) || MOVING_ENV.some((k) => process.env[k])) {
     return `\`gh pr merge --admin\` names no repo, and a \`cd\`, \`--chdir\` or \`GH_REPO\` means the working directory does not say which one. ${NAME_THE_REPO}`;
   }
   const repos = ctx.cwd ? (ctx.resolveRepos ?? gitRepoResolver)(ctx.cwd) : null;
