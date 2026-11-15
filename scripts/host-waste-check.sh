@@ -65,8 +65,12 @@ check_tailscaled() {
 check_mediaanalysisd() {
   local uid disabled=0 running=0
   uid=$(id -u)
-  "$LAUNCHCTL_BIN" print-disabled "gui/$uid" 2>/dev/null | grep -q "\"$AGENT\" => \(disabled\|true\)" && disabled=1
-  "$PS_BIN" -Ao comm= | grep -q '/mediaanalysisd$' && running=1
+  # Captured, then matched: `grep -q` closing a pipe early makes the producer die of SIGPIPE, which pipefail turns into a miss.
+  local states procs
+  states=$("$LAUNCHCTL_BIN" print-disabled "gui/$uid" 2>/dev/null)
+  procs=$("$PS_BIN" -Ao comm=)
+  grep -q "\"$AGENT\" => \(disabled\|true\)" <<<"$states" && disabled=1
+  grep -q '/mediaanalysisd$' <<<"$procs" && running=1
   if [ "$disabled" -eq 1 ] && [ "$running" -eq 0 ]; then echo "$AGENT disabled and stopped"; return 0; fi
   if [ "$disabled" -eq 0 ]; then
     echo "$AGENT is enabled (Photos analysis burns about half a core on a library this size; fix: make photos-analysis-off)"
