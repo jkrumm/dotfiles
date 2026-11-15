@@ -61,6 +61,7 @@ which validates geometry before it delivers.
 | `agent-workflows` | The agent platform (public repo; concept in its `docs/concept.md`). Three processes: the host (HTTP on `127.0.0.1:7791`) and the audio process (`:7792`) from one release dir, and the inference gateway (`:7794`, own bundle). `GET /health` is unauthenticated (200 `ok` / 503 `degraded`), everything else bearer-gated. The gateway holds every provider key on the mini; agw itself holds none (§Secrets flow) | runs natively here from a release dir `~/.agent-workflows/releases/<sha>` (`current` symlink; origin/master exported by `make deploy`, never the main checkout) — `com.jkrumm.agent-workflows-host` and `com.jkrumm.agent-workflows-audio` run from it, the host via its `scripts/launch.sh` (zsh wrapper, `secrets-run`, `bun packages/host/src/main.ts`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `~/.agent-workflows/current/packages/cli/bin/agw.ts` |
 | `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
 | `ntfy-mac` | Native macOS client for ntfy servers, a public product (Swift, CLI-first). A factory project, `deploy.mode none`: users get it from its manual Release workflow | no server here; the mini builds it, the owner runs it on the MacBook (`make install-macbook`) |
+| `shutterflow` | The photography app (Tauri desktop app on a Rust core, plus the share server at `shutterflow.app`); photo-flow is discontinued. A factory project | developed, gated and released here, with a lab of sample photos in `~/ShutterflowLab`; the owner's library and his installed app live on the MacBook only (shutterflow `docs/decisions/0059`, `docs/engineering/dev-host.md`) |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
 | `home` | Apple Home control + diagnostics: HomeClaw (App Store Catalyst app, must run in the GUI session) and its `homeclaw-cli`, wrapped for agents and Tinycast | HomeClaw in `/Applications`; MacBook reaches it over SSH |
@@ -73,7 +74,6 @@ which validates geometry before it delivers.
 
 | Repo | Purpose |
 |-|-|
-| `shutterflow` | the photography app (photo-flow is discontinued) |
 | `image-gateway` | the Tauri studio — a GUI app belongs on the machine with a human at it; it generates through agw's image door on the mini (the VPS gateway is retired) |
 | `basalt-ui` | followed image-gateway when the studio consumed it as a `file:` dependency; every consumer now pins the published npm version, so this placement is convenience, not a requirement |
 | `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here |
