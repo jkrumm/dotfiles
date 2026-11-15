@@ -727,8 +727,8 @@ foreground, one hop) instead of hot-looping on `colima start -f`'s instant
   supervise`, exit 0, over the stock plist it exists to repair.
 - **The default VM's resolver is derived at every start, never remembered.**
   Lima's host resolver is the guest's default gateway, and the gateway moves when
-  lima renumbers the guest: the `default` and `teamchat` profiles share one lima
-  network, so whichever boots first takes `192.168.5.2` and the other gets the
+  lima renumbers the guest: the `default` and `teamchat` profiles (two VMs then; one now) shared one lima
+  network, so whichever booted first takes `192.168.5.2` and the other gets the
   next address. The `/etc/resolv.conf` colima wrote once at provisioning
   (`nameserver 192.168.5.1`, 2026-06-08) went stale on 2026-11-14 18:54 CET when
   teamchat restarted first; nothing answered DNS, the VPN container looped on
@@ -743,11 +743,11 @@ foreground, one hop) instead of hot-looping on `colima start -f`'s instant
   the containers that still hold the old resolver (they read it when they
   start; `--restart` restarts them); `vm-dns.sh check` is the heartbeat's
   `colima` probe line (a name resolves inside the VM; a failure names the
-  resolver in the file and the gateway). The teamchat VM is its repo's
-  (`scripts/vm-dns.sh` there), not this one.
-- **Order rule: never restart one colima profile while the other is booting.**
-  They share the lima network, so the address a VM gets depends on who boots
-  first. `make colima-restart` returns before the VM is down (`bootout` +
+  resolver in the file and the gateway). The teamchat VM no longer exists:
+  its sandbox runs in this VM (Issue 1239).
+- **Order rule (history, from the two-VM time): never restart one colima profile while the other is booting.**
+  They shared the lima network, so the address a VM got depended on who booted
+  first; with one VM it no longer applies. `make colima-restart` returns before the VM is down (`bootout` +
   `bootstrap` hand the job to launchd and return), so a script that chains a
   restart of one profile into the other starts the second while the first is
   still booting. Wait for `colima status` (and `docker info`) of the first, then

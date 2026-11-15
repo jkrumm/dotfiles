@@ -264,7 +264,7 @@ verbs and grading: [`mini-registry.md`](mini-registry.md).
 |-|-|-|
 | `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules |
 | `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors, the teamchat sandbox, `research-chrome`, `shared-chrome` |
-| `manual` | started and stopped as a profile | `work` (VPN, dashboard, token minters), `dev-db` (mariadb, redis, clickstack) |
+| `manual` | started and stopped as a profile | `work` (student-enrolment containers), `dev-db` (mariadb, redis, clickstack) |
 
 The tier is recorded here and enforced by nothing yet; the rows that make `on-demand` and `manual` real are in
 `docs/plan.yaml`. `make doctor` and the heartbeat component `check_registry` fail on a loaded job the registry does not know.

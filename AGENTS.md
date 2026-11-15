@@ -270,7 +270,7 @@ the registry in the same commit as its plist (the doctor fails on a loaded job i
 |-|-|
 | `core` | always on (herdr-core, factory, agw, Postgres, Caddy, hermes, home, iris, argo, finances, rb, schedules, the work stack: VPN, import dashboard, teamchat sandbox) |
 | `on-demand` | starts on the first request, stops idle (dev servers behind `.test` doors, research-chrome) |
-| `manual` | a profile starts it: `work` (student-enrolment, deploy gates), `dev-db` |
+| `manual` | a profile starts it: `work` (the student-enrolment containers), `dev-db` |
 
 **Run rules** (`rules/run-on-mini.md`, skill `mini-service`): five placement questions, a tier and a budget per entry, a never
 list (second Postgres or VM, `restart: unless-stopped` outside core, no `mem_limit`, a port off 127.0.0.1, a program in a worktree,
@@ -291,8 +291,7 @@ only `colima/mounts.mini.txt` (not `$HOME`): a new bind mount elsewhere shows an
 first. Run `colima-restart` from the main checkout: the plist records the checkout it ran from. The default VM's
 resolver is **derived at every start** (`colima/vm-dns-guest.sh`, an `after-boot` provision step written by
 `colima/apply-provision.sh`; `colima/vm-dns.sh apply|check` on a running VM; the heartbeat's `colima` probe fails when no name
-resolves in it). **Never restart one colima profile while the other boots**: both share one lima network, the address (and
-resolver) follows boot order, and `make colima-restart` returns before the VM is down. Full model — the inverted
+resolves in it). **The mini runs one VM, always on** (the VPN, the import dashboard and the teamchat sandbox share it; an out-of-memory kill in the guest means `COLIMA_MEMORY=4`, never a second VM), and `make colima-restart` returns before the VM is down. Full model — the inverted
 `KeepAlive` repair, brew silently regenerating the plist on every `brew
 services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,
 `kickstart -k` not re-reading the plist, `com.colima.docker-socket` for the

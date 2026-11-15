@@ -428,8 +428,8 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
   vz guest never returns memory while it runs: its host footprint climbs to whatever the ceiling is. Same revert signal
   (a guest OOM kill, or `available` under 0.5 GB): go to 3 GB. The VPN sidecar re-authenticates headless after the restart.
 - **One VM, always on, 3 GB (2026-11-14, the owner's decision):** the VPN, the dashboard and the teamchat sandbox are
-  reached by colleagues, so they run always and share the default VM; the second VM (teamchat's own profile, 2 GB) goes
-  once its sandbox has moved. The two guests used 0.75 GB and 0.59 GB, about 1.05 GB merged. 2 GB would hold that, but the
+  reached by colleagues, so they run always and share the default VM; the second VM (teamchat's own profile, 2 GB) went
+  once its sandbox had moved (Issue 1239, 2026-11-15; the stopped profile is deleted with `colima delete -p teamchat` after 2026-11-16 08:35 UTC). The two guests used 0.75 GB and 0.59 GB, about 1.05 GB merged. 2 GB would hold that, but the
   dev databases and the student-enrolment stack start in the same VM on demand, and a guest OOM there could take the VPN:
   so `COLIMA_MEMORY` 2 → **3**. Net: 4 GB in two VMs becomes 3 GB in one. Revert signal as above, next step 4 GB; never a
   second VM.
@@ -447,7 +447,6 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
 
 | Finding | Default | Why not applied |
 |-|-|-|
-| teamchat VM 4 GiB → 2 GiB (0.7 GB used) | 2 GiB | profile lives in the IuRoot teamchat repo; its restart is already owner-timed (after MR !296) |
 | weatherorb `round` pool: cap concurrent processes at one | one | another repo; filed as a signal there |
 | postgres `shared_buffers` 4 GB → 2 GB | keep 4 GB | trades 31–38 ms p95 for ~2 GB; a measured product choice. Later: 2 GB, then 512 MB on 2026-11-14 while weatherorb's jobs are disabled (revert signal in `docs/postgres.md`) |
 | Chrome / Obsidian | no limit | 0.5 GB, not a driver |

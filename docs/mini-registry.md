@@ -16,13 +16,18 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 
 | Tier | Rule | Members today |
 |-|-|-|
-| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, the teamchat api, broker and sandbox, and the work stack colleagues reach (VPN, import dashboard, its watcher and token jobs) |
+| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, the teamchat api, broker and sandbox, and the work stack colleagues reach (VPN, import dashboard, its watcher, the token minters, the dashboard and tool deploy gates, the state backup, the artefact job) |
 | `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), `research-chrome`, `shared-chrome` (the `/browse` Chrome) |
-| `manual` | started and stopped as a profile | `work` (student-enrolment, deploy gates), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs have no profile |
+| `manual` | started and stopped as a profile | `work` (the student-enrolment containers only), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs have no profile |
 
 A tier is a promise the registry holds. For a dev server behind a tailnet door the host keeps it (§Apps page): the door
-starts it, the idle stop ends it. The wake of the other on-demand services and the VM that starts only when a service needs
-it are the rows that follow (`docs/plan.yaml`: `mini-docker-idle`, `mini-work-profile`).
+starts it, the idle stop ends it.
+
+**One VM, always on, 3 GiB.** The mini runs one Colima VM, `default`. The VPN, the import dashboard and the teamchat sandbox
+(opencode, relay, egress) run in it, colleagues reach them, so they are `core` and no profile verb stops them: `make
+mini-profile NAME=work UP=0` reaches only the student-enrolment containers. The dev databases (`dev-db`) start in the same
+VM on demand. The VM's budget is its measured footprint times 1.1 (a vz guest cannot exceed its ceiling by much); its
+revert signal is an out-of-memory kill in the guest, answered by `COLIMA_MEMORY=4`, never by a second VM.
 
 ## An entry
 
@@ -84,7 +89,7 @@ footprint against its budget. A loaded interval job between runs is `stopped`; a
 - `FORMAT=json make mini-ps` is the same data for the apps page, with `can_start`, `can_stop` and `idle_minutes` per row.
 - **Leftovers are findings.** `mini-registry check` (so `make doctor` and the heartbeat) warns on a container no row names and on a
   disabled job whose plist is still installed. A container counts by its name in any VM: one that runs in another VM than its row
-  declares is the `second-vm` rule's finding, tracked by the VM-merge Issues, not an unknown container.
+  declares is the `second-vm` rule's finding, not an unknown container.
 - **`make mini-prune`** lists what to remove, `make mini-prune ARGS=--apply` removes it: the plist of every `launchctl disable`d job
   in `~/Library/LaunchAgents` (registered or not: a retired job's row goes with it, its file stays) and every created or exited
   container no row names (never a running one). A retired service ends here: delete its row and its map row, run the prune.

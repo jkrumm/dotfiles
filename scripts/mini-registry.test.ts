@@ -170,6 +170,21 @@ describe("registry parsing", () => {
     const doors = real.services.flatMap((s) => s.doors)
     for (const d of ["argo-live", "brain", "rb", "linewatch", "fpp", "rollhook", "weatherorb-tiles"]) expect(doors).toContain(d)
   })
+
+  test("one VM, always on: the work stack and the sandbox are core, so the work profile's down verb never reaches them", () => {
+    const { services } = loadAll()
+    expect(services.filter((s) => s.kind === "vm").map((s) => s.name)).toEqual(["colima-default"])
+    const core = ["dashboard-api", "dashboard-ui", "vpn", "prometheus-vpn-watcher", "prometheus-stack-dashboard", "prometheus-dashboard-autodeploy",
+      "prometheus-state-backup", "prometheus-artefact-daily", "prometheus-conduktor-token", "prometheus-epos-token", "tool-checkout-deploy",
+      "teamchat-opencode", "teamchat-relay", "teamchat-egress"]
+    for (const n of core) expect(services.find((s) => s.name === n)?.tier).toBe("core")
+    // the selection `mini-registry profile work --down` makes
+    const members = services.filter((s) => s.tier === "manual" && s.profile === "work").map((s) => s.name)
+    expect(members.length).toBeGreaterThan(0)
+    for (const m of members) expect(m.startsWith("idss-")).toBe(true)
+    const vm = services.find((s) => s.name === "colima-default")!
+    expect(vm.memory_mib).toBeLessThanOrEqual(3400)
+  })
 })
 
 describe("probes", () => {

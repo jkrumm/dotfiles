@@ -808,7 +808,7 @@ async function readPlists(): Promise<Plist[]> {
 
 const INSPECT_FORMAT = "{{.Name}}|{{.Config.Image}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.Memory}}|{{range $p, $b := .HostConfig.PortBindings}}{{range $b}}[{{.HostIp}}]{{end}}{{end}}"
 
-const COLIMA_VMS: Record<string, string> = { default: "colima", teamchat: "colima-teamchat" }
+const COLIMA_VMS: Record<string, string> = { default: "colima" }
 
 async function readVms(procs: Proc[], vmNames: string[]): Promise<Map<string, { running: boolean; mib: number }>> {
   const vz = procs.filter((p) => p.cmd.startsWith("com.apple.Virtua")).sort((a, b) => a.pid - b.pid)
