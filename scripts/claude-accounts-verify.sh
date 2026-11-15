@@ -13,7 +13,9 @@ REGISTRY="${CLAUDE_ACCOUNTS_REGISTRY:-$DOTFILES_DIR/config/claude-accounts.json}
 CACHE_DIR="${CLAUDE_ACCOUNTS_CACHE_DIR:-$HOME/.cache/claude-accounts}"
 STATE_DIR="${CLAUDE_ACCOUNTS_STATE_DIR:-$HOME/.local/state/claude-accounts}"
 LOG_DIR="${CLAUDE_LOG_DIR:-$HOME/.claude/logs}"
-USAGE_DB="${USAGE_TRACKER_DB:-$HOME/.local/share/usage-tracker/usage.db}"
+# usage-tracker's live store is Postgres (database shared, schema usage, unix socket of the mini's cluster); the SQLite file is a retired archive.
+USAGE_PG="${USAGE_TRACKER_PG:-host=/tmp dbname=shared}"
+usage_q() { psql "$USAGE_PG" -X -Atq -v ON_ERROR_STOP=1 -c "$1" 2>/dev/null; }
 RD_SCRIPT="${RD_SCRIPT:-$DOTFILES_DIR/scripts/remote-dev.sh}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
@@ -253,17 +255,16 @@ else
     row PASS "attribution/session_env" "all $total Claude session_env lines carry a registered account"
   fi
 fi
-if [[ -z "${USAGE_TRACKER_DB:-}" && ! -d "$HOME/SourceRoot/usage-tracker" ]]; then
+if [[ -z "${USAGE_TRACKER_PG:-}" && ! -d "$HOME/SourceRoot/usage-tracker" ]]; then
   row WARN "attribution/usage-db" "usage-tracker not on this machine (the mini ingests; its mirror reads this machine's logs)"
-elif [[ ! -r "$USAGE_DB" ]] || ! command -v sqlite3 >/dev/null 2>&1; then
-  row WARN "attribution/usage-db" "usage-tracker DB or sqlite3 not available"
+elif ! command -v psql >/dev/null 2>&1 || [[ "$(usage_q 'select 1')" != 1 ]]; then
+  row WARN "attribution/usage-db" "usage-tracker Postgres not reachable (psql missing, or no cluster at '$USAGE_PG')"
 else
-  cutoff=$(date -u -r $((now_s - 86400)) +%Y-%m-%dT%H:%M:%S)
-  orphan=$(sqlite3 "$USAGE_DB" "select count(*) from usage_record where billing='max' and account is null and ts >= '$cutoff';" 2>/dev/null) || orphan=""
+  orphan=$(usage_q "select count(*) from usage.records where billing='max' and account is null and ts >= now() - interval '24 hours'") || orphan=""
   if [[ -z "$orphan" ]]; then
-    row FAIL "attribution/usage-db" "usage_record.account column unreadable (schema changed?)"
+    row FAIL "attribution/usage-db" "usage.records.account unreadable (schema changed?)"
   elif (( orphan > 0 )); then
-    row FAIL "attribution/usage-db" "$orphan billing='max' usage_record row(s) in the last 24 h have no account (run usage-tracker ingest; else the collector lost the join)"
+    row FAIL "attribution/usage-db" "$orphan billing='max' usage.records row(s) in the last 24 h have no account (run usage-tracker ingest; else the collector lost the join)"
   else
     row PASS "attribution/usage-db" "no billing='max' row without an account in the last 24 h"
   fi
@@ -271,15 +272,19 @@ else
     [[ -n "$id" && "$id" != "$(jq -r '.accounts | to_entries[] | select(.value.dir == null) | .key' "$REGISTRY")" ]] || continue
     seen=$(jq -s --arg id "$id" '[.[] | select(.data.account == $id)] | length' <<<"$SE" 2>/dev/null) || seen=0
     (( seen > 0 )) || continue
-    have=$(sqlite3 "$USAGE_DB" "select count(*) from usage_record where account='$id';" 2>/dev/null) || have=0
+    # a failed query is its own row, never a silent 0 that reads as "no rows"
+    if ! have=$(usage_q "select count(*) from usage.records where account='$id'"); then
+      row FAIL "attribution/$id-rows" "usage.records query for account='$id' failed (Postgres error, not a missing row)"
+      continue
+    fi
     first=$(jq -s -r --arg id "$id" '[.[] | select(.data.account == $id) | .ts] | min' <<<"$SE")
     first_s=$(date -u -j -f %Y-%m-%dT%H:%M:%S "${first:0:19}" +%s 2>/dev/null) || first_s=$now_s
     if (( have > 0 )); then
-      row PASS "attribution/$id-rows" "session_env has $seen $id line(s); usage_record has $have row(s) with account='$id'"
+      row PASS "attribution/$id-rows" "session_env has $seen $id line(s); usage.records has $have row(s) with account='$id'"
     elif (( now_s - first_s < 7200 )); then
-      row WARN "attribution/$id-rows" "$seen $id session_env line(s), first under 2 h ago; no usage_record row yet (ingest lag, FAIL after 2 h)"
+      row WARN "attribution/$id-rows" "$seen $id session_env line(s), first under 2 h ago; no usage.records row yet (ingest lag, FAIL after 2 h)"
     else
-      row FAIL "attribution/$id-rows" "$seen $id session_env line(s) but no usage_record row with account='$id' (ingest, or the join is broken)"
+      row FAIL "attribution/$id-rows" "$seen $id session_env line(s) but no usage.records row with account='$id' (ingest, or the join is broken)"
     fi
   done <<<"$IDS"
 fi
