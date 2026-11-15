@@ -9,7 +9,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { findViolation } from "./review-bypass-guard";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { findViolation, gitRepoResolver } from "./review-bypass-guard";
 
 const HOOK = `${import.meta.dir}/review-bypass-guard.ts`;
 
@@ -162,7 +165,7 @@ describe("allow", () => {
 
 describe("deny reason", () => {
   test("says it is the owner's to do by hand", () => {
-    const reason = findViolation("gh pr merge 12 --admin") ?? "";
+    const reason = findViolation("gh pr merge 12 -R o/r --admin") ?? "";
     expect(reason).toContain("owner's to do by hand");
     expect(reason).toContain("factory issue ask");
   });
@@ -223,9 +226,12 @@ describe("the owner's admin-merge exception", () => {
     allowed(`gh pr merge 5 -R ${IMPORT_DASHBOARD} --squash --admin`);
   });
 
-  test("no repo named: denied, the working directory is not trusted", () => {
-    denied("gh pr merge 64 --admin");
-    denied(`cd ~/IuRoot/epos-tool-athena && gh pr merge 64 --admin`);
+  test("no repo named, no checkout to read: denied with the hint to name it", () => {
+    for (const cmd of ["gh pr merge 64 --admin", "gh pr merge 125 --squash --admin"]) {
+      const reason = findViolation(cmd) ?? "";
+      expect(reason).toContain("-R <owner>/<repo>");
+      expect(reason).not.toContain("factory issue ask");
+    }
   });
 
   test("another repo, or one name near a listed repo: denied", () => {
@@ -249,5 +255,133 @@ describe("the owner's admin-merge exception", () => {
   test("gh api stays denied on the listed repos", () => {
     denied(`gh api -X PUT repos/${TOOL}/pulls/64/merge`);
     denied(`gh api -X DELETE repos/${TOOL}/rulesets/1`);
+  });
+});
+
+describe("the repo comes from the working directory when the command names none", () => {
+  const TEAMCHAT = "IU-Group-Engineering/epos-ai-teamchat-athena";
+  const at = (repos: string[] | null) => ({ cwd: "/work/checkout", resolveRepos: () => repos });
+  const reasonOf = (cmd: string, repos: string[] | null) => findViolation(cmd, at(repos)) ?? "";
+
+  test("a listed repo: allowed", () => {
+    expect(findViolation("gh pr merge 125 --admin", at([TEAMCHAT]))).toBeNull();
+    expect(findViolation("gh pr merge 125 --squash --admin 2>&1; echo rc=$?", at([TEAMCHAT]))).toBeNull();
+    expect(findViolation("gh pr merge --squash --admin", at([TEAMCHAT, TEAMCHAT]))).toBeNull();
+  });
+
+  test("an unlisted repo: denied with the owner text", () => {
+    const reason = reasonOf("gh pr merge 125 --admin", ["someone/else"]);
+    expect(reason).toContain("owner's to do by hand");
+    expect(reason).toContain("factory issue ask");
+  });
+
+  test("one unlisted remote among listed ones, or one gh cannot read: denied", () => {
+    expect(reasonOf("gh pr merge 1 --admin", [TEAMCHAT, "someone/else"])).toContain("owner's to do by hand");
+    expect(reasonOf("gh pr merge 1 --admin", [TEAMCHAT, ""])).toContain("owner's to do by hand");
+  });
+
+  test("no checkout or no remote: denied with the hint to name the repo", () => {
+    for (const repos of [null, []]) {
+      const reason = reasonOf("gh pr merge 125 --admin", repos);
+      expect(reason).toContain("-R <owner>/<repo>");
+      expect(reason).not.toContain("factory issue ask");
+    }
+  });
+
+  test("a cd, --chdir or GH_REPO means the directory proves nothing: denied with the hint", () => {
+    for (const cmd of [
+      "cd /elsewhere && gh pr merge 64 --admin",
+      "(cd /elsewhere; gh pr merge 64 --admin)",
+      "pushd /elsewhere && gh pr merge 64 --admin",
+      "bash -c 'cd /elsewhere && gh pr merge 64 --admin'",
+      "env -C /elsewhere gh pr merge 64 --admin",
+      "GH_REPO=someone/else gh pr merge 64 --admin",
+      "export GH_REPO=someone/else; gh pr merge 64 --admin",
+    ]) {
+      const reason = reasonOf(cmd, [TEAMCHAT]);
+      expect(reason).toContain("-R <owner>/<repo>");
+      expect(reason).not.toContain("factory issue ask");
+    }
+  });
+
+  test("a named repo wins over the directory", () => {
+    expect(findViolation(`gh pr merge 1 -R someone/else --admin`, at([TEAMCHAT]))).not.toBeNull();
+    expect(findViolation(`gh pr merge 1 -R ${TEAMCHAT} --admin`, at(["someone/else"]))).toBeNull();
+  });
+});
+
+describe("gitRepoResolver", () => {
+  const git = (cwd: string, ...args: string[]) => {
+    const p = Bun.spawnSync(["git", "-C", cwd, ...args], { stdout: "ignore", stderr: "pipe" });
+    expect(p.exitCode).toBe(0);
+  };
+  const repo = (setup: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), "rbg-"));
+    try {
+      git(dir, "init", "-q");
+      setup(dir);
+      return gitRepoResolver(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  test("reads github remotes in https, scp and ssh form", () => {
+    expect(repo((d) => git(d, "remote", "add", "origin", "https://github.com/o/r.git"))).toEqual(["o/r"]);
+    expect(repo((d) => git(d, "remote", "add", "origin", "git@github.com:o/r.git"))).toEqual(["o/r"]);
+    expect(repo((d) => git(d, "remote", "add", "origin", "ssh://git@github.com/o/r"))).toEqual(["o/r"]);
+    expect(repo((d) => git(d, "remote", "add", "origin", "https://x-access-token@github.com/o/r"))).toEqual(["o/r"]);
+  });
+
+  test("another host is unreadable, a set-default pin replaces the URL", () => {
+    expect(repo((d) => git(d, "remote", "add", "origin", "https://gitlab.com/o/r.git"))).toEqual([""]);
+    expect(
+      repo((d) => {
+        git(d, "remote", "add", "origin", "https://github.com/o/r.git");
+        git(d, "config", "remote.origin.gh-resolved", "up/stream");
+      }),
+    ).toEqual(["up/stream"]);
+    expect(
+      repo((d) => {
+        git(d, "remote", "add", "origin", "https://github.com/o/r.git");
+        git(d, "config", "remote.origin.gh-resolved", "base");
+      }),
+    ).toEqual(["o/r"]);
+  });
+
+  test("no remotes, or no checkout at all: empty", () => {
+    expect(repo(() => {})).toEqual([]);
+    const dir = mkdtempSync(join(tmpdir(), "rbg-"));
+    try {
+      expect(gitRepoResolver(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("hook I/O: the cwd of the hook input decides", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rbg-"));
+    try {
+      git(dir, "init", "-q");
+      const run = async (url: string) => {
+        git(dir, "remote", "remove", "origin");
+        git(dir, "remote", "add", "origin", url);
+        const env: Record<string, string> = { ...(process.env as Record<string, string>), FACTORY_SESSION: "w1" };
+        delete env.GH_REPO;
+        const proc = Bun.spawn(["bun", HOOK], {
+          stdin: new Blob([JSON.stringify({ tool_name: "Bash", cwd: dir, tool_input: { command: "gh pr merge 125 --squash --admin" } })]),
+          stdout: "pipe",
+          env,
+        });
+        const out = await new Response(proc.stdout).text();
+        await proc.exited;
+        return out;
+      };
+      git(dir, "remote", "add", "origin", "x");
+      expect(await run("git@github.com:IU-Group-Engineering/epos-ai-teamchat-athena.git")).toBe("");
+      expect(await run("git@github.com:someone/else.git")).toContain("owner's to do by hand");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

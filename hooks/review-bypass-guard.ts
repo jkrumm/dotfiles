@@ -32,9 +32,13 @@
  * same endpoints, and every word above inside quotes (a commit message, a grep).
  *
  * The owner's exception (2026-11-06): `gh pr merge --admin` on the repos in
- * ADMIN_MERGE_REPOS, and only when the command names the repo itself (`-R` or the
- * PR's URL). The working directory is never read: a `cd` could point it anywhere.
- * `gh api` stays denied on them too.
+ * ADMIN_MERGE_REPOS. The repo is the one the command names (`-R`, `--repo`, the
+ * PR's URL); a command that names none gets it from the hook's working
+ * directory — every remote there (and each `gh-resolved` override) must be a
+ * listed repo — but only when nothing in the command can move gh elsewhere: no
+ * `cd` / `pushd` / `--chdir`, no `GH_REPO`. Then it is denied with the hint to
+ * name the repo (incident 2026-11-15: Issue 1239's `gh pr merge 125 --admin` was
+ * sent to the owner and waited eight hours). `gh api` stays denied on them too.
  *
  * Not covered (same hazard class): `curl`/`wget` straight at api.github.com,
  * `gh alias set` wrapping `--admin`, and other forges' CLIs.
@@ -44,12 +48,17 @@ import { collect, type Invocation } from "./broad-kill-guard.ts";
 
 interface HookInput {
   tool_name: string;
+  cwd?: string;
   tool_input?: { command?: string; [key: string]: unknown };
 }
 
 const OWNER =
   "This bypasses a required review and is the owner's to do by hand, not a factory lead's. " +
   "Leave the PR open for its reviewer, or `factory issue ask` the owner.";
+
+const NAME_THE_REPO =
+  "Name the repo in the command so the hook can check it against the owner's list: " +
+  "`gh pr merge <n> -R <owner>/<repo> --squash --admin`.";
 
 // ── gh pr merge ──────────────────────────────────────────────────────────────
 
@@ -85,10 +94,57 @@ function namedRepos(args: string[]): string[] {
   return repos;
 }
 
-const adminMergeAllowed = (args: string[]): boolean => {
-  const repos = namedRepos(args);
-  return repos.length > 0 && repos.every((r) => ADMIN_MERGE_REPOS.has(r));
+// ── Where the working directory points ──────────────────────────────────────
+
+/** `owner/repo` of every repo gh would consider for the checkout at `cwd` (`""` for one it cannot read); null when `cwd` is no checkout. */
+export type RepoResolver = (cwd: string) => string[] | null;
+
+const GITHUB_REMOTE = /^(?:https:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/;
+
+/** Reads the remotes from git config: the fetch URL of each, or the repo `gh repo set-default` pinned for it. */
+export const gitRepoResolver: RepoResolver = (cwd) => {
+  const proc = Bun.spawnSync(["git", "-C", cwd, "config", "--get-regexp", String.raw`^remote\..+\.(url|gh-resolved)$`], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  if (proc.exitCode === 1) return []; // git config: no key matched, so no remote
+  if (proc.exitCode !== 0) return null;
+  const url = new Map<string, string>();
+  const pinned = new Map<string, string>();
+  for (const line of proc.stdout.toString().split("\n")) {
+    const m = /^remote\.(.+)\.(url|gh-resolved) (.+)$/.exec(line.trim());
+    if (!m) continue;
+    (m[2] === "url" ? url : pinned).set(m[1], m[3]);
+  }
+  return [...url].map(([name, u]) => {
+    const pin = pinned.get(name);
+    return pin && pin !== "base" ? pin : (GITHUB_REMOTE.exec(u)?.[1] ?? "");
+  });
 };
+
+/** Anything in the command that can make gh run in, or target, another repo than the hook's working directory. */
+const MOVES_GH = /(?:^|[^\w-])(?:cd|pushd|popd)(?![\w-])|--chdir|\benv\s+(?:\S+\s+)*-C\b|\bGH_REPO\b/;
+
+interface Context {
+  cwd?: string;
+  resolveRepos?: RepoResolver;
+}
+
+/** Null when the admin merge may run, else the denial. */
+function adminMergeDenial(command: string, args: string[], ctx: Context): string | null {
+  const NOT_LISTED = `\`gh pr merge --admin\` merges past required reviews and checks. ${OWNER}`;
+  const named = namedRepos(args);
+  if (named.length > 0) return named.every((r) => ADMIN_MERGE_REPOS.has(r)) ? null : NOT_LISTED;
+
+  if (MOVES_GH.test(command) || process.env.GH_REPO) {
+    return `\`gh pr merge --admin\` names no repo, and a \`cd\`, \`--chdir\` or \`GH_REPO\` means the working directory does not say which one. ${NAME_THE_REPO}`;
+  }
+  const repos = ctx.cwd ? (ctx.resolveRepos ?? gitRepoResolver)(ctx.cwd) : null;
+  if (!repos || repos.length === 0) {
+    return `\`gh pr merge --admin\` names no repo and the hook cannot resolve one from the working directory's remotes. ${NAME_THE_REPO}`;
+  }
+  return repos.every((r) => ADMIN_MERGE_REPOS.has(r)) ? null : NOT_LISTED;
+}
 
 // ── gh api ───────────────────────────────────────────────────────────────────
 
@@ -203,15 +259,16 @@ function subcommands(args: string[]): string[] {
 }
 
 /** Why this command must not run in a factory session, or null when it may. */
-export function findViolation(command: string): string | null {
+export function findViolation(command: string, ctx: Context = {}): string | null {
   // gh's own `{owner}` / `{repo}` / `{branch}` endpoint placeholders: the tokenizer reads braces as command groups.
   const flattened = command.replace(/\{(owner|repo|branch)\}/g, "$1");
   for (const inv of collect(flattened) as Invocation[]) {
     if (inv.name !== "gh") continue;
     const positionals = subcommands(inv.args);
 
-    if (positionals[0] === "pr" && positionals[1] === "merge" && inv.args.some(isAdminFlag) && !adminMergeAllowed(inv.args)) {
-      return `\`gh pr merge --admin\` merges past required reviews and checks. ${OWNER}`;
+    if (positionals[0] === "pr" && positionals[1] === "merge" && inv.args.some(isAdminFlag)) {
+      const denial = adminMergeDenial(flattened, inv.args, ctx);
+      if (denial) return denial;
     }
     if (positionals[0] === "api") {
       const at = inv.args.indexOf("api");
@@ -242,6 +299,6 @@ if (import.meta.main) {
   const input: HookInput = JSON.parse(await Bun.stdin.text());
   if (input.tool_name !== "Bash") process.exit(0);
 
-  const violation = findViolation((input.tool_input?.command ?? "").trim());
+  const violation = findViolation((input.tool_input?.command ?? "").trim(), { cwd: input.cwd ?? process.cwd() });
   if (violation) deny(violation);
 }
