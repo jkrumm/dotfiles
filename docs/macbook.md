@@ -139,7 +139,7 @@ own disk.
 
 | Host | Mount | Password | Mount point |
 |-|-|-|-|
-| MacBook | `osascript mount volume` | login Keychain entry Finder saved — mount each share once in Finder with *Remember* first | `/Volumes/<share>` |
+| MacBook | `osascript mount volume` | HomeLab shares: the login Keychain entry Finder saved (mount each once in Finder with *Remember* first). The mini's shares: none, a row user of `-` signs in with the Apple ID's Kerberos ticket | `/Volumes/<share>` |
 | mini (cache backend) | `mount_smbfs` through `expect`, in a transient launchd job (`smb/smb-mount.sh`) | `op://homelab/samba/PASSWORD` from the secrets cache (`secrets-run read`, never `op`); a missing ref → `make secrets-reseal-request` | `~/HomeLab/<share>`, created for the attempt and removed again when the mount fails |
 
 The mini's password never enters the keepalive process: `smb/smb-mount.sh` runs as a transient `launchctl submit`
