@@ -158,6 +158,7 @@ brain drift audit, project narratives; the agents-overview digest was paused
 | Label | Schedule | What |
 |-|-|-|
 | `com.jkrumm.orb.corpus-obs` | 3600s | V2 corpus observation, installed by `make v2-corpus-install` from the default-branch checkout (Issue 1005); tier manual in `config/mini/services.yaml` |
+| `com.jkrumm.orb.capture-relay` | 6 h | relay of the capture ledgers and files between the VPS and the HomeLab (Issue 1400), `make capture-relay-install` from the default-branch checkout; tier manual in the registry |
 | `com.jkrumm.orb.clocks-audit` | weekly (Mon 07:05) | audit of every loaded job on the mini, the VPS and the HomeLab (Issue 1285), `make clocks-install HOST=mini` from the default-branch checkout; tier manual in the registry |
 | `com.jkrumm.orb.site-record` | 3 h | V2 site record (replaces the daily `corpus-extend`), `make v2-corpus-install JOB=sites` from the default-branch checkout; tier manual in the registry |
 
