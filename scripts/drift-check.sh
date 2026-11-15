@@ -350,6 +350,7 @@ check_power_posture
 NEW_FIRST_SEEN=""
 STALE=""
 FRESH=""
+WAITING=""
 
 while IFS=$'\t' read -r key desc; do
   [[ -n "$key" ]] || continue
@@ -364,8 +365,15 @@ while IFS=$'\t' read -r key desc; do
   if (( age_d >= DRIFT_GRACE_DAYS )) || printf '%s' "$IMMEDIATE_KEYS" | /usr/bin/grep -qxF -- "$key"; then
     STALE_KEYS="${STALE_KEYS}${key}
 "
-    STALE="${STALE}${desc} [${age_d}d]
+    if [[ "$key" == macos ]]; then
+      # Waiting for the owner's restart window (install is off by policy, the signal below asks for it):
+      # reported, never a page.
+      WAITING="${WAITING}${desc} [${age_d}d]
 "
+    else
+      STALE="${STALE}${desc} [${age_d}d]
+"
+    fi
   else
     FRESH="${FRESH}${desc} [${age_d}d]
 "
@@ -407,12 +415,17 @@ join_lines() { printf '%s' "$1" | /usr/bin/grep -v '^$' | /usr/bin/tr '\n' ';' |
 stale_n=$(printf '%s' "$STALE" | /usr/bin/grep -c . || true)
 fresh_n=$(printf '%s' "$FRESH" | /usr/bin/grep -c . || true)
 skip_n=$(printf '%s' "$SKIPPED" | /usr/bin/grep -c . || true)
+wait_n=$(printf '%s' "$WAITING" | /usr/bin/grep -c . || true)
 
 summary=""
 (( stale_n > 0 )) && summary="STALE: $(join_lines "$STALE")"
 if (( fresh_n > 0 )); then
   [[ -n "$summary" ]] && summary="$summary | "
   summary="${summary}drifting: $(join_lines "$FRESH")"
+fi
+if (( wait_n > 0 )); then
+  [[ -n "$summary" ]] && summary="$summary | "
+  summary="${summary}waiting for a restart window: $(join_lines "$WAITING")"
 fi
 if (( skip_n > 0 )); then
   [[ -n "$summary" ]] && summary="$summary | "
@@ -426,6 +439,7 @@ echo "  drift-check ($("$DATE_BIN" '+%Y-%m-%d %H:%M'))"
 printf '%s' "$INFO" | /usr/bin/grep -v '^$' | /usr/bin/sed 's/^/    · /' || true
 if (( fresh_n > 0 )); then printf '%s' "$FRESH" | /usr/bin/grep -v '^$' | /usr/bin/sed 's/^/    ~ /'; fi
 if (( stale_n > 0 )); then printf '%s' "$STALE" | /usr/bin/grep -v '^$' | /usr/bin/sed 's/^/    ✗ /'; fi
+if (( wait_n > 0 )); then printf '%s' "$WAITING" | /usr/bin/grep -v '^$' | /usr/bin/sed 's/^/    … /'; fi
 if (( skip_n > 0 )); then printf '%s' "$SKIPPED" | /usr/bin/grep -v '^$' | /usr/bin/sed 's/^/    ? /'; fi
 
 # The push URL file is optional and its absence is silent — same contract as the

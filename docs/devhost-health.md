@@ -514,6 +514,7 @@ after the reboot; the tsv is what it should find.
 - **`CriticalUpdateInstall` stays off** because it is the old Rapid Security Response path, which restarted the Mac every time; Background Security Improvements restart too and are a separate Privacy & Security switch (**Automatically Install: off**, not readable by drift-check).
 - **A pending update is applied in a window:** `make planned-restart` from the MacBook (`docs/recovery-drill.md` §4): drain, tell the leads, wait for merges and deploys, restart, read `0 waiting`, run.
 - **Past 14 days one signal asks for the window** (once per set of pending updates, filed by the daily run, never by `make doctor`); brew and Tailscale upgrades are unchanged.
+- **A pending update never pages.** Install is off by policy and the restart is the owner's chosen window, so past the grace it stays in the msg and the report as `waiting for a restart window: … [Nd]` and the Drift monitor stays UP; the signal above is the one ask. Every other stale drift and every immediate key (a setting wrong now) still pushes DOWN.
 
 Four decisions that are not arbitrary:
 

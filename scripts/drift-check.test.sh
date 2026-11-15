@@ -332,6 +332,23 @@ assert_eq "--no-push (doctor) never files" "$(nsignals)" 0
 reset; rm -f "$BACKEND_FILE"; rm "$ST/defaults_none"; printf "$SAFARI_261" > "$ST/defaults_out"; first_seen macos:30; run
 assert_eq "not the dev host: no signal" "$(nsignals)" 0
 
+echo "a pending macOS update never pages, whatever its age"
+pend; rm -f "$ST/factory.log"; first_seen macos:19; run
+assert_eq "macOS pending 19d, all else current: push up" "$(push_status)" up
+assert_eq "macOS pending 19d: exit 0" "$RC" 0
+assert_contains "the msg names the pending update and the wait" "$(push_msg)" "waiting for a restart window: macOS update pending: Safari 26.1 (needs a restart window) [19d]"
+assert_not_contains "it is not STALE" "$(push_msg)" "STALE"
+assert_contains "the terminal report names it" "$OUT" "… macOS update pending: Safari 26.1 (needs a restart window) [19d]"
+assert_eq "the restart-window signal is still filed" "$(nsignals)" 1
+pend; first_seen macos:19 xcaddy:15
+printf 'COLLIE_REF := bbbbbbb2222222222222222222222222222222bb\nXCADDY_VERSION = v0.4.1\nCADDY_DNS_MODULE_VERSION = v0.0.3\n' > "$DRIFT_MAKEFILE"; run
+assert_eq "a pin stale 14d+ still pushes down beside a pending macOS update" "$(push_status)" down
+assert_contains "the stale pin is STALE, the pending update is not" "$(push_msg)" "STALE: xcaddy v0.4.1 → v0.4.2 (fix: bump XCADDY_VERSION, then make caddy-dns-build) [15d] | "
+assert_contains "the pending update is still named" "$(push_msg)" "waiting for a restart window: macOS update pending"
+pend; printf '1\n' > "$ST/AutomaticallyInstallMacOSUpdates"; first_seen macos:19; run
+assert_eq "an IMMEDIATE key still pushes down beside a pending macOS update" "$(push_status)" down
+assert_contains "auto install on is STALE" "$(push_msg)" "STALE: macOS AutomaticallyInstallMacOSUpdates is 1"
+
 echo "tailscale"
 reset; rm "$TS/sock"; run
 assert_contains "no CLI is skipped" "$(push_msg)" "tailscale (no CLI found)"
