@@ -127,7 +127,7 @@ class Reap(unittest.TestCase):
         if core_down:
             write(down, "")
         env = dict(os.environ, HOME=self.home, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_WORLD=self.world,
-                   FAKE_CALLS=self.calls, FAKE_CORE_DOWN=down, CORE_UP_SH=os.path.join(self.bin, "core-up.sh"), HC_TERMINAL_ID=own, REAP_IDLE_H="12")
+                   FAKE_CALLS=self.calls, FAKE_CORE_DOWN=down, HC_BIN=os.path.join(self.bin, "hc"), CORE_UP_SH=os.path.join(self.bin, "core-up.sh"), HC_TERMINAL_ID=own, REAP_IDLE_H="12")
         env.pop("HC_SESSION", None)
         env.update(extra_env or {})
         r = subprocess.run([sys.executable, REAP, *flags], env=env, capture_output=True, text=True)
