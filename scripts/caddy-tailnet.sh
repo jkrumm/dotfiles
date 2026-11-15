@@ -956,6 +956,11 @@ section.tier { margin-top: 1.4rem; }
 	body { padding: 1.5rem .75rem 3rem; }
 	th, td { padding-left: .4rem; padding-right: .4rem; }
 	.narrow { display: none; }
+	/* the apps table: a 12rem status column and a long name would run past a phone's edge */
+	table.apps { table-layout: fixed; }
+	table.apps th:first-child { width: 6.5rem !important; }
+	table.apps td { overflow-wrap: anywhere; }
+	table.apps .st { white-space: normal; }
 	table.svc th:first-child { width: 5.5rem !important; }
 	table.svc th:nth-child(3) { width: 6.5rem !important; }
 	table.svc th:last-child { width: 5rem !important; }
@@ -965,7 +970,7 @@ section.tier { margin-top: 1.4rem; }
 <main>
 	<h1>dev apps</h1>
 	<p class="sub" id="sub"></p>
-	<table>
+	<table class="apps">
 		<thead>
 			<tr>
 				<th style="width:12rem">status</th>
