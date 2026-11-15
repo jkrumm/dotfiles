@@ -488,7 +488,7 @@ daily). `DEVHOST_DRIFT_CHECK_BIN` overrides the script path for tests.
 
 It watches the collie commit pin (`COLLIE_REF`), the versions compiled into caddy
 (`XCADDY_VERSION`, `CADDY_DNS_MODULE_VERSION`), brew-upgrade recency and pending
-macOS updates. **Pins are read out of the Makefile, never duplicated.** Tag
+macOS updates and, on the dev host, the two automatic-install keys. **Pins are read out of the Makefile, never duplicated.** Tag
 resolution is shared with `make collie-upgrade` via `scripts/lib/github-tags.sh`:
 the subtle half is `tag_commit`'s annotated-tag peel, since
 Collie is built from the *dereferenced* commit, and reading the tag
@@ -507,6 +507,14 @@ reboots it: `herdr-core-resume-pre-reboot-<stamp>.tsv` (one line per terminal th
 `jk.claude.session` label: address, session, config, cwd, state; taken only when launchd says
 `com.jkrumm.herdr-core` is running, since any `hc` call would otherwise auto-start a core). `hc-resume` revives the sessions
 after the reboot; the tsv is what it should find.
+
+### Update policy (macOS)
+
+- **No unplanned restart.** `AutomaticallyInstallMacOSUpdates` and `CriticalUpdateInstall` stay `0`; drift-check asserts both on the dev host and fails the drift line at first sight (no grace), also when a key is unset or a macOS upgrade reset it.
+- **Silent and restart-free stays on:** `ConfigDataInstall` (XProtect, Gatekeeper and TCC config data; Apple: no restart) is `1`, and `AutomaticDownload` may stay on (it downloads, never installs).
+- **`CriticalUpdateInstall` stays off** because it is the old Rapid Security Response path, which restarted the Mac every time; Background Security Improvements restart too and are a separate Privacy & Security switch (**Automatically Install: off**, not readable by drift-check).
+- **A pending update is applied in a window:** `make planned-restart` from the MacBook (`docs/recovery-drill.md` §4): drain, tell the leads, wait for merges and deploys, restart, read `0 waiting`, run.
+- **Past 14 days one signal asks for the window** (once per set of pending updates, filed by the daily run, never by `make doctor`); brew and Tailscale upgrades are unchanged.
 
 Four decisions that are not arbitrary:
 

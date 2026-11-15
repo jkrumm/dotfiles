@@ -840,7 +840,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -3574,6 +3574,17 @@ DRIFT_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/drift-push-url
 mini-macos-update:
 	@bash $(DOTFILES_DIR)/scripts/mini-macos-update.sh
 
+# The restart as a procedure, not a command: drains the factory queue, tells the leads, waits for merge windows
+# and deploys to end, runs mini-macos-update, waits for `make recovery-check` to read 0 waiting, sets the queue
+# back to run. MacBook-only, TTY or YES=1; DRY_RUN=1 prints each step and runs nothing. docs/recovery-drill.md §4.
+.PHONY: planned-restart planned-restart-test
+planned-restart:
+	@bash $(DOTFILES_DIR)/scripts/planned-restart.sh
+
+planned-restart-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/planned-restart.sh $(DOTFILES_DIR)/scripts/planned-restart.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/planned-restart.test.sh
+
 drift-check-setup:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "cache" ]; then \
@@ -3961,6 +3972,7 @@ help:
 	@echo "  make mini-up|mini-down NAME=<service>   Start/stop a registered service (core needs FORCE=1)"
 	@echo "  make mini-profile NAME=<work|dev-db> UP=1|0   Start/stop a manual profile"
 	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
+	@echo "  make planned-restart        MacBook-only: the restart window — drain, tell the leads, wait for merges/deploys, update, recover, run (DRY_RUN=1 prints the steps)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
 	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."

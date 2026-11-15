@@ -1,8 +1,8 @@
 # Recovery drill
 
-How to tell whether the mini recovered, and how to prove it without breaking it. Three parts: read recovery after any
-reboot (read-only), the owner's quiet-window drill (by hand), and the scratch-core proof that never touches the production
-core (by hand). Background: `docs/incident-2026-11-13-mini-panic.md` (the standing constraint), `docs/herdr-core.md`
+How to tell whether the mini recovered, and how to prove it without breaking it. Four parts: read recovery after any
+reboot (read-only), the owner's quiet-window drill (by hand), the scratch-core proof that never touches the production
+core (by hand), and the planned restart for a macOS update (`make planned-restart`). Background: `docs/incident-2026-11-13-mini-panic.md` (the standing constraint), `docs/herdr-core.md`
 §Resume pacing, `docs/devhost-health.md` §Recovery after a boot.
 
 **Who runs what.** Part 1 only reads; anyone, agent or owner, can run it. Parts 2 and 3 contain commands that stop or start
@@ -219,3 +219,29 @@ stamps: starts 3 s apart, never more than 3 in flight. Set `HC_RESUME_STAGGER_MS
 
 The automated counterpart is `scripts/hc-resume.test.ts` (hermetic, in `make check`); this drill adds the live core and the
 real shell.
+
+## 4. A planned restart (macOS update): `make planned-restart`
+
+Automatic macOS install is off (`docs/devhost-health.md` §Update policy), so a pending update waits for this, run by the owner
+from the MacBook in a quiet hour. On 2026-11-15 an unplanned install restarted the mini at 01:11 with 12 leads working and
+11 sessions stayed down for seven hours; this is the same restart with the leads told and the queue held.
+
+```
+DRY_RUN=1 make planned-restart     # prints every step with its command and runs nothing
+make planned-restart               # TTY prompt, or YES=1
+```
+
+| Step | What it does | If it fails |
+|-|-|-|
+| 0 | MacBook only (backend `op`), mini reachable, an update actually pending (else exit 0, nothing drained) | stops, nothing changed |
+| 1 | `factory queue set drain`: no Issue is admitted | refused = stop; an unannounced restart is the incident |
+| 2 | `factory session note` to every non-idle lead: the time, "commit and push, start no merge or deploy, you are resumed afterwards"; then 5 min (`PLANNED_RESTART_GRACE`) | a failed note is named, the run goes on |
+| 3 | for every project of the queue, `factory merge-lock` then `factory deploy-lock` with `-- true`: returns when the running window has ended (up to 90 min each) | a lock that does not free stops the run and puts the queue back to run |
+| 4 | `scripts/mini-macos-update.sh` (YES=1): snapshot of the resume labels, installs, waits down and up, asserts the version moved | the queue **stays drained** and the output says so; the applier's header owns the "never force a reboot" rule |
+| 5 | polls `make recovery-check ARGS=--json` on the mini until `waiting` is 0 (hc-resume is paced; up to 45 min) | the queue stays drained; read §1 |
+| 6 | `factory queue set run` | the line to run by hand is printed |
+
+A failure before step 4 undrains the queue (nothing happened); from step 4 on it never does, because a half-restarted host with
+leads running into it is worse than a held queue. Not run by an agent: it reboots the host every agent runs on, and a lead's
+own session is one of the terminals it ends. A pending update older than 14 days files one signal asking for this window
+(drift-check, once per set of updates), never a nightly install.

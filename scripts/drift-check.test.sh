@@ -70,10 +70,26 @@ cat > "$BIN/brew" <<'EOF'
 [ -f "$ST/brew_fail" ] && exit 1
 if [ "$2" = "--cask" ]; then cat "$ST/brew_casks"; else cat "$ST/brew_outdated"; fi
 EOF
+# defaults read <domain> [key]: the two auto-install keys come from $ST/<key> (absent file = key unset),
+# a bare domain read answers unless $ST/defaults_domain_fail, RecommendedUpdates from defaults_out.
 cat > "$BIN/defaults" <<'EOF'
 #!/bin/sh
+case "$3" in
+  AutomaticallyInstallMacOSUpdates|CriticalUpdateInstall)
+    [ -f "$ST/defaults_domain_fail" ] && exit 1
+    [ -f "$ST/$3" ] || exit 1
+    cat "$ST/$3"; exit 0 ;;
+  "") [ -f "$ST/defaults_domain_fail" ] && exit 1; echo "{ }"; exit 0 ;;
+esac
 [ -f "$ST/defaults_none" ] && exit 1
 cat "$ST/defaults_out"
+EOF
+# The factory CLI: records its argv one per line, then a marker; fails when $ST/factory_fail exists.
+cat > "$BIN/factory" <<'EOF'
+#!/bin/sh
+[ -f "$ST/factory_fail" ] && exit 1
+for a in "$@"; do printf '%s\n' "$a"; done >> "$ST/factory.log"
+printf -- '--end--\n' >> "$ST/factory.log"
 EOF
 cat > "$BIN/pmset" <<'EOF'
 #!/bin/sh
@@ -116,6 +132,7 @@ unset TAILSCALE_BIN TAILSCALE_SOCKET DRIFT_PUSH_URL
 export DOTFILES_DIR="$TMP/dotfiles"
 export DRIFT_MAKEFILE="$TMP/Makefile"
 export GIT_BIN="$BIN/git" BREW_BIN="$BIN/brew" DATE_BIN="$BIN/date"
+export FACTORY_BIN="$BIN/factory"
 export DEFAULTS_BIN="$BIN/defaults" PMSET_BIN="$BIN/pmset" SYSADMINCTL_BIN="$BIN/sysadminctl"
 PYTHON_BIN=$(command -v python3); export PYTHON_BIN
 export DRIFT_STATE_DIR="$TMP/state" BREW_UPGRADE_STAMP="$TMP/brew-stamp"
@@ -144,6 +161,7 @@ reset() {
   printf 'a\nb\n' > "$ST/brew_outdated"; printf 'c\n' > "$ST/brew_casks"
   : > "$BREW_UPGRADE_STAMP"; touch_age "$BREW_UPGRADE_STAMP" 1
   touch "$ST/defaults_none"
+  printf '0\n' > "$ST/AutomaticallyInstallMacOSUpdates"; printf '0\n' > "$ST/CriticalUpdateInstall"
   : > "$ST/pmset_out"; : > "$ST/autologin_out"; : > "$ST/ts_plain"; : > "$ST/ts_feed"
   echo "https://kuma.example.com/api/push/abc" > "$DRIFT_PUSH_URL_FILE"
   ts_current
@@ -261,6 +279,58 @@ assert_contains "major is reported as info only" "$OUT" "macOS major available, 
 reset; rm "$ST/defaults_none"
 printf '(\n  {\n  "Display Name" = "macOS Tahoe 27";\n  Identifier = "MSU_UPDATE_27_major";\n },\n)\n' > "$ST/defaults_out"; run
 assert_eq "a major alone never drifts" "$(push_msg)" "everything current"
+
+echo "automatic macOS install (dev host only)"
+dev() {
+  reset; printf 'cache\n' > "$BACKEND_FILE"
+  printf 'autorestart 1\n' > "$ST/pmset_out"; printf 'Automatic login user: dev\n' > "$ST/autologin_out"
+}
+dev; run
+assert_eq "both keys 0: clean" "$(push_msg)" "everything current"
+assert_contains "auto install off is info" "$OUT" "· macOS AutomaticallyInstallMacOSUpdates off"
+assert_contains "critical update install off is info" "$OUT" "· macOS CriticalUpdateInstall off"
+dev; printf '1\n' > "$ST/AutomaticallyInstallMacOSUpdates"; run
+assert_eq "auto install on pages at first sight (no grace): down" "$(push_status)" down
+assert_eq "auto install on: exit 1" "$RC" 1
+assert_contains "auto install on is STALE with the fix" "$(push_msg)" "STALE: macOS AutomaticallyInstallMacOSUpdates is 1, a macOS install can restart the mini mid-work (fix: sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates -bool false) [0d]"
+assert_not_contains "the other key stays clean" "$(push_msg)" "CriticalUpdateInstall is"
+dev; printf '1\n' > "$ST/CriticalUpdateInstall"; run
+assert_contains "critical update install on is drift too" "$(push_msg)" "macOS CriticalUpdateInstall is 1"
+assert_eq "critical update install on: down" "$(push_status)" down
+dev; rm "$ST/AutomaticallyInstallMacOSUpdates"; run
+assert_contains "an unset key is drift (the OS default decides)" "$(push_msg)" "AutomaticallyInstallMacOSUpdates is unset"
+dev; touch "$ST/defaults_domain_fail"; run
+assert_eq "an unreadable domain is skipped, never drift: up" "$(push_status)" up
+assert_contains "unreadable domain named" "$(push_msg)" "macOS AutomaticallyInstallMacOSUpdates (software update preferences unreadable)"
+reset; printf 'op\n' > "$BACKEND_FILE"; printf '1\n' > "$ST/AutomaticallyInstallMacOSUpdates"; run
+assert_eq "not the dev host: the setting is not asserted" "$(push_msg)" "everything current"
+dev; printf '1\n' > "$ST/AutomaticallyInstallMacOSUpdates"; run --no-push
+assert_eq "--no-push still exits 1 on auto install" "$RC" 1
+
+echo "a pending update past the grace asks for a window, once"
+SAFARI_261='(\n  {\n  "Display Name" = "Safari 26.1";\n  Identifier = "MSU_UPDATE_26.1_patch";\n },\n)\n'
+SAFARI_262='(\n  {\n  "Display Name" = "Safari 26.2";\n  Identifier = "MSU_UPDATE_26.2_patch";\n },\n)\n'
+pend() { dev; rm "$ST/defaults_none"; printf "$SAFARI_261" > "$ST/defaults_out"; }
+nsignals() { if [ -f "$ST/factory.log" ]; then grep -c -- '--end--' "$ST/factory.log" || true; else echo 0; fi; }
+pend; first_seen macos:13; run
+assert_eq "13d: no signal yet" "$(nsignals)" 0
+pend; first_seen macos:14; run
+assert_eq "14d: exactly one signal filed" "$(nsignals)" 1
+assert_contains "signal goes out from agent:dotfiles to dotfiles" "$(tr '\n' ' ' < "$ST/factory.log")" "signal file --from agent:dotfiles --repo dotfiles --title macOS update pending 14+ days: the mini needs a restart window --text Pending for 14+ days: Safari 26.1."
+assert_contains "signal names the procedure" "$(cat "$ST/factory.log")" "planned-restart"
+assert_contains "signal reported in the terminal" "$OUT" "restart-window signal filed (Safari 26.1)"
+rm -f "$ST/factory.log"; first_seen macos:15; run
+assert_eq "next night, same update: no second signal" "$(nsignals)" 0
+printf "$SAFARI_262" > "$ST/defaults_out"; first_seen macos:16; run
+assert_eq "a different pending update asks again" "$(nsignals)" 1
+pend; rm -f "$DRIFT_STATE_DIR/macos-window-signal"; first_seen macos:20; touch "$ST/factory_fail"; run
+assert_contains "factory refused: skipped, not drift" "$(push_msg)" "restart-window signal (factory refused or unreachable)"
+rm "$ST/factory_fail"; rm -f "$ST/factory.log"; run
+assert_eq "a refused filing is not stamped: the next run files it" "$(nsignals)" 1
+pend; rm -f "$ST/factory.log"; first_seen macos:20; run --no-push
+assert_eq "--no-push (doctor) never files" "$(nsignals)" 0
+reset; rm -f "$BACKEND_FILE"; rm "$ST/defaults_none"; printf "$SAFARI_261" > "$ST/defaults_out"; first_seen macos:30; run
+assert_eq "not the dev host: no signal" "$(nsignals)" 0
 
 echo "tailscale"
 reset; rm "$TS/sock"; run

@@ -75,6 +75,8 @@ DEFAULTS_BIN="${DEFAULTS_BIN:-/usr/bin/defaults}"
 PMSET_BIN="${PMSET_BIN:-/usr/bin/pmset}"
 SYSADMINCTL_BIN="${SYSADMINCTL_BIN:-/usr/sbin/sysadminctl}"
 BACKEND_FILE="${BACKEND_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend}"
+FACTORY_BIN="${FACTORY_BIN:-$HOME/.local/bin/factory}"
+SU_DOMAIN="/Library/Preferences/com.apple.SoftwareUpdate"
 
 STATE_DIR="${DRIFT_STATE_DIR:-$HOME/.local/state/drift-check}"
 FIRST_SEEN_FILE="$STATE_DIR/first-seen"
@@ -97,6 +99,14 @@ INFO=""
 
 drift_add() { DRIFTED="${DRIFTED}${1}	${2}
 "; }
+# A drift with no grace: a setting that is wrong NOW costs more than a pending update ever does, so it
+# pages on its first sight instead of after DRIFT_GRACE_DAYS (the 2026-11-15 restart came the night the
+# setting was found on, not two weeks later).
+IMMEDIATE_KEYS=""
+MACOS_PENDING=""
+STALE_KEYS=""
+drift_now_add() { IMMEDIATE_KEYS="${IMMEDIATE_KEYS}${1}
+"; drift_add "$1" "$2"; }
 skip_add()  { SKIPPED="${SKIPPED}${1}
 "; }
 info_add()  { INFO="${INFO}${1}
@@ -198,8 +208,36 @@ check_macos() {
   if [[ -z "$names" ]]; then
     info_add "macOS: no pending updates"
   else
+    MACOS_PENDING="$names"
     drift_add "macos" "macOS update pending: $names (needs a restart window)"
   fi
+}
+
+# Automatic macOS install must stay OFF on the dev host (secrets backend `cache`). On 2026-11-15 01:09
+# softwareupdated ran its "tonight" install and restarted the mini at 01:11 with 12 leads working; 11 sessions
+# stayed down for seven hours. Updates are applied in a planned window (`make planned-restart`, docs/recovery-drill.md
+# §4), so the two keys that can end in a restart must read an explicit 0:
+#   AutomaticallyInstallMacOSUpdates  the install that restarted the host
+#   CriticalUpdateInstall             "security responses": the pre-Tahoe RSR path, which restarted every time
+# ConfigDataInstall (XProtect and config data, Apple: no restart) and AutomaticDownload are not asserted; the
+# policy is in docs/devhost-health.md §Update policy. An absent key is drift too: the OS default decides then, and
+# sources disagree on what it is. A domain that cannot be read at all is skipped, never drift.
+check_macos_autoinstall() {
+  local backend key v
+  backend=$(/usr/bin/tr -d '[:space:]' < "$BACKEND_FILE" 2>/dev/null || true)
+  [[ "$backend" == "cache" ]] || return 0
+  for key in AutomaticallyInstallMacOSUpdates CriticalUpdateInstall; do
+    if v=$("$DEFAULTS_BIN" read "$SU_DOMAIN" "$key" 2>/dev/null); then
+      v=$(printf '%s' "$v" | /usr/bin/tr -d '[:space:]')
+      if [[ "$v" == "0" ]]; then info_add "macOS $key off"
+      else drift_now_add "macos-$key" "macOS $key is $v, a macOS install can restart the mini mid-work (fix: sudo defaults write $SU_DOMAIN $key -bool false)"
+      fi
+    elif "$DEFAULTS_BIN" read "$SU_DOMAIN" >/dev/null 2>&1; then
+      drift_now_add "macos-$key" "macOS $key is unset, the OS default decides and a macOS install can restart the mini mid-work (fix: sudo defaults write $SU_DOMAIN $key -bool false)"
+    else
+      skip_add "macOS $key (software update preferences unreadable)"
+    fi
+  done
 }
 
 # Tailscale version drift. The mini's client was in a blind spot that only
@@ -299,6 +337,7 @@ check_pinned_version xcaddy       caddyserver/xcaddy        "$(makefile_var XCAD
 check_pinned_version caddy-dns    caddy-dns/cloudflare      "$(makefile_var CADDY_DNS_MODULE_VERSION)" "bump CADDY_DNS_MODULE_VERSION, then make caddy-dns-build"
 check_brew
 check_macos
+check_macos_autoinstall
 check_tailscale
 check_power_posture
 
@@ -322,7 +361,9 @@ while IFS=$'\t' read -r key desc; do
   NEW_FIRST_SEEN="${NEW_FIRST_SEEN}${key}	${seen}
 "
   age_d=$(( (NOW - seen) / 86400 ))
-  if (( age_d >= DRIFT_GRACE_DAYS )); then
+  if (( age_d >= DRIFT_GRACE_DAYS )) || printf '%s' "$IMMEDIATE_KEYS" | /usr/bin/grep -qxF -- "$key"; then
+    STALE_KEYS="${STALE_KEYS}${key}
+"
     STALE="${STALE}${desc} [${age_d}d]
 "
   else
@@ -334,6 +375,31 @@ $DRIFTED
 EOF
 
 printf '%s' "$NEW_FIRST_SEEN" >"$FIRST_SEEN_FILE" 2>/dev/null || true
+
+# --- A restart window, asked for once ------------------------------------------
+# A pending macOS update that has outlived the grace asks the owner for a window: ONE signal per set of
+# pending updates (a new update replaces the old ask), never one per night. Only the scheduled run files it
+# (--no-push is the on-demand doctor), only on the dev host, and a refused filing is not stamped, so the next
+# daily run tries again. The window itself is `make planned-restart` (docs/recovery-drill.md §4).
+file_window_signal() {
+  local backend stamp="$STATE_DIR/macos-window-signal" text
+  (( NO_PUSH )) && return 0
+  printf '%s' "$STALE_KEYS" | /usr/bin/grep -qxF -- macos || return 0
+  [[ -n "$MACOS_PENDING" ]] || return 0
+  backend=$(/usr/bin/tr -d '[:space:]' < "$BACKEND_FILE" 2>/dev/null || true)
+  [[ "$backend" == "cache" ]] || return 0
+  [[ "$(/bin/cat "$stamp" 2>/dev/null || true)" == "$MACOS_PENDING" ]] && return 0
+  [[ -x "$FACTORY_BIN" ]] || { skip_add "restart-window signal (factory CLI missing)"; return 0; }
+  text="Pending for ${DRIFT_GRACE_DAYS}+ days: ${MACOS_PENDING}. Automatic install is off by policy, so it needs a planned restart. Pick a quiet hour and run, from the MacBook: make -C ~/SourceRoot/dotfiles planned-restart (DRY_RUN=1 prints the steps first). Procedure: docs/recovery-drill.md section 4."
+  if /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' 20 "$FACTORY_BIN" signal file --from agent:dotfiles --repo dotfiles \
+       --title "macOS update pending ${DRIFT_GRACE_DAYS}+ days: the mini needs a restart window" --text "$text" >/dev/null 2>&1; then
+    printf '%s' "$MACOS_PENDING" > "$stamp" 2>/dev/null || true
+    info_add "restart-window signal filed ($MACOS_PENDING)"
+  else
+    skip_add "restart-window signal (factory refused or unreachable)"
+  fi
+}
+file_window_signal
 
 # --- Report ------------------------------------------------------------------
 join_lines() { printf '%s' "$1" | /usr/bin/grep -v '^$' | /usr/bin/tr '\n' ';' | /usr/bin/sed 's/;$//; s/;/; /g'; }
