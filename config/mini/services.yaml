@@ -16,7 +16,6 @@
 #               neither refuses the verb. status: the owner's own status command, for the apps page
 services:
   - { name: hermes-gateway, repo: hermes-agent, kind: launchd, tier: core, label: ai.hermes.gateway, memory_mib: 570 }
-  - { name: athena-postgres, repo: epos-ai-teamchat-athena, kind: launchd, tier: manual, label: com.iu.athena-postgres, memory_mib: 50, debt: { shared-infrastructure: "work repo, no factory project: signal held (epos-ai-teamchat-athena, disabled leftover)" } }
   - { name: athena-repo-sync, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.athena-repo-sync, memory_mib: 50 }
   - { name: prometheus-artefact-daily, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.prometheus-artefact-daily, memory_mib: 50 }
   - { name: prometheus-conduktor-token, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-conduktor-token, memory_mib: 50 }
@@ -77,7 +76,7 @@ services:
   - { name: rb, repo: rb, kind: launchd, tier: core, label: com.jkrumm.rb, door: rb, stop: "make -C ~/SourceRoot/rb down", note: "native since Issue 1184, always reachable (owner); 127.0.0.1:4050, health /api/health; the budget covers its headless Chrome during a fetch run (about 0.4 GiB, stopped after 180 s idle); start is launchctl bootstrap of the plist", memory_mib: 600 }
   - { name: shared-chrome, repo: dotfiles, kind: launchd, tier: on-demand, label: com.jkrumm.shared-chrome, start: "~/.local/bin/shared-chrome ensure", stop: "~/.local/bin/shared-chrome stop", note: "the headless Chrome behind /browse: DevTools on 127.0.0.1:9223, one context per agent; a context idle 15 min is closed, Chrome stops 60 s after the last; budget is Chrome (~0.4 GiB) plus ~75 MiB per context", memory_mib: 900 }
   - { name: smb-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.smb-keepalive, memory_mib: 50 }
-  - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, process_type: interactive, memory_mib: 250 }
+  - { name: software-factory, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.software-factory, door: factory, process_type: interactive, memory_mib: 450, note: "measured 300-330 MiB under load (2026-11-15), 1.5 times the footprint" }
   - { name: soloist, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist, memory_mib: 80 }
   - { name: soloist-speaker, repo: home, kind: launchd, tier: core, label: com.jkrumm.soloist-speaker, memory_mib: 50 }
   - { name: usage-tracker, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker, memory_mib: 50 }
@@ -85,17 +84,9 @@ services:
   - { name: usage-tracker-report, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker-report, memory_mib: 50 }
   - { name: vps-pg-backup, repo: vps, kind: launchd, tier: core, label: com.jkrumm.vps-pg-backup, memory_mib: 50 }
   - { name: walkingpad, repo: king-smith-walkingpad-mac, kind: launchd, tier: core, label: com.jkrumm.walkingpad, memory_mib: 50 }
+  - { name: weatherorb-v1-doors, repo: weatherorb, kind: static, tier: manual, door: [weatherorb, weatherorb-tiles, weatherorb-map], memory_mib: 0, note: "the Caddy blocks of the frozen V1 services (their LaunchAgents were pruned 2026-11-15); the doors answer 502 until V1 is revived with make launchd-install in weatherorb" }
   - { name: weatherorb-site-record, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.orb.site-record, note: "V2 site record, every 3 h (replaces corpus-extend); installed by `make v2-corpus-install JOB=sites` from the default-branch checkout", memory_mib: 50 }
   - { name: weatherorb-corpus-obs, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.orb.corpus-obs, note: "V2 corpus observation, hourly; installed by `make v2-corpus-install` from the default-branch checkout", memory_mib: 50 }
-  - { name: weatherorb-public, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.public, memory_mib: 200 }
-  - { name: weatherorb-retention, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.retention, memory_mib: 50 }
-  - { name: weatherorb-serve, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.serve, door: weatherorb, memory_mib: 200 }
-  - { name: weatherorb-sync, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.sync, memory_mib: 200 }
-  - { name: weatherorb-tileserver, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.tileserver, door: [weatherorb-tiles, weatherorb-map], memory_mib: 200 }
-  - { name: weatherorb-verify, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.verify, memory_mib: 50 }
-  - { name: weatherorb-watchdog, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.watchdog, memory_mib: 50 }
-  - { name: weatherorb-worker-ingest, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.worker-ingest, memory_mib: 200 }
-  - { name: weatherorb-worker-round, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.weatherorb.worker-round, memory_mib: 200 }
   - { name: colima, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.colima, memory_mib: 50 }
   - { name: sleepwatcher, repo: dotfiles, kind: launchd, tier: core, label: homebrew.mxcl.sleepwatcher, memory_mib: 50 }
   - { name: postgres, repo: dotfiles, kind: launchd, tier: core, label: "sh.brew.postgresql@18", shared_memory: true, process_type: interactive, memory_mib: 1536 }

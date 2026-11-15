@@ -80,7 +80,7 @@ endpoint and diffs the live catalog against `models.txt`.
 |-|-|
 | `make setup` | Converge this machine onto the tracked config. Idempotent, safe to re-run. |
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
-| `make doctor` | Read-only health. Self-routes on the backend marker (below). |
+| `make doctor` | Read-only health. Self-routes on the backend marker (below). Last line: `N passed, M info — clean.` only with zero failures **and** zero warnings, else `N passed, M warnings, …`; `--json` makes it one `{"passed","failed","warnings","info"}` line. Exit 1 on a failure only. Info lines (a pending-update count the Drift monitor pages, a section that does not apply here) never count. |
 | `make help` | Every target, one line each. |
 | `make check` | Every target in `check:` in the Makefile: hermetic suites only (secrets lint, hook tests, script and bun tests, the architecture-check generator test). No side effects, no live probes; the live architecture-map assertion runs in `make doctor` and, softened, in `make verify`. |
 | `make -k check` | `check` stops at the first failing prerequisite; `-k` runs every suite and lists all failures. |
@@ -89,6 +89,7 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make verify` | `make doctor --verify`, the repo-contract name the factory's Watch runs: fails only on what a change to this repo can break; host conditions and other leads' drift (an unmapped or unregistered agent of another owner, a stale map row, an unclassified TCC program, a DOWN Kuma monitor) are WARN. `make doctor` fails all of it. |
 | `make storage-status` | Shares, mounts, free space, keepalive grade, external volume, mirror and restic age; `ARGS=--json` is the contract in `docs/storage.md` §Status. Read-only, bounded; `make doctor` WARNs from it. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
+| `make mini-prune` | Mini: lists, with `ARGS=--apply` removes, the plist of every disabled job and every stopped container no registry row names (`docs/mini-registry.md`). |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. On the mini it then runs `scripts/gate-pin-notice.sh` (below). |
 | `make worktree-audit` / `worktree-prune` | List / reclaim clean, fully-merged git worktrees across `~/SourceRoot` + `~/IuRoot` — they pile up in four different parent dirs (repo-local, `.claude/worktrees/`, `~/IuRoot/worktrees/`, `~/IuRoot/.wt/`), so it asks git rather than assuming a location. |
 

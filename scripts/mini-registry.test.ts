@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Container, type Plist, type Snapshot, footprint, findings, grade, loadAll, normalizeLabel, parseContainers, parseDisabled,
-  debtLines, gradeRules, hostRefusal, parseInspect, parseLaunchctlList, parsePri, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
+  debtLines, gradeRules, hostRefusal, parseInspect, pruneActions, parseLaunchctlList, parsePri, parseRegistry, parseTop, refusal, startOrder, stepFor, treePids, validate,
 } from "./mini-registry.ts"
 
 const HOME = "/home/u"
@@ -231,6 +231,10 @@ describe("grade", () => {
     expect(by("job").state).toBe("not loaded")
     const d = grade(services, snap({ disabled: new Set(["com.iu.job"]), plists: [plist("com.iu.job")] })).rows.find((r) => r.name === "job")
     expect(d?.state).toBe("disabled")
+    // the flag outlives a pruned plist: that is a row to delete (drift.missing), not a leftover to warn about
+    const pruned = grade(services, snap({ disabled: new Set(["com.iu.job"]) }))
+    expect(pruned.rows.find((r) => r.name === "job")?.state).toBe("not installed")
+    expect(pruned.drift.disabled).toEqual([])
   })
 
   test("a loaded job the registry does not know fails, naming it; removing it passes again", () => {
@@ -284,6 +288,48 @@ describe("grade", () => {
     expect(g.drift.missing).not.toContain("db")
     // a stopped VM means its containers are stopped, not absent
     expect(grade(services, snap()).rows.find((r) => r.name === "db")?.state).toBe("stopped")
+  })
+
+  test("leftovers are warnings: a container no row names and a disabled job whose plist is still installed", () => {
+    const stray = snap({
+      vms: new Map([["default", { running: true, mib: 3200 }]]),
+      containers: new Map([["default", [{ name: "stray", project: "", state: "created", mib: null }]]]),
+      disabled: new Set(["com.iu.job"]),
+      plists: [plist("com.iu.job")],
+    })
+    const g = grade(services, stray)
+    const f = findings(g.rows, g.drift)
+    expect(f.rc).toBe(2)
+    expect(f.lines).toContain("WARN container the registry does not know: default/stray (register it, or make mini-prune)")
+    expect(f.lines).toContain("WARN disabled but still installed: job (make mini-prune removes the plist)")
+    // a registered container in another VM than its row declares is the second-vm rule's finding, not an unknown container
+    const moved = snap({ vms: new Map([["teamchat", { running: true, mib: 100 }]]), containers: new Map([["teamchat", [{ name: "mariadb", project: "vps", state: "running", mib: 10 }]]]) })
+    expect(grade(services, moved).drift.unknown_containers).toEqual([])
+  })
+
+  test("prune removes a disabled plist (registered or not) and a stopped unknown container, never a running one", () => {
+    const s = snap({
+      vms: new Map([["default", { running: true, mib: 3200 }]]),
+      containers: new Map([["default", [
+        { name: "dead", project: "", state: "exited", mib: null },
+        { name: "made", project: "", state: "created", mib: null },
+        { name: "alive", project: "", state: "running", mib: 5 },
+      ]]]),
+      disabled: new Set(["com.iu.job", "com.jkrumm.gone", "com.jkrumm.off-but-elsewhere"]),
+      plists: [
+        { ...plist("com.iu.job"), path: "/home/u/Library/LaunchAgents/com.iu.job.plist" },
+        { ...plist("com.jkrumm.gone"), path: "/home/u/Library/LaunchAgents/com.jkrumm.gone.plist" },
+        { ...plist("com.jkrumm.off-but-elsewhere"), path: "/Library/LaunchAgents/com.jkrumm.off-but-elsewhere.plist" },
+        { ...plist("com.jkrumm.fine"), path: "/home/u/Library/LaunchAgents/com.jkrumm.fine.plist" },
+      ],
+    })
+    const g = grade(services, s)
+    const actions = pruneActions(services, g.rows, s, g.drift, "/home/u/Library/LaunchAgents")
+    expect(actions.filter((a) => a.kind === "plist").map((a) => a.path).sort()).toEqual([
+      "/home/u/Library/LaunchAgents/com.iu.job.plist",
+      "/home/u/Library/LaunchAgents/com.jkrumm.gone.plist",
+    ])
+    expect(actions.filter((a) => a.kind === "container").map((a) => a.name).sort()).toEqual(["dead", "made"])
   })
 
   test("a daemon is read from the system domain", () => {

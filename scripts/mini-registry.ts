@@ -419,7 +419,8 @@ export function stateOf(s: Service, snap: Snapshot): { state: State; mib: number
     const plist = snap.plists.find((p) => labelOf(p.label) && p.domain === "gui")
     const disabled = [...snap.disabled].some(labelOf)
     if (!row) {
-      if (disabled) return { state: "disabled", mib: null }
+      // launchd keeps the disabled flag after the plist is gone: with no file there is nothing left to prune, only a row to delete
+      if (disabled && plist) return { state: "disabled", mib: null }
       return { state: plist ? "not loaded" : "not installed", mib: null }
     }
     if (row.pid == null) return { state: "stopped", mib: null }
@@ -479,8 +480,10 @@ export function grade(services: Service[], snap: Snapshot): { rows: Row[]; drift
     unclaimed_doors: snap.doors.filter((d) => !services.some((s) => s.doors.includes(d))).sort(),
     disabled: rows.filter((r) => r.state === "disabled").map((r) => r.name),
   }
-  const registered = new Set(services.filter((s) => s.container).map((s) => `${s.vm}/${s.container}`))
-  for (const [vm, list] of snap.containers) for (const c of list) if (!registered.has(`${vm}/${c.name}`)) drift.unknown_containers.push(`${vm}/${c.name}`)
+  // A container is known by its name: one that runs in another VM than its row declares is the second-vm rule's finding (the VM-merge
+  // Issues track it), not an unknown container.
+  const registered = new Set(services.filter((s) => s.container).map((s) => s.container))
+  for (const [vm, list] of snap.containers) for (const c of list) if (!registered.has(c.name)) drift.unknown_containers.push(`${vm}/${c.name}`)
   drift.unknown_containers.sort()
   return { rows, drift }
 }
@@ -598,8 +601,40 @@ export function findings(rows: Row[], drift: Drift, rules?: RuleReport): { lines
   }
   for (const w of rules?.warnings ?? []) lines.push(`WARN ${w}`)
   for (const r of rows.filter((r) => r.over)) lines.push(`WARN over budget: ${r.name} ${r.footprint_mib} MiB of ${r.budget_mib}`)
+  // leftovers a person must not have to remember: `make mini-prune` lists them, `make mini-prune ARGS=--apply` removes them
+  for (const c of drift.unknown_containers) lines.push(`WARN container the registry does not know: ${c} (register it, or make mini-prune)`)
+  for (const d of drift.disabled) lines.push(`WARN disabled but still installed: ${d} (make mini-prune removes the plist)`)
   const failed = lines.some((l) => l.startsWith("FAIL"))
-  return { lines, rc: failed ? 1 : rows.some((r) => r.over) || rules?.warnings.length ? 2 : 0 }
+  return { lines, rc: failed ? 1 : lines.length ? 2 : 0 }
+}
+
+// ---------------------------------------------------------------- prune
+
+export type PruneAction = { kind: "plist"; name: string; path: string } | { kind: "container"; vm: string; name: string; state: string }
+
+// What `prune` removes: the plist of a disabled launchd job, registered or not (a row that is gone with its job leaves the file,
+// which the architecture check then lists as on-disk-but-unmapped), and a container no row names that is not running (created or
+// exited: a test run's leftover, a retired compose project's). Disabled is the proof: `launchctl disable` is the owner's or an
+// agent's explicit off switch, which no job being merely stopped or unloaded has. A running or paused unknown container is never touched.
+export function pruneActions(services: Service[], rows: Row[], snap: Snapshot, drift: Drift, agentsDir = join(HOME, "Library", "LaunchAgents")): PruneAction[] {
+  const out: PruneAction[] = []
+  const agents = agentsDir + "/"
+  const add = (name: string, file: Plist | undefined) => {
+    if (file && file.domain === "gui" && file.path.startsWith(agents) && !out.some((a) => a.kind === "plist" && a.path === file.path)) out.push({ kind: "plist", name, path: file.path })
+  }
+  rows.forEach((r, i) => { if (r.state === "disabled") add(r.name, plistFileOf(services[i], snap)) })
+  const disabled = new Set([...snap.disabled].map(normalizeLabel))
+  for (const label of drift.unknown_installed) {
+    if (disabled.has(normalizeLabel(label))) add(label, snap.plists.find((p) => p.label === label && p.domain === "gui"))
+  }
+  const stopped = /^(created|exited|dead)$/
+  for (const id of drift.unknown_containers) {
+    const [vm, ...rest] = id.split("/")
+    const name = rest.join("/")
+    const c = snap.containers.get(vm)?.find((x) => x.name === name)
+    if (c && stopped.test(c.state)) out.push({ kind: "container", vm, name, state: c.state })
+  }
+  return out
 }
 
 // ---------------------------------------------------------------- verbs
@@ -832,8 +867,8 @@ async function main(argv: string[]) {
   const arg = rest.find((a) => !a.startsWith("--"))
   const fmt = rest.includes("--format") ? rest[rest.indexOf("--format") + 1] : "table"
   if (verb === "lint") return lint(rest)
-  if (!verb || !["ps", "check", "debt", "up", "down", "profile", "list"].includes(verb)) {
-    console.error("usage: mini-registry ps [--format table|json] | check | debt | lint [--file F] [--repo R|--host] | up NAME | down NAME [--force] | profile NAME --up|--down")
+  if (!verb || !["ps", "check", "debt", "prune", "up", "down", "profile", "list"].includes(verb)) {
+    console.error("usage: mini-registry ps [--format table|json] | check | debt | prune [--apply] | lint [--file F] [--repo R|--host] | up NAME | down NAME [--force] | profile NAME --up|--down")
     return 2
   }
   const backend = (() => {
@@ -870,6 +905,23 @@ async function main(argv: string[]) {
     const lines = debtLines(rules)
     console.log(lines.length ? lines.join("\n") : "no recorded breaches")
     return 0
+  }
+  if (verb === "prune") {
+    const actions = pruneActions(services, rows, snap, drift)
+    if (!actions.length) { console.log("nothing to prune"); return 0 }
+    const docker = process.env.DOCKER_BIN ?? "/opt/homebrew/bin/docker"
+    let failed = 0
+    for (const a of actions) {
+      const label = a.kind === "plist" ? `remove plist ${a.path}` : `docker rm ${a.vm}/${a.name} (${a.state})`
+      if (!flag("--apply")) { console.log(`would ${label}`); continue }
+      const ok = a.kind === "plist"
+        ? (() => { try { rmSync(a.path); return true } catch { return false } })()
+        : (await run([docker, "rm", a.name], { DOCKER_HOST: `unix://${HOME}/.colima/${a.vm}/docker.sock` })).rc === 0
+      console.log(`${ok ? "done" : "FAILED"}: ${label}`)
+      if (!ok) failed++
+    }
+    if (!flag("--apply")) console.log("(dry run: make mini-prune ARGS=--apply)")
+    return failed ? 1 : 0
   }
   if (verb === "check") {
     const f = findings(rows, drift, rules)

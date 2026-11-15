@@ -79,6 +79,12 @@ footprint against its budget. A loaded interval job between runs is `stopped`; a
   `/.claude/worktrees/`, plists installed but neither loaded nor registered, registry entries with no plist or
   container (a manual compose service whose project is down is normal, not drift), containers the registry does not know, doors no service claims, and disabled leftovers whose plist is still installed.
 - `FORMAT=json make mini-ps` is the same data for the apps page.
+- **Leftovers are findings.** `mini-registry check` (so `make doctor` and the heartbeat) warns on a container no row names and on a
+  disabled job whose plist is still installed. A container counts by its name in any VM: one that runs in another VM than its row
+  declares is the `second-vm` rule's finding, tracked by the VM-merge Issues, not an unknown container.
+- **`make mini-prune`** lists what to remove, `make mini-prune ARGS=--apply` removes it: the plist of every `launchctl disable`d job
+  in `~/Library/LaunchAgents` (registered or not: a retired job's row goes with it, its file stays) and every created or exited
+  container no row names (never a running one). A retired service ends here: delete its row and its map row, run the prune.
 
 The label families are `com.jkrumm.*`, `com.iu.*`, `ai.hermes.*`, `homebrew.mxcl.*`, `sh.brew.*` and `com.colima.*`.
 

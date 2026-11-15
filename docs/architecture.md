@@ -154,17 +154,13 @@ brain drift audit, project narratives; the agents-overview digest was paused
 
 | Label | Schedule | What |
 |-|-|-|
-| `com.jkrumm.weatherorb.serve` | KeepAlive | API server (:8080, loopback) |
-| `com.jkrumm.weatherorb.tileserver` | KeepAlive | map tiles (:8081) |
-| `com.jkrumm.weatherorb.public` | KeepAlive | blend-only public app (:8082), the VPS edge's only door |
-| `com.jkrumm.weatherorb.sync` | KeepAlive | data sync |
-| `com.jkrumm.weatherorb.watchdog` | 900s | Kuma push monitor |
-| `com.jkrumm.weatherorb.retention` | daily 04:30 | member-store retention (`--apply`) |
-| `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
-| `com.jkrumm.weatherorb.worker-ingest` | KeepAlive | durable-jobs worker: ingest (DBOS, ADR 0010) |
-| `com.jkrumm.weatherorb.worker-round` | KeepAlive | durable-jobs worker: blend rounds (DBOS, ADR 0010) |
 | `com.jkrumm.orb.corpus-obs` | 3600s | V2 corpus observation, installed by `make v2-corpus-install` from the default-branch checkout (Issue 1005); tier manual in `config/mini/services.yaml` |
 | `com.jkrumm.orb.site-record` | 3 h | V2 site record (replaces the daily `corpus-extend`), `make v2-corpus-install JOB=sites` from the default-branch checkout; tier manual in the registry |
+
+The nine V1 service agents (`serve`, `tileserver`, `public`, `sync`, `watchdog`, `retention`, `verify`, `worker-ingest`,
+`worker-round`) were disabled since V1 froze (2026-11-14) and their plists were removed by `make mini-prune` on
+2026-11-15: a disabled registry row is a leftover, not a state. Reviving V1 is `make launchd-install` in `weatherorb`,
+which writes them again, with their registry rows and map rows.
 
 The 1200s/900s/hourly/daily/3 h timers that used to ingest, log, archive,
 backfill and run blend rounds (`obs`, `fcstlog`, `archive`, `backfill`, `round`) are
@@ -191,7 +187,6 @@ the weatherorb session workflow.
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the live Argo since 2026-10-30, from `~/.argo/releases/<sha>`, crons on; Caddy doors `argo-live.test` and `argo.jkrumm.com` (extra FQDN door); health for Kuma through the Kuma door `/h/argo` |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
-| `com.jkrumm.agent-workflows-eval-mine` | agent-workflows | 04:30 daily — `scripts/eval-mine-daily.sh` from the release dir |
 | `com.jkrumm.agent-workflows-gateway` | agent-workflows | KeepAlive (:7794, loopback) — the inference gateway (`packages/gateway`, `gateway/<build>/` under `~/.agent-workflows`, not the release dir; restarted by a deploy only when its build changed). The one process that holds provider keys: the personal IU key and one API key per Claude Console org (`iu`, `me`, `me2`, from `config/claude-accounts.json` `platform` blocks, `docs/claude-accounts.md`). Callers present a door token from `~/.agent-workflows/data/door-tokens`; its own SQLite ledger is the outbox for `usage.records`. Claude Code and Athena Teamchat stay outside it |
 | `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
@@ -214,7 +209,6 @@ the weatherorb session workflow.
 | `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
 | `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
-| `com.iu.athena-postgres` | IuRoot (chat) | **disabled** (`launchctl disable`) since the cutover of 2026-11-14: `athena` lives in the one Postgres on the same socket path; the old data dir under `~/.local/state/athena` is the 7-day rollback copy (`docs/postgres.md`). Was rendered by `make -C chat pg-setup` |
 | `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
 | `com.iu.teamchat-api` | IuRoot (chat) | KeepAlive — `make -C chat api` in the teamchat-runtime worktree |
 | `com.iu.teamchat-broker` | IuRoot (chat) | KeepAlive — `epx serve run --port 8790` in the teamchat-runtime worktree |
@@ -343,7 +337,6 @@ rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to
 | `1Password Backup - Push` (opbackup, MacBook) | push | the weekly backup left the box | Kuma, Slack | the owner | dotfiles | kept |
 | `com.jkrumm.hermes-liveness`, `Hermes Backup - Push` | push | Hermes gateway (and the inference gateway door token), the 03:00 backup | Kuma, Slack | the owner | hermes-agent | kept; see Open below |
 | `com.jkrumm.hermes-serve-liveness` | push (backstop 4 h) | `hermes serve` (:9119) | Kuma, Slack | the owner | hermes-agent | kept; see Open below |
-| `com.jkrumm.weatherorb.watchdog` | push (`Push` and `Degraded` beats) | WeatherOrb service health, `overdue_after` dead-man | Kuma, Slack | the owner | weatherorb | kept; see Open below |
 | `com.jkrumm.linewatch-watchdog`, `com.jkrumm.linewatch-heartbeat` | push (`Home Line - Push`, `Home Line - Watchdog` latch) | the home internet line, the collector | Kuma, Slack | the owner | linewatch | kept; see Open below |
 | `com.iu.teamchat-vm-watch` | unspecified | teamchat VM (IuRoot, read-only mention) | unspecified | unspecified | IuRoot (teamchat) | not reviewed here |
 | `com.iu.prometheus-vpn-watcher` | in-process self-heal ladder (IuRoot, read-only mention) | the VPN | a desktop notification per the archived note `docs/archive/background-jobs-2026-10-warden-era.md` | unspecified | IuRoot | not reviewed here |

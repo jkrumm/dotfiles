@@ -879,9 +879,12 @@ doctor: ## Read-only health of this machine (+ the mini when run from the MacBoo
 
 # The mini's service registry (config/mini/services.yaml + a mini-services.yaml at any repo's root):
 # every service with its tier, budget and start/stop verbs. docs/mini-registry.md.
-.PHONY: mini-ps mini-up mini-down mini-profile mini-registry-lint
+.PHONY: mini-ps mini-prune mini-up mini-down mini-profile mini-registry-lint
 mini-ps: ## Every service on the mini: tier, state, footprint against budget, drift (FORMAT=json for the apps page)
 	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts ps $(if $(FORMAT),--format $(FORMAT))
+
+mini-prune: ## Leftovers the registry flags: the plist of a disabled job, a stopped container no row names (lists; ARGS=--apply removes)
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts prune $(ARGS)
 
 mini-registry-lint: ## This repo's host registry file against every repo's mini-services.yaml (static: a clash fails before the merge)
 	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts lint --host --file $(DOTFILES_DIR)/config/mini/services.yaml
