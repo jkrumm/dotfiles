@@ -105,7 +105,9 @@ there. Plan row `smb-ssd-share`.
   nothing and the internal disk is never exposed or written (a mount point is not created by anything here).
 - **One script owns it:** `scripts/external-volume-share.sh add|remove|status`. `add` refuses unless the gate says `present` (mounted,
   unlocked, sentinel readable), reads the mount point from the gate (never a typed path), is idempotent, creates an SMB-only share with
-  guest access off, and adds the invoking admin to the new share's access group. `remove` drops the share point and leaves the data
+  guest access off, then creates the share's access group the way System Settings does and links it (`sharing -a` alone leaves the
+  share point without one and smbd answers the client "the share does not exist", measured 2026-11-15), and adds the invoking
+  admin to it. A re-run repairs a share point that lacks the group. `remove` drops the share point and leaves the data
   alone (the rollback). `status` needs no root.
 - **It needs root and there is no root-free route** (checked 2026-11-14: `sharing -a` answers `must run as root`, `dscl` on the share
   point records `eDSPermissionError`, `sudo -n` asks for a password). So it is one owner step, from a Herdr terminal on the mini (that

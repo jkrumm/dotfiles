@@ -27,12 +27,31 @@ cat > "$T/sharing" <<STUB
 echo "\$*" >> "$T/sharing.calls"
 case "\$1" in
   -l) cat "$T/shares.json" ;;
-  -a) printf '{"EXT":{"path":"%s","smb_name":"EXT"}}\n' "\$2" > "$T/shares.json"; printf 'com.apple.sharepoint.group.1\ncom.apple.sharepoint.group.2\n' > "$T/groups" ;;
+  -a) printf '{"EXT":{"path":"%s","smb_name":"EXT"}}\n' "\$2" > "$T/shares.json" ;;
   -r) echo '{}' > "$T/shares.json" ;;
 esac
 STUB
-printf '#!/bin/bash\ncat "%s"\n' "$T/groups" > "$T/dscl"
-printf '#!/bin/bash\necho "$*" >> "%s/dsedit.calls"\n' "$T" > "$T/dseditgroup"
+# dscl models the directory: the group list, a share point's sharepoint_group_id, a group's GeneratedUID.
+cat > "$T/dscl" <<STUB
+#!/bin/bash
+echo "\$*" >> "$T/dscl.calls"
+case "\$2" in
+  -list) cat "$T/groups" ;;
+  -read)
+    case "\$3" in
+      /SharePoints/EXT) [ -f "$T/gid" ] && echo "sharepoint_group_id: \$(cat "$T/gid")" ;;
+      /Groups/*) echo "GeneratedUID: UID-\${3##*/}" ;;
+    esac ;;
+  -create) [ "\$3" = /SharePoints/EXT ] && echo "\$5" > "$T/gid" ;;
+esac
+exit 0
+STUB
+cat > "$T/dseditgroup" <<STUB
+#!/bin/bash
+echo "\$*" >> "$T/dsedit.calls"
+[ "\$2" = create ] && echo "\${@: -1}" >> "$T/groups"
+exit 0
+STUB
 chmod +x "$T/gate" "$T/sharing" "$T/dscl" "$T/dseditgroup"
 
 run() { # run <uid> <args...>; prints output, sets rc
@@ -53,9 +72,17 @@ if grep -q -- '^-a' "$T/sharing.calls" 2>/dev/null; then bad "a share point was 
 echo present > "$T/state"; run 0 add
 eq "add with the volume present succeeds" 0 "$rc"
 eq "sharing -a names the volume's mount point, the name, smb only, no guest" "-a $ROOT -S EXT -n EXT -s 001 -g 000" "$(grep -- '^-a' "$T/sharing.calls")"
-eq "the invoking admin joins the new access group" "-o edit -a owner -t user com.apple.sharepoint.group.2" "$(cat "$T/dsedit.calls")"
+eq "an access group is created after the highest existing one (RealName = the share)" "-o create -r EXT -i 702 com.apple.sharepoint.group.2" "$(sed -n 1p "$T/dsedit.calls")"
+eq "the share point is linked to it" "UID-com.apple.sharepoint.group.2" "$(cat "$T/gid")"
+eq "the invoking admin joins the new access group" "-o edit -a owner -t user com.apple.sharepoint.group.2" "$(sed -n 2p "$T/dsedit.calls")"
 run 0 add;                    eq "add is idempotent" 0 "$rc"
 eq "... and creates no second share point" 1 "$(grep -c -- '^-a' "$T/sharing.calls")"
+eq "... and no second group" 2 "$(wc -l < "$T/dsedit.calls" | tr -d ' ')"
+# a share point made earlier without a group (the 2026-11-15 state) is repaired by a re-run
+rm "$T/gid"; : > "$T/dsedit.calls"; printf 'com.apple.sharepoint.group.1\ncom.apple.sharepoint.group.2\n' > "$T/groups"
+run 0 add;                    eq "re-run repairs a share point that has no access group" 0 "$rc"
+eq "... a group 3 is created and linked" "UID-com.apple.sharepoint.group.3" "$(cat "$T/gid")"
+eq "... and the share point was not re-created" 1 "$(grep -c -- '^-a' "$T/sharing.calls")"
 run 501 status;              eq "status needs no root" 0 "$rc"
 case "$out" in *"share point: EXT"*) ok "status shows the share" ;; *) bad "status" "$out" ;; esac
 printf '{"EXT":{"path":"/elsewhere","smb_name":"EXT"}}\n' > "$T/shares.json"

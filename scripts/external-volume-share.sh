@@ -46,20 +46,34 @@ cmd_add() {
   root=$("$GATE" root) || die "the volume has no mount point"
   existing=$(share_path)
   if [ -n "$existing" ]; then
-    [ "$existing" = "$root" ] && { echo "already shared: $NAME -> the volume"; return 0; }
+    [ "$existing" = "$root" ] && { ensure_group; echo "already shared: $NAME -> the volume"; return 0; }
     die "a share point '$NAME' exists at a different path; remove it first ($0 remove)"
   fi
-  local before after grp user="${SUDO_USER:-}"
-  before=$(sharepoint_groups)
   "$SHARING" -a "$root" -S "$NAME" -n "$NAME" -s 001 -g 000 || die "sharing -a failed"
-  # A new share point creates its access group; the invoking admin joins it so the first mount works.
-  after=$(sharepoint_groups)
-  grp=$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n 1)
-  if [ -n "$grp" ] && [ -n "$user" ] && [ "$user" != root ]; then
-    "$DSEDITGROUP" -o edit -a "$user" -t user "$grp" 2>/dev/null || echo "note: could not add $user to $grp"
-  fi
   [ -n "$(share_path)" ] || die "the share point is not listed after sharing -a"
+  ensure_group
   echo "shared: $NAME (smb, no guest)"
+}
+
+# smbd only serves a share point that names an access group (sharepoint_group_id), as System Settings creates it;
+# `sharing -a` alone leaves it out and the client then answers "the share does not exist" (2026-11-15, measured).
+# Create the group the way System Settings does (com.apple.sharepoint.group.N, gid 700+N, RealName = the share),
+# link it, and put the invoking admin in it. Idempotent: a share point that already has one is left alone.
+ensure_group() {
+  local have max n grp uid user="${SUDO_USER:-}"
+  have=$("$DSCL" . -read "/SharePoints/$NAME" sharepoint_group_id 2>/dev/null | awk '{print $2}')
+  [ -z "$have" ] || return 0
+  max=$(sharepoint_groups | sed 's/.*group\.//' | sort -n | tail -n 1)
+  n=$(( ${max:-0} + 1 ))
+  grp="com.apple.sharepoint.group.$n"
+  "$DSEDITGROUP" -o create -r "$NAME" -i $((700 + n)) "$grp" || die "could not create the access group $grp"
+  uid=$("$DSCL" . -read "/Groups/$grp" GeneratedUID 2>/dev/null | awk '{print $2}')
+  [ -n "$uid" ] || die "the access group $grp has no GeneratedUID"
+  "$DSCL" . -create "/SharePoints/$NAME" sharepoint_group_id "$uid" || die "could not link $grp to the share point"
+  if [ -n "$user" ] && [ "$user" != root ]; then
+    "$DSEDITGROUP" -o edit -a "$user" -t user "$grp" || echo "note: could not add $user to $grp"
+  fi
+  echo "access group: $grp"
 }
 
 cmd_remove() {
@@ -72,7 +86,12 @@ cmd_remove() {
 cmd_status() {
   local p; p=$(share_path)
   echo "volume gate: $("$GATE" state)"
-  if [ -n "$p" ]; then echo "share point: $NAME (smb)"; else echo "share point: none"; fi
+  if [ -n "$p" ]; then echo "share point: $NAME (smb)"; else echo "share point: none"; return 0; fi
+  if [ -n "$("$DSCL" . -read "/SharePoints/$NAME" sharepoint_group_id 2>/dev/null | awk '{print $2}')" ]; then
+    echo "access group: linked"
+  else
+    echo "access group: missing (smbd answers 'the share does not exist'; re-run add as root)"
+  fi
 }
 
 case "${1:-}" in
