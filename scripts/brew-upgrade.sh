@@ -106,7 +106,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
 # LAN fallback checked first, the restart in a detached watchdog that rolls back.
 # The post-assertion further down reports new-binary-old-daemon rather than letting
 # it pass for "upgraded".
-HELD=(caddy tailscale)
+#
+# blueutil is held for the home repo's speaker-watch (the Soloist speaker connector, home/AGENTS.md): it is ad-hoc signed
+# and launchd runs it under the Bluetooth permission of its own binary, so an upgrade asks for the grant again. Nothing
+# to repair afterwards, so no fixup: the pin is the whole mechanism. `make doctor` compares `brew list --pinned` with
+# this list, so a pin that is not here (or a held formula whose pin is gone) shows as a warning.
+HELD=(blueutil caddy tailscale)
 
 # The command that repairs a held package after a deliberate manual upgrade:
 #   brew unpin X && brew upgrade X && <this> && brew pin X

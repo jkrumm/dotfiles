@@ -75,6 +75,17 @@ out_ultra=$(VREG="$TMP/registry-ultra.json" verify IU_SEV=PASS)
 assert_eq "quota/pass: an Ultra account needs only seven_day" PASS "$(qrow "$out_ultra")"
 assert_contains "quota/pass: Ultra row names the weekly window only" "seven_day utilization+resets_at present" "$(grep -E ' quota/pass ' <<<"$out_ultra")"
 
+# no cachedUsageUtilization in .claude.json (Claude Code stopped writing it outside a session): the picker's sample is the reading
+mkdir -p "$TMP/cache" "$TMP/d2"
+printf '{"src":"oauth","s":12,"s_reset":1,"w":40,"w_reset":2}' > "$TMP/cache/warn.sample.json"
+printf '{"src":"statusline","s":null,"w":40}' > "$TMP/cache/fail.sample.json"
+out_sample=$(verify IU_SEV=PASS)
+qr() { grep -E "^(PASS|WARN|FAIL) +quota/$1 " <<<"$out_sample"; }
+assert_eq "quota/warn: a complete picker sample passes without the .claude.json field" PASS "$(qr warn | awk '{print $1}')"
+assert_contains "quota/warn: says where the reading came from" "picker's sample (oauth)" "$(qr warn)"
+assert_eq "quota/fail: a sample without the session window is still a WARN on a Max account" WARN "$(qr fail | awk '{print $1}')"
+assert_eq "quota/unread: no sample at all is a WARN" WARN "$(qr unread | awk '{print $1}')"
+
 echo
 if (( fail )); then printf '\033[31m%d failed\033[0m, %d passed\n' "$fail" "$pass"; exit 1; fi
 printf '\033[32mall %d passed\033[0m\n' "$pass"

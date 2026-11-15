@@ -121,7 +121,15 @@ while IFS=$'\t' read -r id dir; do
   plan=$(jq -r --arg id "$id" '.accounts[$id].plan // "" | ascii_downcase' "$REGISTRY" 2>/dev/null) || plan=""
   if [[ "$plan" == "ultra" ]]; then wins='["seven_day"]'; wins_label="seven_day"; else wins='["five_hour","seven_day"]'; wins_label="five_hour/seven_day"; fi
   if [[ -z "$cu" ]]; then
-    row WARN "quota/$id" "no cachedUsageUtilization in $cj yet (fix: claude-account refresh --ids $id)"
+    # Claude Code 2.1.310 stopped writing cachedUsageUtilization outside a live session; the picker's own sample (the OAuth usage
+    # endpoint, claude-account refresh) is the reading that counts, so an account without the field is graded on that.
+    sample="$CACHE_DIR/$id.sample.json"
+    have=$(jq -r --argjson wins "$wins" '[ $wins[] as $w | (if $w == "seven_day" then .w else .s end) | select(type == "number") ] | length' "$sample" 2>/dev/null) || have=0
+    if [[ "${have:-0}" == "$(jq -r 'length' <<<"$wins")" ]]; then
+      row PASS "quota/$id" "$wins_label in the picker's sample ($(jq -r '.src // "?"' "$sample")); .claude.json has no cachedUsageUtilization (only live sessions write it)"
+    else
+      row WARN "quota/$id" "no usable quota sample for $wins_label: nothing in $cj and ${sample} is missing or incomplete (fix: claude-account refresh --ids $id)"
+    fi
   else
     miss=$(jq -r --argjson wins "$wins" '[ (if (.fetchedAtMs|type) == "number" then empty else "fetchedAtMs" end),
       (.utilization // {} | to_entries | map(select(.key == "five_hour" or .key == "seven_day")) | map(.key)) as $have
