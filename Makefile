@@ -136,6 +136,7 @@ setup:
 	@$(MAKE) --no-print-directory browser-reap-setup
 	@$(MAKE) --no-print-directory icloud-photos-export-setup
 	@$(MAKE) --no-print-directory photos-analysis-off
+	@$(MAKE) --no-print-directory ext-mirror-setup
 	@$(MAKE) --no-print-directory shared-chrome-setup
 	@$(MAKE) --no-print-directory smb-keepalive-setup
 	@$(MAKE) --no-print-directory fseventsd-watch-setup
@@ -842,7 +843,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -3139,6 +3140,34 @@ icloud-photos-export-status: ## Last iCloud Photos export: the status file with 
 icloud-photos-export-test: ## Hermetic suite for icloud-photos-export.py (fake osxphotos and hl, no Photos, no network)
 	@python3 -W ignore $(DOTFILES_DIR)/scripts/icloud-photos-export.test.py
 
+# Nightly second local copy of the HomeLab's SSD share, HDD/fuji and HDD/Videos on the external volume
+# (scripts/ext-mirror.py), mini only: `hl` (S3) pulls into <volume>/mirror/{ssd,fuji,videos}, behind the volume gate.
+# docs/storage.md §EXT mirror.
+.PHONY: ext-mirror-setup ext-mirror-teardown ext-mirror-run ext-mirror-status ext-mirror-test
+ext-mirror-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — ext-mirror skipped"; exit 0; fi; \
+	if [ "$$(jq -r '.attached // false' "$(DOTFILES_DIR)/config/external-volume.json" 2>/dev/null)" != "true" ]; then \
+		echo "    · external volume not attached (config/external-volume.json) — ext-mirror skipped"; exit 0; fi; \
+	command -v rclone >/dev/null 2>&1 || { echo "    ✗ rclone missing — brew bundle"; exit 1; }; \
+	chmod +x "$(DOTFILES_DIR)/scripts/ext-mirror.py"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.ext-mirror" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ 05:00 daily → homelab ssd, hdd/fuji, hdd/Videos into <volume>/mirror (hl, behind the gate); log: ~/Library/Logs/ext-mirror.log"
+ext-mirror-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.ext-mirror.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.ext-mirror.json"; \
+	echo "  ✓ ext-mirror torn down (unloaded, plist and jobrun state removed; the mirror and its status file stay)"
+ext-mirror-run: ## Run the EXT mirror once now (the nightly job's own run, foreground; ARGS=--dry-run or --check-now)
+	@python3 $(DOTFILES_DIR)/scripts/ext-mirror.py $(ARGS)
+ext-mirror-status: ## Last EXT mirror run: <volume>/mirror/.status.json, then the jobs-grade row
+	@python3 $(DOTFILES_DIR)/scripts/ext-mirror.py --status; \
+	jobs-grade 2>/dev/null | jq -r '.[] | select(.label=="com.jkrumm.ext-mirror") | "grade: \(.grade)"' 2>/dev/null || true
+ext-mirror-test: ## Hermetic suite for ext-mirror.py (real volume gate on a stub diskutil, rclone alias as the HomeLab)
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/ext-mirror.test.py
+
 # The shared headless Chrome for UI checks (scripts/shared-chrome.ts): one Chrome, DevTools on 127.0.0.1:9223,
 # its own profile, one isolated context per agent. The job is loaded but not running; `shared-chrome ensure`
 # starts it and its supervisor stops it when no context is left. Any machine. Log: ~/Library/Logs/shared-chrome.log.
@@ -4000,6 +4029,7 @@ help:
 	@echo "  make host-waste-check          Host waste checks, one line each (orphaned sleeps, tailscaled CPU, Photos analysis, sshd); photos-analysis-off keeps mediaanalysisd off"
 	@echo "  make host-waste-test           Hermetic suite for host-waste-check.sh (ps, launchctl, tailscale stubs)"
 	@echo "  make photos-analysis-off       Dev host: disable Photos analysis (mediaanalysisd); make setup runs it"
+	@echo "  make ext-mirror-setup           Load the 05:00 mirror of the HomeLab onto the external volume (mini; -run, -status, -test, -teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make storage-status             Shares, mounts, free space, mirror and backup age (ARGS=--json; docs/storage.md §Status)"

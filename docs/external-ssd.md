@@ -17,7 +17,7 @@ Read-only first, measured on the mini (`diskutil info`, `diskutil apfs list`, `d
 | Volume | `EXT`, one APFS volume in its own container on a GPT USB disk (EFI + container), case-insensitive, owners disabled, SMART verified |
 | Encryption | FileVault (APFS native), one crypto user, hint `EXT SSD` |
 | Size | 931 GiB container; 526 GiB used, 406 GiB free (57 %) at 20:20 CET |
-| Top level (GiB) | `Bilder` 168.7, `weatherorb` 166.5 (weatherorb's, with its own marker `.weatherorb-data-root`), `Videos` 110.4, `usb-rescue` 11.2, `Steuer` 7.4, `mirror` 3.4 (the `ext-mirror` row has started it), `Dokumente` ~0, Spotlight and system dirs ~0.5 |
+| Top level (GiB) | `Bilder` 168.7, `weatherorb` 166.5 (weatherorb's, with its own marker `.weatherorb-data-root`), `Videos` 110.4, `usb-rescue` 11.2, `Steuer` 7.4, `mirror` 3.4 (the `ext-mirror` job owns it since 2026-11-15), `Dokumente` ~0, Spotlight and system dirs ~0.5 |
 | Not ours | `Bilder`, `Videos`, `Steuer`, `Dokumente`, `usb-rescue` are the owner's folders; they move to the HomeLab or become `mirror/fuji` in other rows. The end state is `weatherorb/` and `mirror/` only |
 | What unlocks it | The **login keychain**: it holds an "Encrypted Volume Password" item for the volume (created 2023-05), which macOS uses at login. Since issue 1274 a second copy is `op://mini/ext-ssd/PASSPHRASE` (the owner created the item; `dotfiles-private/headless.refs` lists it; `passphraseRef` names it), so the unlock job can re-unlock a lock the keychain does not cover |
 
@@ -93,7 +93,7 @@ Listed today: `com.jkrumm.devhost-health` (the check reads the sentinel) and wea
 `worker-round` (their `data/`, `products/` and `var/` entries are symlinks onto the volume). weatherorb's jobs are unloaded (V1 frozen),
 so no grant could be probed for them; the first run after a revival raises the prompt. The heartbeat's grant is probed by its first run
 after this change merges (its log, `~/Library/Logs/devhost-health.log`, shows `external volume present` or `unreadable`). The mirror job
-joins when `ext-mirror` puts it behind the gate; weatherorb was asked by signal to put its jobs behind it.
+(`com.jkrumm.ext-mirror`, `docs/storage.md` §EXT mirror) is listed too: it runs only behind the gate and writes `mirror/`; weatherorb was asked by signal to put its jobs behind it.
 
 ## Share
 

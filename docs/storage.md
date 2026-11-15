@@ -59,7 +59,7 @@ SSD/                      HDD/                       EXT/
 | Job | From → to | When | Proof it ran |
 |-|-|-|-|
 | restic (`homelab` repo, `docs/backups.md`) | SSD share, `HDD/fuji/RAWs`, `HDD/backups`, service state → B2 | daily 03:30 | Uptime Kuma push monitor, 25 h |
-| EXT mirror (plan row `ext-mirror`, not built yet) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror` | nightly, pulled by the mini over S3 (`hl`) | `jobrun` grade and a status file on EXT |
+| EXT mirror (`com.jkrumm.ext-mirror`, dotfiles; §EXT mirror) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror/{ssd,fuji,videos}` | nightly 05:00, pulled by the mini over S3 (`hl`), behind the volume gate | `jobrun` grade and `EXT/mirror/.status.json` |
 | iCloud Photos export (`com.jkrumm.icloud-photos-export`, dotfiles) | the mini's Photos library → `SSD/Bilder/iCloud/<year>/<month>/` | nightly 01:30, over S3 (`hl`) | `jobrun` grade, `Bilder/iCloud/.status.json` |
 | Shutterflow sync (its own app) | finals on the MacBook → B2 | on demand | the app's pipeline view |
 
@@ -102,6 +102,32 @@ so the export would miss them.
 
 Restic's 03:30 run covers `SSD/Bilder`, and the EXT mirror pulls it from there, so the archive reaches the offsite copy the
 night after it is written.
+
+## EXT mirror
+
+`scripts/ext-mirror.py` (`make ext-mirror-setup`, mini only, once `attached` is true) keeps `EXT/mirror/{ssd,fuji,videos}` equal to
+`homelab:ssd`, `homelab:hdd/fuji` and `homelab:hdd/Videos`. It is the only writer of `EXT/mirror`.
+
+| Piece | How |
+|-|-|
+| When | 05:00 daily, after the iCloud export (01:30) and restic (03:30); `jobrun --timeout 43200 --lock ext-mirror`, log `~/Library/Logs/ext-mirror.log` |
+| Gate | the script re-executes itself through `scripts/lib/volume-gate.sh run --`: volume absent, locked or unreadable is one `skipped: volume <state>` line, exit 0, nothing run or created, never a path on the internal disk. It is listed `removable` in `config/tcc-programs.json` |
+| Away | every source is probed before any sync: HomeLab unreachable (no such host, timeout, refused) is `skipped: HomeLab not reachable`, exit 0, nothing created. Any other probe failure, a rejected key included, and a key `hl` cannot resolve are failures (exit 1) |
+| Lock | a run holds `EXT/mirror/.lock` (`flock`, released when the process ends however it ends); a second one is `skipped: a run is already in progress`, exit 0, so the nightly job and a long manual first copy never sync into the mirror together |
+| Floor | less than 60 GiB free on the volume (`EXT_MIRROR_MIN_FREE_GIB`): `refusing to start`, exit 1 |
+| Sync | `rclone sync` over `hl`, size and modification time (the gateway gives Samba-written files no usable etag, `homelab` `docs/s3.md` Caveats). Excludes what restic excludes (trash, macOS metadata, build output, Immich thumbs and encoded video, the gateway's `.sgwtmp`), except `*.tmp`, which restic loses real files to |
+| Deletes | a file changed or deleted at the source moves to `EXT/mirror/.deleted/<YYYY-MM-DD>/<source>/` (`--backup-dir`) and the dated folder is removed after 30 days (`EXT_MIRROR_RETAIN_DAYS`); nothing else under `.deleted` is touched. The HomeLab is never written: the mini's key cannot delete there either |
+| Empty source | a source that lists empty over a mirror that holds files is a share that is not mounted at home: that source is refused and the run fails, the mirror stays |
+| Check | monthly (`EXT_MIRROR_CHECK_EVERY_DAYS`, `--check-now` forces it): `rclone check --download` over a sample per source, 100 files and at most 1 GiB (both ends are read over the slow link), drawn with a seed from the month and the source name, so a re-run draws the same files. A difference or missing file fails the run and is recorded; a failed check is repeated every night until it passes |
+| Status | `EXT/mirror/.status.json`: `started`, `finished`, `ok`, `free_gib`, per source `files`, `bytes`, `transferred`, `transferred_bytes`, `moved_to_deleted`, `errors`, `ok`, and `check` (`finished`, `seed`, `ok`, per source `sampled`, `matched`, `differ`, `missing_in_mirror`, `errors`). `make storage-status` reads it and warns past 36 h; `make ext-mirror-status` prints it and the grade |
+| Restore | a mistake at home is in `.deleted/<date>/` for 30 days; copy it back through the share. A file edited on the mirror is overwritten the next night |
+
+Adoption (2026-11-15): the volume held a hand copy of `HDD/fuji` as `Bilder/RAWs` and `Videos/Videos`. Compared with the HomeLab by
+name and size first (6,320 and 418 files, nothing the HomeLab lacked but a `.DS_Store`), then renamed on the same volume to
+`mirror/fuji/RAWs` and `mirror/fuji/Videos`; the copy's modification times were set to the HomeLab's, so the first sync verified instead of
+copying 280 GiB. Manual runs: `make ext-mirror-run ARGS=--dry-run`.
+
+The path from the mini to the HomeLab carries about 2 MiB/s whatever the stream count (measured 2026-11-15: `hl` with 4 and with 16 streams, and a read through the SMB mount, all the same; 92 ms), so the first copy of the SSD share (164 GiB) takes about a day. `EXT_MIRROR_TRANSFERS` (16) only keeps small files from queueing behind large ones. The job's timeout is 12 h; a night that ends at the timeout is graded failing and the next one resumes where it stopped, so a night after the first copy is minutes.
 
 ## Mounts
 

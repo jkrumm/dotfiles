@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.ext-mirror</string>
+  <!-- Nightly second local copy of the HomeLab's SSD share, HDD/fuji and HDD/Videos on the external volume
+       (<volume>/mirror/{ssd,fuji,videos}), pulled over S3 with `hl`, behind the volume gate: a volume that is absent or
+       locked is one "skipped" line, exit 0. See scripts/ext-mirror.py and docs/storage.md §EXT mirror. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.ext-mirror</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--timeout</string><string>43200</string>
+    <string>--lock</string><string>ext-mirror</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/ext-mirror.py</string>
+  </array>
+  <!-- --timeout 43200: the path to the HomeLab carries about 2 MiB/s, so a first or catch-up run takes hours; a wedged transfer must not hold the job open for ever
+       (launchd would skip every later night). A held lock skips a run that overlaps a long one. -->
+  <!-- jobrun is a bun script and launchd's PATH is minimal: bun's dir, ~/.local/bin (hl, secrets-run) and Homebrew
+       (python3, rclone) must be on it. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- 05:00: after the HomeLab's 03:30 restic run and the 01:30 iCloud export, so the night's photos are in the copy;
+       calendar interval, so a fire missed asleep runs on wake. Not RunAtLoad: nothing here belongs on the boot path. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>5</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <key>Nice</key><integer>10</integer>
+  <key>ProcessType</key><string>Background</string>
+  <!-- ~/Library/Logs, rotated by log-rotate (which derives it from this plist). -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/ext-mirror.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/ext-mirror.log</string>
+</dict>
+</plist>
