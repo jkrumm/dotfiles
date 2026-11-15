@@ -230,6 +230,18 @@ session label (an unknown foreground, `null` or absent, is retried by the next s
 model/effort flags and the `c` launcher's env (`ENABLE_TOOL_SEARCH`, lane vars). A terminal sitting at a shell prompt
 that carries a session label (the claude exited without SessionEnd, e.g. the shell was reused) is resumed too, once.
 
+**Rescan (issue 1367).** The subscribe snapshot is read once, about 13 s after the core starts, when most terminals'
+foreground is not yet a login shell, and nothing produces a later one. On 2026-11-15 five of 16 resumed and eleven sessions
+sat at a shell for 7 h 13 min until a restart of the job re-read them. Each connection (hc-resume's own start and every
+reconnect) now also re-reads the roster with `terminal.list` on a short-lived connection, every 15 s for the first 10
+minutes, then every 60 s for as long as a labelled terminal's foreground is still unknown, and runs it through the snapshot
+rules above (positively a login shell, no live agent, one attempt per terminal and session, the pacing below). The reads
+end when 10 minutes are over and every resumable terminal is running or skipped on purpose. Only live, kept terminals are
+read. Every skip is logged once per terminal and reason as `skip <addr>: <reason>`: `foreground unknown`, `foreground is
+<program>` (also `, not a login shell`), `live <app> session (agent status)`, `unusable session label`; a terminal already
+running `claude` is not a skip. `rescan failed: …` logs the first failed read of a streak. No knob: the intervals are
+`DEFAULT_RESCAN` in `scripts/hc-resume.ts`.
+
 **Resume pacing (issue 1033).** After the 2026-11-13 panic reboot, 25 `claude --resume` started within 9 ms and the load
 average reached 404: sshd and tailscale answered only after about 7.5 minutes (`docs/incident-2026-11-13-mini-panic.md`).
 hc-resume now queues the terminals it would resume and starts them paced. Which terminals, the order and the account are

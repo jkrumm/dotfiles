@@ -5,9 +5,16 @@
 // core replaces it with a login shell; this types `claude --resume <id>` into that shell.
 //
 // Triggers: its own start (the subscribe snapshot), every reconnect (stream EOF = core restart), a
-// `restarted` event, a `missed` snapshot. Rules: one attempt at a time per terminal, at most one
+// `restarted` event, a `missed` snapshot, and the rescan. Rules: one attempt at a time per terminal, at most one
 // attempt per (terminal, session id), only into a terminal whose foreground is POSITIVELY a login shell
-// (an unknown foreground is skipped and re-evaluated by the next snapshot).
+// (an unknown foreground is skipped and re-evaluated by the next read).
+//
+// Rescan (issue 1367): after a boot the one subscribe snapshot arrives ~13 s after the core starts, when most terminals'
+// foreground is not yet a login shell, and nothing produced a later snapshot: eleven sessions sat at a shell for seven hours.
+// So each connection re-reads the roster (`terminal.list`, one short-lived connection) every RESCAN fast interval for the
+// first 10 minutes, then every slow interval for as long as a labelled terminal's foreground is still unknown, and
+// feeds it through the same rules as a snapshot. Every skip is logged once per terminal with its reason
+// (`skip <addr>: <reason>`, the line scripts/recovery-check.sh reads).
 //
 // Pacing (docs/herdr-core.md §Resume pacing): after a reboot every kept terminal qualifies at once, and 25 `claude --resume`
 // started in the same millisecond starved sshd and tailscale for 7 minutes (docs/incident-2026-11-13-mini-panic.md). So at most
@@ -30,6 +37,9 @@ export type Terminal = {
   /** Set by a running agent's own hook (`app: "claude-code"`); null on a bare shell. The foreground fact can be stale. */
   status?: { app?: string } | null
   labels?: Record<string, string>
+  /** `terminal.list` only: a finished or unkept terminal is never resumed. */
+  state?: string
+  keep?: boolean
 }
 /** What a link yields: a full snapshot (subscribe result, `missed`) or one restarted terminal. */
 export type Msg = { kind: "snapshot" | "restarted"; terminals: Terminal[] }
@@ -38,6 +48,9 @@ export interface Link { messages: AsyncIterable<Msg>; close(): void }
 export interface Deps {
   /** Connect and subscribe; rejects when no core runs. */
   open: () => Promise<Link>
+  /** Re-reads the roster (`terminal.list`) for the rescan; absent = no rescan. */
+  list?: () => Promise<Terminal[]>
+  rescan?: Partial<Rescan>
   /** `session` is the id the line was built for: the real adapter re-checks it at send time. `argvFallback` is set only
    *  by a `restarted` trigger: the terminal's own argv may stand in for an ABSENT foreground fact. */
   send: (address: string, text: string, session: string, argvFallback?: boolean) => Promise<void>
@@ -106,6 +119,16 @@ export const DEFAULT_MAX_INFLIGHT = 3
 export const DEFAULT_STAGGER_MS = 3000
 export const DEFAULT_TAILNET_WAIT_MS = 120000
 
+export interface Rescan {
+  /** Between reads during the window after a connection opens. */
+  fastMs: number
+  /** Between reads after the window, while a labelled terminal's foreground is still unknown. */
+  slowMs: number
+  /** How long the fast reads last whatever the roster looks like. */
+  windowMs: number
+}
+export const DEFAULT_RESCAN: Rescan = { fastMs: 15000, slowMs: 60000, windowMs: 600000 }
+
 export interface Pacing {
   /** Sends in flight at once (>= 1). */
   maxInFlight: number
@@ -167,6 +190,8 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
   const pending = new Set<Promise<void>>() // sends running now (at most maxInFlight)
   type Job = { address: string; line: string; id: string; account: string; argvFallback: boolean }
   const queue: Job[] = []
+  const skipLogged = new Map<string, string>() // address -> the skip reason last logged: a skip is logged once
+  const unsettled = new Set<string>() // labelled, foreground unknown: not a deliberate skip, the rescan keeps reading
   let pump: Promise<void> | null = null
   let lastStart = 0
   let gated = !pacing.gate
@@ -195,14 +220,39 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     }
   }
 
+  type Skip = { reason: string; unknown: boolean }
+  /** Why this terminal is not typed into, or null when it qualifies. A claude foreground is the goal state, not a skip. */
+  function skipOf(t: Terminal, argvFallback: boolean): Skip | "running" | null {
+    if (!isLoginShell(t, argvFallback)) {
+      const head = t.foreground?.argv?.[0]
+      if (!head) return { reason: "foreground unknown", unknown: true }
+      const name = head.replace(/^-/, "").split("/").pop() || head
+      if (name === "claude") return "running"
+      return { reason: SHELLS.has(name) ? `foreground is ${name}, not a login shell` : `foreground is ${name}`, unknown: false }
+    }
+    if (!argvFallback && hasLiveAgent(t)) return { reason: `live ${t.status?.app} session (agent status)`, unknown: false }
+    return null
+  }
+
+  function noteSkip(address: string, s: Skip): void {
+    if (s.unknown) unsettled.add(address); else unsettled.delete(address)
+    if (skipLogged.get(address) === s.reason) return
+    skipLogged.set(address, s.reason)
+    log(`skip ${address}: ${s.reason}`)
+  }
+
   function consider(t: Terminal, argvFallback: boolean): void {
     const labels = t.labels ?? {}
     const id = labels[SESSION]
-    if (!id || !isLoginShell(t, argvFallback)) return
-    if (!argvFallback && hasLiveAgent(t)) return
+    if (!id) return
     if (inflight.has(t.address) || attempted.get(t.address) === id) return
+    const skip = skipOf(t, argvFallback)
+    if (skip === "running") { unsettled.delete(t.address); skipLogged.delete(t.address); return }
+    if (skip) { noteSkip(t.address, skip); return }
     const line = resumeLine(labels, t.argv)
-    if (!line) { log(`skip ${t.address}: unusable session label`); return }
+    if (!line) { noteSkip(t.address, { reason: "unusable session label", unknown: false }); return }
+    unsettled.delete(t.address)
+    skipLogged.delete(t.address)
     inflight.add(t.address)
     attempted.set(t.address, id)
     queue.push({ address: t.address, line, id, account: labels[CONFIG] || "iu", argvFallback })
@@ -215,13 +265,20 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
 
   return {
     handle(m: Msg): void {
-      if (m.kind === "snapshot") for (const a of attempted.keys()) if (!m.terminals.some((t) => t.address === a)) attempted.delete(a)
+      if (m.kind === "snapshot") {
+        const gone = (a: string) => !m.terminals.some((t) => t.address === a)
+        for (const a of attempted.keys()) if (gone(a)) attempted.delete(a)
+        for (const a of unsettled) if (gone(a)) unsettled.delete(a)
+        for (const a of skipLogged.keys()) if (gone(a)) skipLogged.delete(a)
+      }
       // A `restarted` event is a new loss: the previous attempt (if any) is history.
       for (const t of m.terminals) {
         if (m.kind === "restarted") attempted.delete(t.address)
         consider(t, m.kind === "restarted")
       }
     },
+    /** Terminals still to be settled: queued or sending, or labelled with a foreground nobody has seen yet. */
+    outstanding(): number { return inflight.size + unsettled.size },
     /** Resolves when every queued send has started and finished. */
     async settled(): Promise<void> { while (pump || pending.size) await Promise.all([pump, ...pending]) },
   }
@@ -231,17 +288,45 @@ export async function run(deps: Deps): Promise<void> {
   const log = deps.log ?? (() => {})
   const [minB, maxB] = deps.backoffMs ?? [1000, 30000]
   const resumer = createResumer(deps.send, log, deps.pacing)
+  const rescan: Rescan = { ...DEFAULT_RESCAN, ...deps.rescan }
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
   let backoff = minB
   const onAbort = () => link?.close()
   let link: Link | undefined
   deps.signal?.addEventListener("abort", onAbort)
 
+  /** The rescan of one connection: fast for the window, then slow while anything is unsettled; ends with the connection. */
+  async function watch(stop: AbortSignal): Promise<void> {
+    const t0 = Date.now()
+    let failed = false
+    while (!stop.aborted) {
+      const age = Date.now() - t0
+      if (age >= rescan.windowMs && resumer.outstanding() === 0) { log(`rescan done after ${Math.round(age / 1000)} s: every resumable terminal is running or skipped on purpose`); return }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(done, age < rescan.windowMs ? rescan.fastMs : rescan.slowMs)
+        function done() { clearTimeout(timer); stop.removeEventListener("abort", done); resolve() }
+        stop.addEventListener("abort", done)
+      })
+      if (stop.aborted) return
+      try {
+        const terminals = await deps.list!()
+        if (stop.aborted) return
+        failed = false
+        resumer.handle({ kind: "snapshot", terminals })
+      } catch (e) {
+        if (!failed) log(`rescan failed: ${(e as Error).message}`)
+        failed = true
+      }
+    }
+  }
+
   while (!deps.signal?.aborted) {
     let got = false
     try {
       link = await deps.open()
-      for await (const m of link.messages) { got = true; resumer.handle(m) }
+      const stop = new AbortController()
+      if (deps.list) void watch(stop.signal)
+      try { for await (const m of link.messages) { got = true; resumer.handle(m) } } finally { stop.abort() }
       log(got ? "stream ended (core restart?), reconnecting" : "stream ended with no data")
     } catch (e) {
       log(`no core: ${(e as Error).message}`)
@@ -332,31 +417,47 @@ async function call(proc: ReturnType<typeof Bun.spawn>, it: AsyncGenerator<strin
   }
 }
 
+/** One short-lived connection with a hard deadline: the connect process is killed and the call rejects when it passes. */
+async function withHc<T>(what: string, deadlineMs: number, guard: () => boolean, fn: (rpc: (id: number, method: string, params: Json) => Promise<Json>) => Promise<T>): Promise<T> {
+  const proc = spawnConnect(guard)
+  let timedOut = false
+  const timer = setTimeout(() => { timedOut = true; proc.kill() }, deadlineMs)
+  try {
+    const it = lines(proc.stdout)
+    return await fn((id, method, params) => call(proc, it, id, method, params))
+  } catch (e) {
+    if (timedOut) throw new Error(`${what} timed out after ${deadlineMs} ms`)
+    throw e
+  } finally {
+    clearTimeout(timer)
+    proc.kill()
+  }
+}
+
 /**
  * Re-read the terminal on a short-lived connection and send only if its foreground is positively a login shell carrying
  * the same session label (the subscribed connection answers no requests). A hard deadline kills the
  * connect process and rejects, so the caller's `inflight` always clears.
  */
 export async function sendHc(address: string, text: string, session: string, deadlineMs = SEND_DEADLINE_MS, guard: () => boolean = coreAvailable, argvFallback = false): Promise<void> {
-  const proc = spawnConnect(guard)
-  let timedOut = false
-  const timer = setTimeout(() => { timedOut = true; proc.kill() }, deadlineMs)
-  try {
-    const it = lines(proc.stdout)
-    const t = (await call(proc, it, 3, "terminal.get", { terminal: address })) as unknown as Terminal
+  await withHc(`send to ${address}`, deadlineMs, guard, async (rpc) => {
+    const t = (await rpc(3, "terminal.get", { terminal: address })) as unknown as Terminal
     if (t.labels?.[SESSION] !== session) throw new Error(`skipped: ${address} no longer carries session ${session}`)
     // Unknown foreground (null, or absent without the `restarted` fallback) is never typed into: a later snapshot decides.
     if (t.foreground === null || (t.foreground === undefined && !argvFallback)) throw new RetryLater(`foreground of ${address} unknown: not typing, a later snapshot decides`)
     if (!argvFallback && hasLiveAgent(t)) throw new Error(`skipped: ${address} runs a live ${t.status?.app} session`)
     if (!isLoginShell(t, argvFallback)) throw new Error(`skipped: ${address} is no longer at a login shell`)
-    await call(proc, it, 2, "terminal.send", { terminal: address, text, caller: "hc-resume" })
-  } catch (e) {
-    if (timedOut) throw new Error(`send to ${address} timed out after ${deadlineMs} ms`)
-    throw e
-  } finally {
-    clearTimeout(timer)
-    proc.kill()
-  }
+    await rpc(2, "terminal.send", { terminal: address, text, caller: "hc-resume" })
+  })
+}
+
+/** The roster for the rescan: live, kept terminals (a finished or unkept one is never resumed). */
+export async function listHc(deadlineMs = SEND_DEADLINE_MS, guard: () => boolean = coreAvailable): Promise<Terminal[]> {
+  return withHc("terminal.list", deadlineMs, guard, async (rpc) => {
+    const r = await rpc(4, "terminal.list", {})
+    if (!Array.isArray(r.terminals)) throw new Error("terminal.list answered without a terminals array")
+    return (r.terminals as Terminal[]).filter((t) => (t.state ?? "live") === "live" && t.keep !== false)
+  })
 }
 
 if (import.meta.main) {
@@ -365,7 +466,7 @@ if (import.meta.main) {
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { ac.abort(); setTimeout(() => process.exit(0), 200) })
   log(`hc-resume started pid=${process.pid}`)
   const { tailnetWaitMs, ...pace } = pacingFromEnv()
-  log(`pacing: max ${pace.maxInFlight} in flight, ${pace.staggerMs} ms apart, tailnet wait ${tailnetWaitMs} ms`)
+  log(`pacing: max ${pace.maxInFlight} in flight, ${pace.staggerMs} ms apart, tailnet wait ${tailnetWaitMs} ms; rescan ${DEFAULT_RESCAN.fastMs} ms for ${DEFAULT_RESCAN.windowMs} ms, then ${DEFAULT_RESCAN.slowMs} ms while a foreground is unknown`)
   const gate = () => waitForTailnet(tailnetRunning, tailnetWaitMs, 2000, log)
-  await run({ open: openHc, pacing: { ...pace, gate }, send: (a, t, s, fb) => sendHc(a, t, s, SEND_DEADLINE_MS, coreAvailable, fb), log, signal: ac.signal })
+  await run({ open: openHc, list: () => listHc(), pacing: { ...pace, gate }, send: (a, t, s, fb) => sendHc(a, t, s, SEND_DEADLINE_MS, coreAvailable, fb), log, signal: ac.signal })
 }
