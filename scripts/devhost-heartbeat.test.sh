@@ -33,7 +33,7 @@ case "\$*" in *api/push/*) ;; *7793*)
     n=\$(cat "$TMP/factory.calls" 2>/dev/null || echo 0); n=\$((n + 1)); echo "\$n" > "$TMP/factory.calls"
     if [ "\${STUB_FACTORY_DOWN}" = 1 ] || [ "\$n" -lt "\${STUB_FACTORY_DOWN}" ]; then exit 7; fi
   fi
-  # STUB_FACTORY_ROUTES: extra heartbeat fields, e.g. ',"routeP95Ms":3000,"routeSamples":12'.
+  # STUB_FACTORY_ROUTES: extra heartbeat fields, e.g. ',"routeP95Ms":3000,"routeSamples":25'.
   echo "{\"heartbeat\":{\"ok\":true,\"tickAt\":\"t\",\"queueMovedAt\":\"q\"\${STUB_FACTORY_ROUTES:-}}}"; exit 0 ;; esac
 case "\$*" in *--unix-socket*_ping*) echo OK; exit 0 ;; esac
 [ "\${STUB_CURL_FAIL:-0}" = 1 ] && exit 22
@@ -259,13 +259,15 @@ assert_contains "stale mark: pages" "status=down" "$factory_push"
 rm -f "$TMP/restart-marks/com.jkrumm.software-factory"
 
 echo "factory monitor: slow routes push down, unknown or thin evidence does not"
-factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":3000,"routeSamples":12'
-assert_contains "p95 3000 over 12 samples: down" "status=down" "$factory_push"
+factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":3000,"routeSamples":25'
+assert_contains "p95 3000 over 25 samples: down" "status=down" "$factory_push"
 assert_contains "down names the p95" "p95 3000 ms" "$factory_push"
 factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":2000,"routeSamples":50'
 assert_contains "p95 exactly at the line: up" "status=up" "$factory_push"
-factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":9000,"routeSamples":9'
-assert_contains "slow but 9 samples: up" "status=up" "$factory_push"
+factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":9000,"routeSamples":19'
+assert_contains "slow but 19 samples: up" "status=up" "$factory_push"
+factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":3000,"routeSamples":20'
+assert_contains "p95 over the line with exactly 20: down" "status=down" "$factory_push"
 factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":9000'
 assert_contains "samples absent: unknown, up" "status=up" "$factory_push"
 factory_run STUB_FACTORY_ROUTES=',"routeP95Ms":null,"routeSamples":0'

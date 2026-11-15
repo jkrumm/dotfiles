@@ -321,7 +321,7 @@ collie or without a seeded cache never fails the script.
   http://127.0.0.1:7793/health` (loopback, no token) carries `heartbeat: { ok, reason,
   tickAt, queueMovedAt, routeP95Ms, routeSamples }`, `ok` meaning the tick advanced and the queue moved within 30
   minutes. `/health` never queries the database, so `ok` alone missed a day when every DB-backed route
-  timed out (2026-11-14): `ok` with `routeP95Ms` > 2000 and `routeSamples` ≥ 10 (the factory's own
+  timed out (2026-11-14): `ok` with `routeP95Ms` > 2000 and `routeSamples` ≥ 20 (below 20 the nearest-rank p95 is the one slowest answer, so a cold request after a deploy would page; the factory's own
   `routes_slow` line; `FACTORY_ROUTE_P95_MAX_MS` / `FACTORY_ROUTE_MIN_SAMPLES`) is down (`factory routes
   slow: p95 … ms`); either field absent or non-numeric (older server) is unknown, so up.
   `ok` → up (`tick …, queue moved …`); no answer, a 503, no `heartbeat` or `ok:
