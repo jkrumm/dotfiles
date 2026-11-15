@@ -44,6 +44,7 @@
     {
       "label": "APPS",
       "members": [
+        "shutterflow",
         "rollhook",
         "basalt-ui",
         "weatherorb",
