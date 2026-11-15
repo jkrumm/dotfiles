@@ -15,7 +15,7 @@
 // A verb runs only a command the registry holds (or launchctl for a launchd job without one): a name
 // from the command line selects an entry, it never reaches a shell.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import { homedir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 
@@ -915,7 +915,7 @@ async function main(argv: string[]) {
       const label = a.kind === "plist" ? `remove plist ${a.path}` : `docker rm ${a.vm}/${a.name} (${a.state})`
       if (!flag("--apply")) { console.log(`would ${label}`); continue }
       const ok = a.kind === "plist"
-        ? (() => { try { rmSync(a.path); return true } catch { return false } })()
+        ? (() => { try { rmSync(a.path); return true } catch (e) { console.error(`  ${e instanceof Error ? e.message : e}`); return false } })()
         : (await run([docker, "rm", a.name], { DOCKER_HOST: `unix://${HOME}/.colima/${a.vm}/docker.sock` })).rc === 0
       console.log(`${ok ? "done" : "FAILED"}: ${label}`)
       if (!ok) failed++
