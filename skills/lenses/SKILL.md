@@ -13,7 +13,7 @@ First run, WeatherOrb, 2026-11-14 (`~/SourceRoot/brain/wiki/weatherorb/lenses-20
 (68, 11, 5, 2), 735 seed questions, memos of 4,600 words on average, 240,000 to 350,000 subagent tokens and 20 to 30
 minutes per lens with audit and repair, ten lenses at a time. The audit checked 431 cited claims: 358 confirmed, 20
 contradicted, 49 not on the cited page; 38 memos were repaired. The 5-hour usage limit stopped the run twice. The
-synthesis half had not run when this was written: `reference/synthesis.md` says so.
+synthesis half ran once (2026-11): `reference/synthesis.md` carries what held and what did not.
 
 **Not for** a question one `/research` run answers, a decision inside one field, or a plan the user wants today.
 Invoking this skill is the user's opt-in to the Workflow tool for its fan-outs.
