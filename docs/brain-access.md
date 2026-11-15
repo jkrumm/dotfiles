@@ -14,6 +14,11 @@ MacBook commits when the tree is dirty, the mini never does outside the nightly
 committing on its own timer. Multi-writer sync was tried (LiveSync) and failed
 silently for ten days — the vault gained 13 commits while CouchDB sat untouched.
 
+**Offline is not a job fault.** A pull or push that fails on the network (github.com
+unresolvable, a timeout, no route) counts toward the Kuma DOWN streak (3 ticks) but
+the tick exits 0, so `jobs-grade` does not file a "job needs a fix" Issue for a home-line
+outage. A conflict, an auth failure or a rejected push still exits 1.
+
 | Device | Access | Can write? |
 |-|-|-|
 | Mac mini | the vault itself; Claude Code `/brain`, Hermes, Obsidian | yes |

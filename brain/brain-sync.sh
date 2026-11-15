@@ -177,7 +177,19 @@ fail_transient() {
     log "withholding the DOWN beat until $TRANSIENT_FAILS consecutive failures"
   fi
   beat_sent="yes"
+  # An unreachable network is the line's fault, not the job's: linewatch and the
+  # Kuma streak above already cover it, and exiting 1 made jobs-grade file a
+  # "job needs a fix" Issue for every home-line outage (2026-11-15: 85 min with
+  # github.com unresolvable, 5 failed ticks, a factory Issue, and the next tick
+  # was green with nothing to fix). A non-network failure still exits 1.
+  [ -n "${OFFLINE:-}" ] && exit 0
   exit 1
+}
+
+# True when git's output says the network, not the repo or the credentials, is
+# the problem. Matches git's own English and German text plus curl's wording.
+is_offline() {
+  printf '%s' "$1" | grep -qiE 'could not resolve host|konnte nicht aufgel|failed to connect|connection timed out|operation timed out|network is unreachable|netzwerk ist nicht erreichbar|no route to host|connection refused|couldn.t connect to server|ssh: connect to host'
 }
 
 # --- single instance ---------------------------------------------------------
@@ -336,6 +348,8 @@ if [ "$pull_rc" -ne 0 ]; then
   # No rebase in progress: offline, auth, or the autostash failed to re-apply
   # after an otherwise clean rebase — in that last case the work is safe but
   # parked, hence the pointer at the stash list.
+  OFFLINE=""
+  is_offline "$pull_out" && OFFLINE=1
   fail_transient "git pull failed (offline? auth? check 'git stash list' for a parked autostash): $pull_tail"
 fi
 
@@ -379,7 +393,14 @@ fi
 
 ahead="$(git rev-list --count '@{u}..HEAD')"
 if [ "$ahead" -gt 0 ]; then
-  "${NET[@]}" git push -q || fail_transient "push failed with $ahead commit(s) waiting — origin unreachable or the branch diverged"
+  push_rc=0
+  push_out="$("${NET[@]}" git push -q 2>&1)" || push_rc=$?
+  if [ "$push_rc" -ne 0 ]; then
+    OFFLINE=""
+    is_offline "$push_out" && OFFLINE=1
+    warn "$push_out"
+    fail_transient "push failed with $ahead commit(s) waiting — origin unreachable or the branch diverged"
+  fi
   log "pushed $ahead commit(s)"
   summary="$summary, pushed $ahead"
 else
