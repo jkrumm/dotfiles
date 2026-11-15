@@ -133,11 +133,32 @@ _recovery_tailnet_age() {
   return 0
 }
 
+# Once per boot, a factory signal on this repo when terminals still wait at a login shell past the WARN threshold
+# (issue 1367: eleven sessions sat at a shell for seven hours and `make recovery-check` read "11 waiting" the whole time).
+# The stamp is the epoch of the filing, valid only if written after the boot, so the next boot files again. A signal the
+# factory did not take leaves no stamp: the next heartbeat tries again. Reads RECOVERY_JSON; prints nothing.
+_recovery_signal_once() {
+  local uptime_s="$1" stamp="$2" age="$3" bin="${RECOVERY_FACTORY_BIN:-factory}" jq="${JQ_BIN:-/usr/bin/jq}" now at="" text
+  now=$(/bin/date +%s)
+  [[ -f "$stamp" ]] && read -r at < "$stamp"
+  case "$at" in ''|*[!0-9]*) at="" ;; esac
+  if [[ -n "$at" ]] && (( at >= now - uptime_s - 60 )); then return 0; fi
+  text=$("$jq" -r --argjson min "$(( age / 60 ))" '
+    "\(.waiting) of \(.resumable) resumable Claude terminals are still at a login shell \($min) min after the tailnet came up (\(.running) running, \(.skipped) skipped).\n\n"
+    + ([.terminals[] | select(.state == "waiting") | "- \(.name // .address) (\(.address)): \(if .verdict == null then "hc-resume has not typed" else "\(.verdict)\(if .at != null then " at \(.at)" else "" end)\(if .reason != null then ": \(.reason)" else "" end)" end)"] | .[:15] | join("\n"))
+    + "\n\nRead make recovery-check ARGS=--json and ~/Library/Logs/hc-resume.log (a `skip` line names the reason per terminal). A terminal closed on purpose keeps its label and counts as waiting."
+  ' <<<"$RECOVERY_JSON" 2>/dev/null) || return 0
+  _recovery_bounded 15 "$bin" signal file --from agent:dotfiles --repo dotfiles \
+    --title "Claude terminals still waiting at a shell after a boot" --text "$text" >/dev/null 2>&1 || return 0
+  echo "$now" > "$stamp" 2>/dev/null || true
+}
+
 # The heartbeat's sub-check (check_core calls it). Prints one line, or nothing when it is off, past the window, or no
 # core answers (check_core already reports that). Returns 0, or 2 for the WARN. Appends the counts to
-# DEVHOST_SNAPSHOT_LOG when set. DEVHOST_RECOVERY=0 turns it off.
+# DEVHOST_SNAPSHOT_LOG when set. DEVHOST_RECOVERY=0 turns it off. The WARN names the waiting count and, when any terminal
+# waits, files the once-per-boot signal (RECOVERY_SIGNAL_STAMP, default beside the tailnet stamp; RECOVERY_FACTORY_BIN).
 recovery_heartbeat() {
-  local uptime_s="$1" stamp="$2" running="${3:-0}" age line rc=0 jq="${JQ_BIN:-/usr/bin/jq}" now
+  local uptime_s="$1" stamp="$2" running="${3:-0}" age line rc=0 jq="${JQ_BIN:-/usr/bin/jq}" now waiting
   [[ "${DEVHOST_RECOVERY:-1}" != 0 ]] || return 0
   case "$uptime_s" in ''|*[!0-9]*) return 0 ;; esac
   (( uptime_s < RECOVERY_WINDOW_SECONDS )) || return 0
@@ -156,7 +177,9 @@ recovery_heartbeat() {
   fi
   # shellcheck disable=SC2046  # three integers, split on purpose
   if recovery_warn_due $("$jq" -r '"\(.running) \(.resumable)"' <<<"$RECOVERY_JSON") "$age"; then
-    echo "$line (WARN: fewer running than resumable, $(( age / 60 )) min after tailnet-up; see make recovery-check)"
+    waiting=$("$jq" -r '.waiting' <<<"$RECOVERY_JSON")
+    if (( waiting > 0 )); then _recovery_signal_once "$uptime_s" "${RECOVERY_SIGNAL_STAMP:-$(dirname "$stamp")/recovery-signal-at}" "$age"; fi
+    echo "$line (WARN: fewer running than resumable, $waiting still waiting at a shell $(( age / 60 )) min after tailnet-up; see make recovery-check)"
     return 2
   fi
   echo "$line"

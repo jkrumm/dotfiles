@@ -26,7 +26,14 @@ echo "$*" >> "$HC_CALLED"
 cat > /dev/null
 printf '{"jsonrpc":"2.0","id":1,"result":{"terminals":%s,"hidden_finished":0}}\n' "$(cat "$FIXTURE")"
 S
+# factory stub: records its arguments (one block per call); FACTORY_RC makes it refuse.
+cat > "$T/bin/factory" <<'S'
+#!/bin/bash
+{ printf 'CALL'; printf ' [%s]' "$@"; printf '\n'; } >> "$FACTORY_CALLED"
+exit "${FACTORY_RC:-0}"
+S
 chmod +x "$T/bin/"*
+export RECOVERY_FACTORY_BIN="$T/bin/factory" FACTORY_CALLED="$T/factory-called"
 export NC_BIN="$T/bin/nc" HC_BIN="$T/bin/hc" PS_BIN="$T/bin/ps" HC_SOCKET="$T/sock" PS_TABLE="$T/table" HC_CALLED="$T/hc-called" \
   FIXTURE="$T/terminals.json" RECOVERY_RESUME_LOG="$T/hc-resume.log" JQ_BIN=/usr/bin/jq
 printf '    0 /sbin/launchd\n    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/ready\n' > "$T/table"
@@ -149,6 +156,44 @@ eq "no core: silent" "" "$out"; eq "no core: rc" 0 "$rc"; [ ! -e "$HC_CALLED" ] 
 # a wedged hc: a line that says so, never a WARN
 out=$(HC_HANG=1 RECOVERY_HC_TIMEOUT=1 recovery_heartbeat 300 "$STAMP" 1); rc=$?
 eq "hung hc: rc" 0 "$rc"; case "$out" in "recovery: not measured (hc did not answer"*) ;; *) fail "hung hc line: $out" ;; esac
+
+# 8b. the 10-minute escalation (issue 1367): the WARN names the waiting count; waiting terminals file ONE factory signal per boot
+fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")" "$(term t2 aaaaaaaa-2 "$LOGIN")" "$(term t3 aaaaaaaa-3 "$LOGIN")" "$(term t4 aaaaaaaa-4 '["/usr/bin/vim"]')"
+{
+  echo "$(iso $((NOW - 300))) resume t2 aaaaaaaa-2 (iu)"
+  echo "$(iso $((NOW - 200))) skip t4: foreground is vim"
+} > "$RECOVERY_RESUME_LOG"
+STAMP="$T/tailnet-up-at"; SIGSTAMP="$T/recovery-signal-at"
+rm -f "$FACTORY_CALLED" "$SIGSTAMP"
+echo $((NOW - 540)) > "$STAMP"; out=$(recovery_heartbeat 1200 "$STAMP" 1); rc=$?
+eq "9 min waiting: no WARN" 0 "$rc"; [ ! -e "$FACTORY_CALLED" ] || fail "signal filed 9 min after tailnet-up"
+echo $((NOW - 660)) > "$STAMP"; out=$(recovery_heartbeat 1200 "$STAMP" 1); rc=$?
+eq "11 min waiting: WARN rc" 2 "$rc"
+case "$out" in *"WARN: fewer running than resumable, 2 still waiting at a shell 11 min after tailnet-up"*) ;; *) fail "WARN names the count: $out" ;; esac
+eq "one signal filed" 1 "$(grep -c "^CALL" "$FACTORY_CALLED")"
+call=$(cat "$FACTORY_CALLED")
+case "$call" in "CALL [signal] [file] [--from] [agent:dotfiles] [--repo] [dotfiles] [--title] [Claude terminals still waiting at a shell after a boot] [--text] ["*) ;; *) fail "signal arguments: $call" ;; esac
+case "$call" in *"2 of 4 resumable Claude terminals are still at a login shell 11 min after the tailnet came up (1 running, 1 skipped)"*) ;; *) fail "signal text counts: $call" ;; esac
+[ -s "$SIGSTAMP" ] || fail "signal stamp not written"
+# a heartbeat five minutes later: still WARN, no second signal
+out=$(recovery_heartbeat 1500 "$STAMP" 1); rc=$?
+eq "still WARN" 2 "$rc"; eq "once per boot" 1 "$(grep -c "^CALL" "$FACTORY_CALLED")"
+# a stamp left by the previous boot does not count: the next boot files again
+echo $((NOW - 5000)) > "$SIGSTAMP"; recovery_heartbeat 1200 "$STAMP" 1 >/dev/null
+eq "new boot files again" 2 "$(grep -c "^CALL" "$FACTORY_CALLED")"
+# the factory refuses: no stamp, the next heartbeat tries again
+rm -f "$SIGSTAMP" "$FACTORY_CALLED"
+FACTORY_RC=1 recovery_heartbeat 1200 "$STAMP" 1 >/dev/null; [ ! -e "$SIGSTAMP" ] || fail "stamp written for a refused signal"
+recovery_heartbeat 1200 "$STAMP" 1 >/dev/null; eq "retried after a refusal" 2 "$(grep -c "^CALL" "$FACTORY_CALLED")"; [ -s "$SIGSTAMP" ] || fail "stamp missing after the retry"
+# nothing waiting (only a skipped terminal short of running): WARN, but no signal
+rm -f "$SIGSTAMP" "$FACTORY_CALLED"
+fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")" "$(term t4 aaaaaaaa-4 '["/usr/bin/vim"]')"
+out=$(recovery_heartbeat 1200 "$STAMP" 1); rc=$?
+eq "skipped only: WARN" 2 "$rc"; [ ! -e "$FACTORY_CALLED" ] || fail "signal filed with nothing waiting"
+# all running: neither
+fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")"; recovery_heartbeat 1200 "$STAMP" 1 >/dev/null; [ ! -e "$FACTORY_CALLED" ] || fail "signal filed with everything running"
+rm -f "$RECOVERY_RESUME_LOG" "$FACTORY_CALLED" "$SIGSTAMP"
+fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")"
 
 # 9. the CLI: --json, and the not-measured line
 out=$(bash "$HERE/recovery-check.sh" --json --since 0); eq "cli json" 1 "$(/usr/bin/jq -r .resumable <<<"$out")"
