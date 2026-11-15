@@ -5,6 +5,7 @@
 //   mini-registry ps    [--format table|json]    tier, state, footprint against budget, drift
 //   mini-registry check                          drift, run-rule and budget findings only; exit 1 on drift or a rule breach, 2 on a budget breach
 //   mini-registry debt                           the recorded breaches (debt and exceptions), one per line
+//   mini-registry lint  [--file F] [--repo R|--host]  F (default ./mini-services.yaml) as repo R (default this repo's directory name) against every other registry; no probes, runs on any machine
 //   mini-registry up    NAME                     start what NAME needs first, then NAME
 //   mini-registry down  NAME [--force]           stop NAME; a core service needs --force
 //   mini-registry profile NAME --up|--down       every manual service of a profile (work, dev-db)
@@ -16,7 +17,7 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 
 const HOME = homedir()
 const DOTFILES = join(import.meta.dir, "..")
@@ -201,15 +202,21 @@ export function validate(services: Service[]): string[] {
   return errors
 }
 
-export function loadAll(roots = defaultRoots(), hostFile = HOST_FILE, home = HOME): Loaded {
+// `candidate` is a registry file under edit (a worktree's, not the checkout the roots find): it stands in for the host
+// file (no `repo`) or for the file of the repo directory named `repo`, so a change is validated against everyone else's rows.
+export type Candidate = { file: string; repo?: string }
+
+export function loadAll(roots = defaultRoots(), hostFile = HOST_FILE, home = HOME, candidate?: Candidate): Loaded {
   const out: Loaded = { services: [], errors: [], listed: [] }
-  const files: [string, string | undefined][] = [[hostFile, undefined]]
+  const files: [string, string | undefined][] = [[candidate && !candidate.repo ? candidate.file : hostFile, undefined]]
   for (const root of roots) {
     if (!existsSync(root)) continue
     for (const d of readdirSync(root, { withFileTypes: true })) {
+      if (candidate?.repo === d.name) continue
       if (d.isDirectory() && existsSync(join(root, d.name, REPO_FILE))) files.push([join(root, d.name, REPO_FILE), d.name])
     }
   }
+  if (candidate?.repo) files.push([candidate.file, candidate.repo])
   for (const [file, repo] of files) {
     if (!existsSync(file)) { out.errors.push(`${file}: not found`); continue }
     const r = parseRegistry(readFileSync(file, "utf8"), file.replace(`${home}/`, "~/"), repo, home)
@@ -795,13 +802,38 @@ export function renderTable(rows: Row[], drift: Drift, services: Service[], rule
 
 // ---------------------------------------------------------------- cli
 
+// The repo that adds a row learns of a clash before the merge, not from the next lead's Watch: its `make check` runs
+// `bun ~/SourceRoot/dotfiles/scripts/mini-registry.ts lint`. Static (the registry files only), so it needs no mini and no probe.
+function lint(args: string[]): number {
+  const opt = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined)
+  const file = resolve(opt("--file") ?? "mini-services.yaml")
+  const host = args.includes("--host")
+  const repo = host ? undefined : opt("--repo") ?? repoDirName()
+  if (!existsSync(file)) { console.log(`registry lint: ${file} not found, nothing to check`); return 0 }
+  const loaded = loadAll(defaultRoots(), HOST_FILE, HOME, { file, repo })
+  if (loaded.errors.length) {
+    console.error(`FAIL registry invalid (${file} as ${repo ?? "the host file"}):\n  ${loaded.errors.join("\n  ")}`)
+    return 1
+  }
+  console.log(`registry lint: ${loaded.services.length} services, no clash`)
+  return 0
+}
+
+// A worktree's directory is not its repo's name: the main checkout's name is the parent of the git common dir.
+function repoDirName(): string {
+  const p = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], { stderr: "ignore" })
+  const common = p.exitCode === 0 ? p.stdout.toString().trim() : ""
+  return basename(common ? dirname(common) : process.cwd())
+}
+
 async function main(argv: string[]) {
   const [verb, ...rest] = argv
   const flag = (n: string) => rest.includes(n)
   const arg = rest.find((a) => !a.startsWith("--"))
   const fmt = rest.includes("--format") ? rest[rest.indexOf("--format") + 1] : "table"
+  if (verb === "lint") return lint(rest)
   if (!verb || !["ps", "check", "debt", "up", "down", "profile", "list"].includes(verb)) {
-    console.error("usage: mini-registry ps [--format table|json] | check | debt | up NAME | down NAME [--force] | profile NAME --up|--down")
+    console.error("usage: mini-registry ps [--format table|json] | check | debt | lint [--file F] [--repo R|--host] | up NAME | down NAME [--force] | profile NAME --up|--down")
     return 2
   }
   const backend = (() => {

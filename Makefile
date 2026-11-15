@@ -840,7 +840,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -878,9 +878,12 @@ doctor: ## Read-only health of this machine (+ the mini when run from the MacBoo
 
 # The mini's service registry (config/mini/services.yaml + a mini-services.yaml at any repo's root):
 # every service with its tier, budget and start/stop verbs. docs/mini-registry.md.
-.PHONY: mini-ps mini-up mini-down mini-profile
+.PHONY: mini-ps mini-up mini-down mini-profile mini-registry-lint
 mini-ps: ## Every service on the mini: tier, state, footprint against budget, drift (FORMAT=json for the apps page)
 	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts ps $(if $(FORMAT),--format $(FORMAT))
+
+mini-registry-lint: ## This repo's host registry file against every repo's mini-services.yaml (static: a clash fails before the merge)
+	@bun $(DOTFILES_DIR)/scripts/mini-registry.ts lint --host --file $(DOTFILES_DIR)/config/mini/services.yaml
 
 mini-up: ## Start a registered service, what it needs first (NAME=<service>)
 	@[ -n "$(NAME)" ] || { echo "usage: make mini-up NAME=<service>  (names: make mini-ps)"; exit 2; }
@@ -3953,6 +3956,7 @@ help:
 	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
 	@echo ""
 	@echo "  make doctor                 Read-only health of this machine (+ the mini when run from the MacBook)"
+	@echo "  make mini-registry-lint     Host registry file vs every repo's mini-services.yaml: duplicate name, label or container (docs/mini-registry.md)"
 	@echo "  make mini-ps                Every service on the mini: tier, state, footprint against budget, drift (docs/mini-registry.md)"
 	@echo "  make mini-up|mini-down NAME=<service>   Start/stop a registered service (core needs FORCE=1)"
 	@echo "  make mini-profile NAME=<work|dev-db> UP=1|0   Start/stop a manual profile"

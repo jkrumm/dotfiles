@@ -91,6 +91,54 @@ describe("registry parsing", () => {
     expect(loadAll([join(dir, "src")], join(dir, "host.yaml"), dir).errors.join()).toContain("duplicate name web")
   })
 
+  describe("lint: a file under edit against everyone else's rows", () => {
+    const setup = () => {
+      const dir = mkdtempSync(join(tmpdir(), "mini-reg-"))
+      mkdirSync(join(dir, "src", "myrepo"), { recursive: true })
+      mkdirSync(join(dir, "src", "other"), { recursive: true })
+      writeFileSync(join(dir, "src", "other", "mini-services.yaml"), "services:\n  - { name: owned, kind: launchd, tier: core, label: com.jkrumm.owned, memory_mib: 1 }")
+      // the checkout's own file is stale: the candidate replaces it, so its old row is not a clash with the new one
+      writeFileSync(join(dir, "src", "myrepo", "mini-services.yaml"), "services:\n  - { name: old, kind: launchd, tier: core, label: com.jkrumm.mine, memory_mib: 1 }")
+      writeFileSync(join(dir, "host.yaml"), "services:\n  - { name: web, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.web, memory_mib: 1 }")
+      return dir
+    }
+    const candidate = (dir: string, row: string) => {
+      const file = join(dir, "candidate.yaml")
+      writeFileSync(file, `services:\n  - ${row}`)
+      return file
+    }
+
+    test("a second row for a label another repo owns is an error, a fresh label is not", () => {
+      const dir = setup()
+      const clash = loadAll([join(dir, "src")], join(dir, "host.yaml"), dir, {
+        repo: "myrepo", file: candidate(dir, "{ name: dup, kind: launchd, tier: core, label: com.jkrumm.owned, memory_mib: 1 }"),
+      })
+      expect(clash.errors.join()).toContain("label com.jkrumm.owned registered by owned and dup")
+      const fine = loadAll([join(dir, "src")], join(dir, "host.yaml"), dir, {
+        repo: "myrepo", file: candidate(dir, "{ name: mine, kind: launchd, tier: core, label: com.jkrumm.mine, memory_mib: 1 }"),
+      })
+      expect(fine.errors).toEqual([])
+      expect(fine.services.map((s) => s.name).sort()).toEqual(["mine", "owned", "web"])
+    })
+
+    test("a host-file candidate replaces the host file and meets the repos' rows", () => {
+      const dir = setup()
+      const file = candidate(dir, "{ name: owned, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.web, memory_mib: 1 }")
+      expect(loadAll([join(dir, "src")], join(dir, "host.yaml"), dir, { file }).errors.join()).toContain("duplicate name owned")
+    })
+
+    test("the CLI exits 1 naming the clash and 0 when there is none", () => {
+      const dir = setup()
+      const run = (row: string) => Bun.spawnSync(["bun", join(import.meta.dir, "mini-registry.ts"), "lint", "--repo", "myrepo", "--file", candidate(dir, row)], {
+        env: { ...process.env, MINI_REGISTRY_ROOTS: join(dir, "src") },
+      })
+      const bad = run("{ name: dup, kind: launchd, tier: core, label: com.jkrumm.owned, memory_mib: 1 }")
+      expect(bad.exitCode).toBe(1)
+      expect(bad.stderr.toString()).toContain("registered by owned and dup")
+      expect(run("{ name: mine, kind: launchd, tier: core, label: com.jkrumm.mine2, memory_mib: 1 }").exitCode).toBe(0)
+    })
+  })
+
   test("two services of one compose project can not share a start or stop command", () => {
     const rows = parseRegistry(
       `services:
