@@ -32,7 +32,6 @@ services:
   - { name: teamchat-runtime-deploy, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-runtime-deploy, memory_mib: 50 }
   - { name: teamchat-vm-watch, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-vm-watch, memory_mib: 50 }
   - { name: tool-checkout-deploy, repo: prometheus-scripts, kind: launchd, tier: manual, profile: work, label: com.iu.tool-checkout-deploy, memory_mib: 50 }
-  - { name: agent-workflows-eval-mine, repo: agent-workflows, kind: launchd, tier: core, label: com.jkrumm.agent-workflows-eval-mine, memory_mib: 50 }
   - { name: argo, repo: argo, kind: launchd, tier: core, label: com.jkrumm.argo, door: argo-live, memory_mib: 160 }
   - { name: beszel-agent, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.beszel-agent, memory_mib: 50 }
   - { name: brain-backup, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-backup, memory_mib: 50 }
