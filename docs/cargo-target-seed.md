@@ -23,6 +23,16 @@ and a check can pass on code it never compiled. After every clone each `--own` f
 recreating a deleted one); a seed of another key also gets the `--key-path` trees touched. `--own` has no default and must match
 a file: a missing or empty one fails before anything is cloned. The rule lives only in this script and its test.
 
+## The relocation
+
+`build` compiles in `<root>/.tmp-<key>-<pid>` and renames it, so a build script's cached record (`build/<pkg>/output`,
+`root-output`, the `*-permission-files` lists in `out/`) names a directory that is gone, and cargo trusts it as fresh: tauri's
+`DEP_*` paths fail with "No such file", a final link looks for aws-lc and SQLite in it. After a clone (and after a warm start of
+`build`) every `.tmp-*` path in those files is rewritten to the directory the target now lives in. Each file keeps its time to the
+nanosecond: a newer `output` makes cargo rerun the script and rebuild the package and everything above it, the cold build again
+(46 crates in shutterflow, measured). Objects and rlibs carry the path only in debuginfo and are left alone. Idempotent; shutterflow's
+`scripts/target-seed/relocate.sh` workaround is a no-op once this is live and can go.
+
 ## In a repo's Makefile
 
 ```make

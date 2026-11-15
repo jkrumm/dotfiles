@@ -105,6 +105,37 @@ out=$(S clone 2>&1); eq "exit 0 (a cold build follows)" 0 $?
 [ -e "$R/ws/target" ] && bad "a target appeared with no seed" || ok "no target made"
 case "$out" in *"first build is cold"*) ok "it says the build is cold" ;; *) bad "no cold line" "$out" ;; esac
 
+echo "clone: build-script records are relocated to the clone"
+rm -rf "$SEEDS"; mkseed "$K1"
+GONE="$SEEDS/.tmp-$K1-4242"
+mkdir -p "$SEEDS/$K1/debug/build/tauri-x/out/permissions"
+echo "cargo:rustc-link-search=native=$GONE/debug/build/tauri-x/out" > "$SEEDS/$K1/debug/build/tauri-x/output"
+echo "$GONE/debug/build/tauri-x/out" > "$SEEDS/$K1/debug/build/tauri-x/root-output"
+echo "$GONE/debug/build/tauri-x/out/permissions/a.toml" > "$SEEDS/$K1/debug/build/tauri-x/out/a-permission-files"
+echo "debuginfo $GONE/x" > "$SEEDS/$K1/debug/build/tauri-x/stderr"
+echo "/elsewhere/keep" > "$SEEDS/$K1/debug/build/tauri-x/out/permissions/a.toml"
+touch -t "$OLD" "$SEEDS/$K1/debug/build/tauri-x/output" "$SEEDS/$K1/debug/build/tauri-x/root-output" "$SEEDS/$K1/debug/build/tauri-x/out/a-permission-files"
+stamp_before=$(perl -MTime::HiRes=stat -e 'print((stat $ARGV[0])[9])' "$SEEDS/$K1/debug/build/tauri-x/output")
+agesources; S clone >"$T/reloc.out" 2>&1
+RT="$(cd "$R/ws/target" && pwd -P)" # git resolves symlinks (macOS /var), so the clone is named by its real path
+grep -q "$GONE" "$R/ws/target/debug/build/tauri-x/output" && bad "output still names the gone directory" || ok "output no longer names the gone directory"
+eq "output points at the clone's target" "cargo:rustc-link-search=native=$RT/debug/build/tauri-x/out" "$(cat "$R/ws/target/debug/build/tauri-x/output")"
+eq "root-output points at the clone's target" "$RT/debug/build/tauri-x/out" "$(cat "$R/ws/target/debug/build/tauri-x/root-output")"
+eq "a *-permission-files list is rewritten" "$RT/debug/build/tauri-x/out/permissions/a.toml" "$(cat "$R/ws/target/debug/build/tauri-x/out/a-permission-files")"
+eq "a record keeps its time to the nanosecond" "$stamp_before" "$(perl -MTime::HiRes=stat -e 'print((stat $ARGV[0])[9])' "$R/ws/target/debug/build/tauri-x/output")"
+eq "the seed itself is not rewritten" "$GONE/debug/build/tauri-x/out/permissions/a.toml" "$(cat "$SEEDS/$K1/debug/build/tauri-x/out/a-permission-files")"
+grep -q "$GONE" "$R/ws/target/debug/build/tauri-x/stderr" && ok "a file that is not a record is left alone" || bad "stderr was rewritten"
+eq "a path outside a temporary directory is left alone" "/elsewhere/keep" "$(cat "$R/ws/target/debug/build/tauri-x/out/permissions/a.toml")"
+case "$(cat "$T/reloc.out")" in *"relocated 3 build-script records"*) ok "it says how many records moved" ;; *) bad "no relocate line" "$(cat "$T/reloc.out")" ;; esac
+rm -rf "$R/ws/target"
+
+echo "build: a warm start from a seed relocates its records to the new temporary directory"
+rm -rf "$SEEDS"; mkseed "old-key" "$OLD"
+mkdir -p "$SEEDS/old-key/debug/build/p-1"
+echo "$SEEDS/.tmp-old-key-1/debug/build/p-1/out" > "$SEEDS/old-key/debug/build/p-1/output"
+S build -- sh -c 'cp "$CARGO_TARGET_DIR/debug/build/p-1/output" "$CARGO_TARGET_DIR/seen"' >/dev/null 2>&1
+case "$(cat "$SEEDS/$K1/seen" 2>/dev/null)" in */.tmp-"$K1"-*/debug/build/p-1/out) ok "the command sees records naming its own target" ;; *) bad "records not relocated before the build" "$(cat "$SEEDS/$K1/seen" 2>/dev/null)" ;; esac
+
 echo "clone: an --own that matches nothing fails closed"
 mkseed "$K1"
 (cd "$R" && "$SEED" --workspace ws --own ws/nope clone >/dev/null 2>&1); eq "exit 1" 1 $?

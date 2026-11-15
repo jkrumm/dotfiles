@@ -144,6 +144,31 @@ own_list() {
 # Touch a list made by own_list. `touch -c`: a tracked file deleted in the worktree is not created.
 touch_list() { xargs -0 touch -c <"$1"; }
 
+# The relocation. `build` compiles in `<root>/.tmp-<key>-<pid>` and renames it, so the build scripts' cached records
+# (`build/<pkg>/output`, `root-output`, the `*-permission-files` lists in `out/`) name a directory that no longer exists, and
+# cargo trusts them as fresh: tauri's DEP_* paths then fail with "No such file", a final link looks for aws-lc in a gone
+# directory. Every such path is rewritten to the directory the target now lives in, in those text files only (objects and
+# rlibs carry it in debuginfo, which nothing reads). Each file keeps its time to the nanosecond: a newer `output` makes
+# cargo rerun the script and rebuild the package and everything above it, which is the cold build again. Idempotent.
+relocate() {
+    local dir=$1
+    [ -d "$dir" ] || return 0
+    dir=$(cd "$dir" && pwd)
+    find "$dir" -path '*/build/*' \( -name output -o -name root-output -o -name '*-permission-files' \) -type f -print0 |
+        NEW=$dir xargs -0 perl -MTime::HiRes=stat,utime -e '
+            my ($new, $n) = ($ENV{NEW}, 0);
+            for my $f (@ARGV) {
+                my ($atime, $mtime) = (stat $f)[8, 9];
+                open(my $in, "<", $f) or next; local $/; my $text = <$in>; close $in;
+                (my $out = $text) =~ s{/[^\s"=:;]*/\.tmp-[^/\s"=:;]+}{$new}g;
+                next if $out eq $text;
+                open(my $w, ">", $f) or next; print $w $out; close $w;
+                utime($atime, $mtime, $f); $n++;
+            }
+            print "seed: relocated $n build-script records to $new\n" if $n;
+        '
+}
+
 clone() {
     if [ -n "${CARGO_TARGET_DIR:-}" ]; then return 0; fi # CI's persistent target, or a caller's own
     if [ -e "$target" ]; then return 0; fi               # the worktree's own target: never replaced
@@ -169,6 +194,7 @@ clone() {
     started=$(date +%s)
     clone_dir "$seed" "$tmp"
     mv "$tmp" "$target"
+    relocate "$target"
     touch_list "$list"
     echo "seed: cloned $(basename "$seed") into ${wsprefix}target in $(($(date +%s) - started)) s; the workspace's own crates rebuild"
 }
@@ -211,7 +237,7 @@ build() {
             touch_list "$list"
         fi
     fi
-    if [ -n "$from" ]; then clone_dir "$from" "$tmp"; else mkdir -p "$tmp"; fi
+    if [ -n "$from" ]; then clone_dir "$from" "$tmp"; relocate "$tmp"; else mkdir -p "$tmp"; fi
     echo "seed: building $want in $tmp${from:+ (from $from)}"
     # The command runs before the rename, so a broken master never becomes the seed every worktree clones.
     if ! (cd "$wsdir" && CARGO_TARGET_DIR=$tmp "${cmd[@]}"); then
