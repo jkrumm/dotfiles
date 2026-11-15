@@ -857,7 +857,8 @@ shellcheck-all: ## shellcheck -S warning over every tracked bash script (zsh scr
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
 
-verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
+verify: ## Probe the live system: doctor graded for a change to this repo — host conditions and other leads' drift are WARN (`make doctor` fails them)
+	@bash $(DOTFILES_DIR)/scripts/doctor.sh --verify
 
 logs: ## Bounded tail of the dotfiles-owned agent logs, then exit
 	@for f in $(HOME)/Library/Logs/devhost-health.log; do \

@@ -82,10 +82,10 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
 | `make doctor` | Read-only health. Self-routes on the backend marker (below). |
 | `make help` | Every target, one line each. |
-| `make check` | Every target in `check:` in the Makefile: hermetic suites only (secrets lint, hook tests, script and bun tests, the architecture-check generator test). No side effects, no live probes; the live architecture-map assertion runs in `make doctor` (= `make verify`). |
+| `make check` | Every target in `check:` in the Makefile: hermetic suites only (secrets lint, hook tests, script and bun tests, the architecture-check generator test). No side effects, no live probes; the live architecture-map assertion runs in `make doctor` and, softened, in `make verify`. |
 | `make -k check` | `check` stops at the first failing prerequisite; `-k` runs every suite and lists all failures. |
 | `make check-linux` | The Linux-safe subset (shellcheck over every tracked bash script + the portable suites): what `.github/workflows/check.yml` runs on a hosted ubuntu runner for every PR and master push. A suite joins it only after it passes there. |
-| `make verify` | `make doctor`, under the repo-contract name. |
+| `make verify` | `make doctor --verify`, the repo-contract name the factory's Watch runs: fails only on what a change to this repo can break; host conditions and other leads' drift (an unmapped or unregistered agent of another owner, a stale map row, an unclassified TCC program, a DOWN Kuma monitor) are WARN. `make doctor` fails all of it. |
 | `make storage-status` | Shares, mounts, free space, keepalive grade, external volume, mirror and restic age; `ARGS=--json` is the contract in `docs/storage.md` §Status. Read-only, bounded; `make doctor` WARNs from it. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. On the mini it then runs `scripts/gate-pin-notice.sh` (below). |
@@ -151,7 +151,7 @@ the herdr-core agent). A new KeepAlive script agent calls it from its `*-setup`.
 
 ## Verify & Monitor
 
-`make verify` (= `make doctor`); `make logs` for the bounded log tail. No HTTP
+`make verify` (= `make doctor` with host conditions and other leads' drift as WARN); `make logs` for the bounded log tail. No HTTP
 health URL and no OTel `service.name` — this repo runs no service. Kuma:
 `MacMini Dev Host - Push` (liveness only: tailnet, sshd, core socket; the components ride the opt-in detail monitor; mini only),
 `MacMini Secret Seed - Push` (8-day mtime). Detail: `docs/devhost-health.md`.

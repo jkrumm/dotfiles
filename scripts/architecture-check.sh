@@ -20,6 +20,11 @@
 # listed but exit 0 — another session's fresh install must not turn every hold
 # red. Older, or undatable, fails; mapped-but-absent rows always fail.
 #
+# `--soft` (what `make verify` runs) fails only on what a change to THIS repo can break: an
+# unmapped label whose plist points into this checkout (ARCH_OWN_ROOT, default the main checkout
+# of this repo). Another lead's unmapped agent, any older unmapped label with another owner, and a
+# mapped-but-absent row are WARN there; `make doctor` and the bare script stay strict.
+#
 # Exit 1 lists the unmapped labels. Adding a legit new agent = add a row to the
 # map in the same change; that friction IS the point.
 #
@@ -35,11 +40,22 @@
 
 set -u
 
+SOFT=0
+for arg in "$@"; do
+  case "$arg" in
+    --soft) SOFT=1 ;;
+    *) echo "usage: $(basename "$0") [--soft]" >&2; exit 1 ;;
+  esac
+done
+
 DOTFILES="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MAP="$DOTFILES/docs/architecture.md"
 LAUNCHCTL="${LAUNCHCTL_BIN:-/bin/launchctl}"
 # Overridable so the hermetic test can point at a fake machine.
 LAUNCHD_DIRS=("${LAUNCHD_AGENT_DIRS[@]:-$HOME/Library/LaunchAgents /Library/LaunchAgents /Library/LaunchDaemons}")
+
+# The main checkout (a worktree shares its .git): the root every dotfiles agent's plist points into.
+OWN_ROOT="${ARCH_OWN_ROOT:-$(dirname "$(git -C "$DOTFILES" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")}"
 
 [[ -f "$MAP" ]] || { echo "✗ $MAP not found"; exit 1; }
 
@@ -75,9 +91,15 @@ recent() { # $1 = plist path
   m=$(/usr/bin/stat -f %m "$1" 2>/dev/null) || return 1
   (( $(date +%s) - m < RECENT_SECS ))
 }
+owned_here() { # $1 = plist path: does it point into this repo's checkout?
+  [[ -n "$1" && -e "$1" && -n "$OWN_ROOT" ]] && grep -qF "$OWN_ROOT/" "$1" 2>/dev/null
+}
 note_unmapped() { # $1 = kind, $2 = label, $3 = plist path (may be empty)
   if recent "$3"; then
     warned="${warned}  $1: $2 (new, <24h)
+"
+  elif [[ "$SOFT" -eq 1 ]] && ! owned_here "$3"; then
+    warned="${warned}  $1: $2 (another owner's agent — doctor fails it)
 "
   else
     unmapped="${unmapped}  $1: $2${3:+ ($3)}
@@ -188,8 +210,13 @@ fi
 fi
 
 if [[ -n "$warned" ]]; then
-  echo "⚠ new launchd labels not yet in docs/architecture.md (fail after 24 h) — add a row:"
+  echo "⚠ launchd labels not yet in docs/architecture.md (a new one fails after 24 h) — add a row:"
   printf '%s' "$warned"
+fi
+if [[ "$SOFT" -eq 1 && -n "$stale" && $checked -gt 0 ]]; then
+  echo "⚠ docs/architecture.md lists labels that do not exist on this machine (doctor fails this) — delete the row or restore the agent:"
+  printf '%s' "$stale"
+  stale=""
 fi
 if [[ -n "$unmapped" || -n "$stale" ]]; then
   if [[ -n "$unmapped" ]]; then

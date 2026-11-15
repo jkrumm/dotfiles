@@ -40,10 +40,10 @@ $1
 EOS
 }
 
-run() { # $1 = backend
+run() { # $1 = backend, $2 = optional flag (--soft)
   echo "$1" > "$TMP/backend"
   DOTFILES_DIR="$TMP" BACKEND_FILE="$TMP/backend" LAUNCHCTL_BIN="${FAKE_LAUNCHCTL:-$TMP/launchctl}" \
-    LAUNCHD_AGENT_DIRS="$TMP/agents $TMP/daemons" bash "$CHECK" 2>&1
+    ARCH_OWN_ROOT="$TMP/own" LAUNCHD_AGENT_DIRS="$TMP/agents $TMP/daemons" bash "$CHECK" ${2:-} 2>&1
 }
 
 fails=0
@@ -121,6 +121,21 @@ rm "$TMP/agents/other-name.plist"
 # Unknown backend skips the map-to-machine assertion rather than guessing mini.
 write_map '| `com.jkrumm.gone` | stale |' ""
 out=$(run weird); rc=$?; expect "unknown backend skips the reverse check" 0 "skipping the map-to-machine" "$rc" "$out"
+
+# --soft (make verify): only a label whose plist points into this checkout fails; another owner's
+# unmapped label and a stale row are WARN; a renamed heading still fails.
+write_map "" ""
+: > "$TMP/agents/com.jkrumm.theirs.plist"; touch -t 202001010000 "$TMP/agents/com.jkrumm.theirs.plist"
+out=$(run cache); rc=$?; expect "strict: an old unmapped label fails" 1 "on-disk-but-unmapped: com.jkrumm.theirs" "$rc" "$out"
+out=$(run cache --soft); rc=$?; expect "soft: another owner's old unmapped label warns" 0 "com.jkrumm.theirs (another owner" "$rc" "$out"
+printf '<plist>%s/scripts/x.sh</plist>\n' "$TMP/own" > "$TMP/agents/com.jkrumm.mine.plist"; touch -t 202001010000 "$TMP/agents/com.jkrumm.mine.plist"
+out=$(run cache --soft); rc=$?; expect "soft: an unmapped label pointing into this checkout fails" 1 "on-disk-but-unmapped: com.jkrumm.mine" "$rc" "$out"
+rm "$TMP/agents/com.jkrumm.mine.plist" "$TMP/agents/com.jkrumm.theirs.plist"
+write_map '| `com.jkrumm.gone` | stale row |' ""
+out=$(run cache --soft); rc=$?; expect "soft: a stale row warns" 0 "mapped-but-absent (mini): com.jkrumm.gone" "$rc" "$out"
+write_map "" ""
+sed -i '' 's/^## LaunchAgents — mini/## Agents — mini/' "$TMP/docs/architecture.md"
+out=$(run cache --soft); rc=$?; expect "soft: a renamed heading still fails closed" 1 "heading renamed?" "$rc" "$out"
 
 # launchctl with no output (no GUI session) fails closed.
 printf '#!/bin/sh\nexit 1\n' > "$TMP/launchctl"

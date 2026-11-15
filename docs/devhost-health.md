@@ -459,6 +459,12 @@ for the owner's window (a macOS restart, `make tailscale-upgrade`), the Drift mo
 and a red `make verify` failed the Watch of unrelated factory Issues (737). A drift-check that
 crashes (exit 1 with no `✗` line) is still a FAIL.
 
+`make verify` (`doctor.sh --verify`, the factory Watch) goes further for what no change to this repo causes (Issue 1309): another
+owner's unmapped agent, a stale architecture row, an agent whose plist does not point into this checkout, an unclassified TCC
+program, an unregistered fresh job or a name two registries claim, a DOWN Kuma monitor are WARN. A label whose plist points into
+this checkout, herdr-core, Claude account routing and any other registry rule breach stay FAIL. `make doctor` fails all of it, and
+the heartbeat's `check_registry` still files the registry findings.
+
 | Command | Does |
 |-|-|
 | `make doctor` | Includes the drift report (read-only, no push) |

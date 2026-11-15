@@ -20,6 +20,16 @@ set -u -o pipefail   # NOT -e: one section failing must not abort the rest
 #                         remote path, Kuma monitor states, then (unless
 #                         --local) recurse into 'ssh mini make doctor'
 #
+# Two grades of the same sections:
+#   doctor (default)  every finding fails the run — the owner's full view of the machine
+#   --verify          what `make verify` runs, the factory's Watch of a dotfiles change. It fails only on
+#                     what a change to this repo can break and WARNs on host conditions and other leads'
+#                     drift: another owner's agent not in the map or the registry, a stale map row, a
+#                     LaunchAgent not pointing into this checkout, an unclassified TCC program, a DOWN Kuma
+#                     monitor. Still FAIL there: herdr-core, Claude account routing, an agent whose plist
+#                     points into this checkout, an unmapped label of this checkout, a registry rule breach.
+#                     (Pending OS/tailscale/collie updates, failing jobs and storage are WARN in both.)
+#
 # BASH 3.2. No mapfile, no ${var,,}, no "${arr[@]}" on a possibly-empty array
 # under `set -u` — same constraint as devhost-health-check.sh and drift-check.sh,
 # for the same reason: this is invoked via `make doctor` on a machine whose
@@ -34,12 +44,17 @@ KUMA_HOST="${KUMA_HOST:-homelab}"
 KUMA_DB="${KUMA_DB:-/home/jkrumm/ssd/uptime-kuma/kuma.db}"
 
 LOCAL_ONLY=0
+VERIFY=0
 for arg in "$@"; do
   case "$arg" in
     --local) LOCAL_ONLY=1 ;;
-    *) echo "usage: $(basename "$0") [--local]" >&2; exit 1 ;;
+    --verify) VERIFY=1 ;;
+    *) echo "usage: $(basename "$0") [--local] [--verify]" >&2; exit 1 ;;
   esac
 done
+
+# The main checkout of this repo (a worktree shares its .git): a LaunchAgent whose plist names a path in it is this repo's.
+OWN_ROOT=$(dirname "$(git -C "$DOTFILES_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")
 
 pass=0
 fail=0
@@ -48,10 +63,12 @@ skipped=0
 ok()   { printf '  \033[32m✓\033[0m %-30s %s\n' "$1" "${2:-}"; pass=$((pass + 1)); }
 bad()  { printf '  \033[31m✗\033[0m %-30s %s\n' "$1" "${2:-}"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m·\033[0m %-30s %s\n' "$1" "${2:-}"; skipped=$((skipped + 1)); }
+# A finding no change to this repo causes: a FAIL in doctor, a WARN in --verify.
+host_bad() { if [ "$VERIFY" -eq 1 ]; then skip "$1" "WARN: ${2:-} (doctor fails this; not this repo's change)"; else bad "$1" "${2:-}"; fi; }
 hdr()  { printf '\n  \033[1m%s\033[0m\n' "$1"; }
 
 echo ""
-echo "  doctor — $(hostname -s 2>/dev/null || echo "this machine") (backend=${BACKEND:-unset})"
+echo "  $([ "$VERIFY" -eq 1 ] && echo verify || echo doctor) — $(hostname -s 2>/dev/null || echo "this machine") (backend=${BACKEND:-unset})"
 
 # --- LaunchAgents (both machines) --------------------------------------------
 # A missing program/WorkingDirectory, a down KeepAlive job, /tmp logs, and a
@@ -115,7 +132,7 @@ section_launchagents() {
     fi
 
     if [ -n "$issues" ]; then
-      bad "$label" "${issues#; }"
+      if grep -qF "$OWN_ROOT/" "$plist" 2>/dev/null; then bad "$label" "${issues#; }"; else host_bad "$label" "${issues#; }"; fi
     else
       ok "$label" ""
     fi
@@ -148,7 +165,9 @@ section_core() {
 section_architecture() {
   hdr "Architecture map (docs/architecture.md)"
   local out rc
-  out=$(bash "$DOTFILES_DIR/scripts/architecture-check.sh" 2>&1)
+  local soft=""
+  [ "$VERIFY" -eq 1 ] && soft="--soft"
+  out=$(bash "$DOTFILES_DIR/scripts/architecture-check.sh" $soft 2>&1)
   rc=$?
   printf '%s\n' "$out" | sed 's/^/    /'
   if [ "$rc" -eq 0 ]; then
@@ -345,7 +364,7 @@ section_kuma() {
   # `case`, not `grep -q`: under pipefail a grep that exits early on its first
   # match turns the writer's SIGPIPE into a false failure.
   case "$kuma_out" in
-    *"|DOWN|"*) bad "kuma monitors" "at least one MacMini monitor is DOWN — see above" ;;
+    *"|DOWN|"*) host_bad "kuma monitors" "at least one MacMini monitor is DOWN — see above" ;;
     *)          ok "kuma monitors" "all up" ;;
   esac
 }
@@ -382,6 +401,14 @@ section_registry() {
     printf '    recorded breaches (debt, exceptions; rules/run-on-mini.md):\n'
     printf '%s\n' "$debt" | sed 's/^/      /'
   fi
+  # --verify: another lead's fresh unregistered job, or a name two repos' registry files both claim, is not this change's.
+  # An invalid registry prints "FAIL registry invalid:" plus indented error lines and no summary; every other FAIL line stays a FAIL.
+  if [ "$rc" -eq 1 ] && [ "$VERIFY" -eq 1 ]; then
+    local own_fail
+    own_fail=$(printf '%s\n' "$out" | grep -vE '^FAIL loaded job not in the registry|^registry: ' \
+      | grep -E '^FAIL|^  [^ ]' | grep -vE '^  duplicate name |^FAIL registry invalid:$' || true)
+    if [ -z "$own_fail" ]; then rc=2; fi
+  fi
   case "$rc" in
     0) ok "registry" "$summary" ;;
     2) skip "registry" "WARN: $summary" ;;
@@ -397,7 +424,7 @@ section_tcc() {
   out=$(bash "$DOTFILES_DIR/scripts/tcc-check.sh" 2>&1) || rc=$?
   if [ "$rc" -eq 0 ]; then ok "tcc" "$(printf '%s' "$out" | sed 's/^ *✓ tcc: //')"; return; fi
   printf '%s\n' "$out" | sed 's/^/    /'
-  bad "tcc" "unclassified LaunchAgent program(s) above (docs/tcc.md)"
+  host_bad "tcc" "unclassified LaunchAgent program(s) above (docs/tcc.md)"
 }
 
 # External volume (docs/external-ssd.md), the mini's only (BACKEND=cache): silent while config/external-volume.json says attached=false; with it true,
@@ -466,11 +493,11 @@ elif [ "$BACKEND" = "op" ]; then
 
     mini_rc=0
     if [ -n "$TIMEOUT_BIN" ]; then
-      "$TIMEOUT_BIN" 120 ssh "$HOST" 'cd ~/SourceRoot/dotfiles && make doctor'
+      "$TIMEOUT_BIN" 120 ssh "$HOST" "cd ~/SourceRoot/dotfiles && make $([ "$VERIFY" -eq 1 ] && echo verify || echo doctor)"
       mini_rc=$?
     else
       skip "mini doctor" "no 'timeout'/'gtimeout' on PATH — running unbounded"
-      ssh "$HOST" 'cd ~/SourceRoot/dotfiles && make doctor'
+      ssh "$HOST" "cd ~/SourceRoot/dotfiles && make $([ "$VERIFY" -eq 1 ] && echo verify || echo doctor)"
       mini_rc=$?
     fi
 
