@@ -48,7 +48,7 @@ set -euo pipefail
 # a producer's success path calls `clear K`, and every request expires (default 3d
 # without a waiter, 14d when FACTORY_SESSION is set; `--expires`). `reap` (also
 # run quietly by ask/list/status) writes expired ones off as denied/expired and
-# logs them to events.log. A request enqueued under FACTORY_SESSION is reported
+# logs them to events.log; an answered request's files are deleted after 14 days (HUMAN_QUEUE_PRUNE_DAYS). A request enqueued under FACTORY_SESSION is reported
 # back to that lead once, via `factory session note`, when its result lands.
 
 QUEUE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/human-queue"
@@ -57,6 +57,7 @@ KEY_RE='^[A-Za-z0-9._:/@-]{1,80}$'
 DEFAULT_TTL="${HUMAN_QUEUE_DEFAULT_TTL:-3d}"
 WAITER_TTL=14d
 NOTIFY_MAX_TRIES=5
+PRUNE_DAYS="${HUMAN_QUEUE_PRUNE_DAYS:-14}"
 
 # The MacBook-side ssh alias `push` targets — see `Host iumac` in
 # config/ssh_config (port 2222, IdentityAgent none, no agent forwarding).
@@ -900,11 +901,32 @@ reap_expired() {
   return 0
 }
 
-reap_quiet() { ( reap_expired ) >/dev/null 2>&1 || true; }
+# Answered requests older than PRUNE_DAYS go: the .req and .res pair and the markers beside it (.notified, .notify-tries,
+# .queued), plus stray dot-files (an interrupted write's temp file, the old push-retry stamps) as old. 2026-11-15 the
+# directory held 989 files, every one answered and none ever removed, and each `list`/`reap` walks them all. A request
+# with no .res is pending and is never touched here; events.log stays (the only record of what expired).
+prune_answered() {
+  [[ -d "$QUEUE_DIR" ]] || return 0
+  local res id n=0 stray=0 f
+  while IFS= read -r res; do
+    id="$(basename "$res" .res)"
+    [[ "$id" =~ $ID_RE ]] || continue
+    rm -f -- "$QUEUE_DIR/$id.req" "$QUEUE_DIR/$id.res" "$QUEUE_DIR/$id.notified" "$QUEUE_DIR/$id.notify-tries" "$QUEUE_DIR/$id.queued"
+    n=$(( n + 1 ))
+  done < <(find "$QUEUE_DIR" -maxdepth 1 -name '*.res' -mtime "+$PRUNE_DAYS" 2>/dev/null)
+  while IFS= read -r f; do
+    rm -f -- "$f" && stray=$(( stray + 1 ))
+  done < <(find "$QUEUE_DIR" -maxdepth 1 -type f -name '.*' -mtime "+$PRUNE_DAYS" 2>/dev/null)
+  (( n + stray == 0 )) || printf 'pruned %d answered request(s) and %d stray file(s) older than %s days\n' "$n" "$stray" "$PRUNE_DAYS"
+  return 0
+}
+
+reap_quiet() { ( reap_expired; prune_answered ) >/dev/null 2>&1 || true; }
 
 cmd_reap() {
   ensure_queue_dir
   reap_expired
+  prune_answered
   replay_pending
   notify_sweep || true
 }

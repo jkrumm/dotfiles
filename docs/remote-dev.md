@@ -557,7 +557,7 @@ Console (Needs you, "Back at desk"); `make human-queue` drains only the fallback
 |-|-|-|
 | Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--key <key>] [--expires <dur\|never>] [--check <sh>] [--wait <seconds>] [--no-push]` | mini |
 | A producer's success path: resolve everything pending under its key | `ask-human.sh clear <key> [--as done\|superseded] [--note <text>]` | mini |
-| Write off expired requests (also run quietly by ask/list/status) | `ask-human.sh reap` | mini |
+| Write off expired requests and delete answered ones older than 14 days (`HUMAN_QUEUE_PRUNE_DAYS`); also run quietly by ask/list/status | `ask-human.sh reap` | mini |
 | Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |
 | Inspect own request | `ask-human.sh list [--json]` / `status <id>` | mini |
 | Answer a request without the MacBook (the fleet view's resolve / deny); never runs its command | `ask-human.sh resolve <id> --as done\|denied\|superseded [--note <text>]` | mini |

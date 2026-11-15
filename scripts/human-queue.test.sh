@@ -440,6 +440,23 @@ sec_keys() {
     assert_eq "reap again: no output" "" "$(bash "$AH" reap)"
     assert_eq "reap again: no new event line" "2" "$(grep -c . "$QDIR/events.log")"
 
+    # Pruning: an answered request's files go after 14 days; a pending one and events.log never do.
+    old="$(bash "$AH" ask "answered long ago")"; fresh="$(bash "$AH" ask "answered today")"; pend="$(bash "$AH" ask "still pending" --expires never)"
+    bash "$AH" resolve "$old" --as "done" >/dev/null; bash "$AH" resolve "$fresh" --as "done" >/dev/null
+    : > "$QDIR/$old.notified"; printf '2\n' > "$QDIR/$old.notify-tries"; : > "$QDIR/.$old.fx.AbC123"; : > "$QDIR/.push-retry-$old.attempt"
+    touch -t "$(date -v-20d +%Y%m%d%H%M)" "$QDIR/$old.res" "$QDIR/$old.req" "$QDIR/$old.notified" "$QDIR/$old.notify-tries" "$QDIR/.$old.fx.AbC123" "$QDIR/.push-retry-$old.attempt"
+    touch -t "$(date -v-20d +%Y%m%d%H%M)" "$QDIR/$pend.req"
+    assert_contains "prune: reap reports what it removed" "pruned 1 answered request(s) and 2 stray file(s)" "$(bash "$AH" reap)"
+    for ext in req res notified notify-tries; do
+      assert_eq "prune: $old.$ext removed" "no" "$([[ -e "$QDIR/$old.$ext" ]] && echo yes || echo no)"
+    done
+    assert_eq "prune: stray dot-files removed" "no" "$([[ -e "$QDIR/.$old.fx.AbC123" || -e "$QDIR/.push-retry-$old.attempt" ]] && echo yes || echo no)"
+    assert_eq "prune: a recent answered pair stays" "yes" "$([[ -e "$QDIR/$fresh.res" && -e "$QDIR/$fresh.req" ]] && echo yes || echo no)"
+    assert_eq "prune: a pending request stays however old" "yes" "$([[ -e "$QDIR/$pend.req" && ! -e "$QDIR/$pend.res" ]] && echo yes || echo no)"
+    assert_eq "prune: events.log stays" "yes" "$([[ -e "$QDIR/events.log" ]] && echo yes || echo no)"
+    assert_eq "prune again: no output" "" "$(bash "$AH" reap)"
+    bash "$AH" resolve "$pend" --as "done" >/dev/null; bash "$AH" resolve "$fresh" --as "done" >/dev/null 2>&1
+
     e3="$(bash "$AH" ask "expires on list" --expires 1s)"
     expire_now "$e3"
     out="$(bash "$AH" list --json)"
