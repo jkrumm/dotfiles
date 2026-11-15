@@ -1,7 +1,7 @@
 ---
-description: React and Next.js performance optimization — 69 rules across async, bundle, server, client, re-render, rendering, JS perf, and advanced patterns
+description: React and Next.js performance optimization — 70 rules across async, bundle, server, client, re-render, rendering, JS perf, and advanced patterns
 paths: ["**/*.tsx", "**/*.jsx"]
-source: vercel-labs/agent-skills@73140fc (2026-04-02)
+source: vercel-labs/agent-skills@1a2c79d (2026-10-27)
 ---
 
 # React Best Practices
@@ -11,7 +11,7 @@ source: vercel-labs/agent-skills@73140fc (2026-04-02)
 > manual `useMemo`/`useCallback`: the compiler memoizes, and basalt's lint flags manual memoization.
 > The Next.js server-side sections (`server-*`, RSC) apply only to Next.js apps.
 
-Comprehensive performance optimization guide for React and Next.js applications. 69 rules across 8 categories, prioritized by impact.
+Comprehensive performance optimization guide for React and Next.js applications. 70 rules across 8 categories, prioritized by impact.
 
 ## Rule Categories by Priority
 
@@ -40,6 +40,7 @@ Comprehensive performance optimization guide for React and Next.js applications.
 ### 2. Bundle Size Optimization (CRITICAL)
 
 - `bundle-barrel-imports` - Import directly, avoid barrel files
+- `bundle-analyzable-paths` - Prefer statically analyzable import and file-system paths to avoid broad bundles and traces
 - `bundle-dynamic-imports` - Use next/dynamic for heavy components
 - `bundle-defer-third-party` - Load analytics/logging after hydration
 - `bundle-conditional` - Load modules only when feature is activated
