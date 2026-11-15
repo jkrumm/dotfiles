@@ -164,7 +164,7 @@ brain drift audit, project narratives; the agents-overview digest was paused
 | `com.jkrumm.weatherorb.worker-ingest` | KeepAlive | durable-jobs worker: ingest (DBOS, ADR 0010) |
 | `com.jkrumm.weatherorb.worker-round` | KeepAlive | durable-jobs worker: blend rounds (DBOS, ADR 0010) |
 | `com.jkrumm.orb.corpus-obs` | 3600s | V2 corpus observation, installed by `make v2-corpus-install` from the default-branch checkout (Issue 1005); tier manual in `config/mini/services.yaml` |
-| `com.jkrumm.orb.corpus-extend` | daily 07:30 | V2 corpus holdout extension, same installer and checkout; tier manual in the registry |
+| `com.jkrumm.orb.site-record` | 3 h | V2 site record (replaces the daily `corpus-extend`), `make v2-corpus-install JOB=sites` from the default-branch checkout; tier manual in the registry |
 
 The 1200s/900s/hourly/daily/3 h timers that used to ingest, log, archive,
 backfill and run blend rounds (`obs`, `fcstlog`, `archive`, `backfill`, `round`) are
