@@ -559,7 +559,7 @@ export type RuleReport = {
   stale: { service: string; rule: string }[] // a debt or exception field whose breach is gone
   declared: { service: string; rule: string; plan: string }[] // debt on a rule the registry cannot see
   listed: ListedDebt[]
-  warnings: string[] // the limits of a VM's core services add up to more than the VM
+  warnings: string[] // the budgets of a VM's core services add up to more than the VM
   worktreeLabels: Set<string> // worktree programs this report already judges
 }
 
@@ -624,8 +624,9 @@ export function gradeRules(services: Service[], snap: Snapshot, listed: ListedDe
     }
   }
   for (const vm of services.filter((x) => x.kind === "vm")) {
-    const limits = services.filter((x) => x.kind === "compose" && x.tier === "core" && (x.vm ?? "default") === vm.vm).reduce((a, x) => a + (containerFor(x, snap)?.limit_mib ?? 0), 0)
-    if (vm.memory_mib > 0 && limits > vm.memory_mib) r.warnings.push(`core services of VM ${vm.vm} are limited to ${limits} MiB in total, the VM has ${vm.memory_mib}`)
+    // budgets (1.5 times the footprint), not mem_limit caps: a cap is a ceiling a service never reaches, and the owner sets it wide on purpose
+    const budgets = services.filter((x) => x.kind === "compose" && x.tier === "core" && (x.vm ?? "default") === vm.vm).reduce((a, x) => a + x.memory_mib, 0)
+    if (vm.memory_mib > 0 && budgets > vm.memory_mib) r.warnings.push(`core services of VM ${vm.vm} are budgeted ${budgets} MiB in total, the VM has ${vm.memory_mib}`)
   }
   return r
 }

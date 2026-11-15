@@ -565,10 +565,14 @@ describe("run rules", () => {
     expect(bad.errors.join()).toContain("exception.port-binding must name the reason it is allowed")
   })
 
-  test("the core services of a VM are limited to what the VM has", () => {
-    const services = reg(vm, app("", "core"))
-    expect(check(services, { limit_mib: 5000 }).rules.warnings[0]).toContain("5000 MiB")
-    expect(check(services, { limit_mib: 5000 }).f.rc).toBe(2)
+  test("the core budgets of a VM add up to what the VM has; a wide mem_limit cap is not a budget", () => {
+    const big = "{ name: big, repo: r, kind: compose, tier: core, container: big, needs: [vm], memory_mib: 4500 }"
+    const over = check(reg(vm, big), { name: "big" })
+    expect(over.rules.warnings[0]).toContain("4500 MiB")
+    expect(over.f.rc).toBe(2)
+    const wide = check(reg(vm, app("", "core")), { limit_mib: 5000 })
+    expect(wide.rules.warnings).toEqual([])
+    expect(wide.f.rc).toBe(0)
   })
 
   test("the tracked registry passes its own rules on a quiet host", () => {

@@ -203,7 +203,7 @@ another repo's plist, not measured to starve).
 | a service running below its declared `process_type`, or whose plist lost it | FAIL | FAIL |
 | a breach of a run rule (`rules/run-on-mini.md`) with no `debt`/`exception` on its entry | FAIL | FAIL |
 | a `debt`/`exception` field whose breach is gone | FAIL | FAIL |
-| the core services of a VM limited to more than the VM has | WARN | WARN |
+| the `memory_mib` budgets of a VM's core services add up to more than the VM's budget (a `mem_limit` cap is a ceiling, not counted) | WARN | WARN |
 | a footprint above its budget | WARN | WARN (named in the message) |
 
 A job installed by hand and never registered is exactly this FAIL: it turns the detail monitor DOWN until its row lands
