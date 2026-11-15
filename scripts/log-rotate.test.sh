@@ -69,6 +69,19 @@ for l in herdr-core hc-resume hc-reap hc-events; do
   check "herdr-core world: $l.log rotated" rotated "$l.log"
 done
 
+# A retired service's log (and its .1) is deleted whatever its size; a plist that names the path again keeps it.
+big "$LOGS/agent-gateway.jsonl"; big "$LOGS/sideclaw.jsonl"; big "$LOGS/research-gateway-lightpanda.err"; big "$LOGS/research-gateway-lightpanda.err.1"
+big "$LOGS/research-gateway.log"; plist com.jkrumm.research-gateway "$LOGS/research-gateway.log" "$LOGS/research-gateway.log"
+out6=$(bash "$HERE/log-rotate.sh" 2>&1)
+check "a retired log is pruned" test ! -e "$LOGS/agent-gateway.jsonl" -a ! -e "$LOGS/sideclaw.jsonl"
+check "a retired log's .1 is pruned" test ! -e "$LOGS/research-gateway-lightpanda.err.1" -a ! -e "$LOGS/research-gateway-lightpanda.err"
+check "a retired name a plist names again is kept" test -f "$LOGS/research-gateway.log"
+check "the prune is reported" sh -c 'printf "%s" "$1" | grep -q "pruned retired log .*sideclaw.jsonl"' _ "$out6"
+check "an unrelated big log survives the prune" test -f "$LOGS/vendor.log"
+big "$LOGS/research-gateway.log.1"; bash "$HERE/log-rotate.sh" >/dev/null 2>&1
+check "a retired name a plist names again keeps its rotated .1 too" test -f "$LOGS/research-gateway.log.1"
+rm -f "$AGENTS/com.jkrumm.research-gateway.plist" "$LOGS/research-gateway.log" "$LOGS/research-gateway.log.1"
+
 CR="$CHROME_CLONE_ROOT"
 mkdir "$CR/code_sign_clone.old" "$CR/code_sign_clone.fresh" "$CR/code_sign_clone.open"
 touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.old" "$CR/code_sign_clone.open"

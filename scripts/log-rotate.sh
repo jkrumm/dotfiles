@@ -104,6 +104,18 @@ EXTRA=(
   devhost-snapshots.jsonl
 )
 
+# Logs of services that no longer exist (no plist names them, nothing writes them). Rotation only ever caps a log, so a retired
+# service's file stays at whatever size it died at: 2026-11-15 the mini held 105 MB (agent-gateway.jsonl, last written Oct 29),
+# 67 MB (sideclaw.jsonl, Oct 11) and 51 MB (research-gateway-lightpanda.err.1, Oct 26). Every run deletes these (and their `.1`)
+# unless a plist currently names the path, which is the proof the service is back. A service that is retired adds its log names
+# here in the commit that removes it; basenames only, never a glob, for the reason the file list is derived.
+RETIRED=(
+  agent-gateway.jsonl agent-gateway.log agent-gateway.err agent-gateway-opencode.log agent-gateway-opencode.err
+  audio-gateway.log audio-gateway.err
+  research-gateway.log research-gateway.err research-gateway-deploy.log research-gateway-lightpanda.log research-gateway-lightpanda.err
+  sideclaw.jsonl sideclaw-ab.log sideclaw-probe.log
+)
+
 # Log paths of every com.jkrumm.* / com.iu.* plist, one per line. log-rotate's own log stays
 # out (see its plist: truncating the file it is writing to), and anything outside $HOME
 # (/dev/null, /var/log) is not ours to truncate.
@@ -127,6 +139,16 @@ while IFS= read -r line; do FILES+=("$line"); done < <({ derive_files; printf '%
 
 rotated=0
 checked=0
+pruned=0
+
+# A retired service's logs go; one a plist names again (or an EXTRA entry) stays.
+for name in "${RETIRED[@]}"; do
+  for f in "$LOG_DIR/$name" "$LOG_DIR/$name.1"; do
+    [ -f "$f" ] || continue
+    printf '%s\n' "${FILES[@]}" | grep -qxF -e "$LOG_DIR/$name" -e "$name" && continue
+    if rm -f -- "$f"; then pruned=$((pruned + 1)); echo "pruned retired log $f"; fi
+  done
+done
 
 for entry in "${FILES[@]}"; do
   case "$entry" in
@@ -231,4 +253,4 @@ sweep_chrome_clones() {
 
 sweep_chrome_clones
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') log-rotate: $checked checked, $rotated rotated (cap ${MAX_BYTES} bytes)"
+echo "$(date '+%Y-%m-%d %H:%M:%S') log-rotate: $checked checked, $rotated rotated, $pruned retired logs pruned (cap ${MAX_BYTES} bytes)"
