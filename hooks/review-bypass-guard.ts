@@ -139,7 +139,7 @@ function adminMergeDenial(command: string, args: string[], ctx: Context): string
   if (named.length > 0) return named.every((r) => ADMIN_MERGE_REPOS.has(r)) ? null : NOT_LISTED;
 
   if (MOVES_GH.test(command) || MOVING_ENV.some((k) => process.env[k])) {
-    return `\`gh pr merge --admin\` names no repo, and a \`cd\`, \`--chdir\` or \`GH_REPO\` means the working directory does not say which one. ${NAME_THE_REPO}`;
+    return `\`gh pr merge --admin\` names no repo, and a \`cd\`, \`--chdir\`, \`GH_REPO\`, \`GH_HOST\` or \`GIT_*\` variable means the working directory does not say which one. ${NAME_THE_REPO}`;
   }
   const repos = ctx.cwd ? (ctx.resolveRepos ?? gitRepoResolver)(ctx.cwd) : null;
   if (!repos || repos.length === 0) {
