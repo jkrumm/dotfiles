@@ -75,7 +75,7 @@ check_mediaanalysisd() {
   if [ "$disabled" -eq 0 ]; then
     echo "$AGENT is enabled (Photos analysis burns about half a core on a library this size; fix: make photos-analysis-off)"
   else
-    echo "$AGENT is disabled but still running (it exits at the next login; docs/host-waste.md §mediaanalysisd)"
+    echo "$AGENT is disabled but still running (launchd keeps the loaded agent until the next restart, make planned-restart; kill the pid meanwhile, docs/host-waste.md §mediaanalysisd)"
   fi
   return 2
 }

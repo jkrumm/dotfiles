@@ -7,7 +7,7 @@ left with a reason. `make host-waste-check` (also a section of `make doctor`) sh
 | Consumer | Before | After | Cause | Verdict |
 |-|-|-|-|-|
 | Orphaned `sleep` | 41 `sleep 180` and 20 `sleep 30` with parent 1 after one `make secrets-seed-test` | 0 after the same suite | `run_bounded`'s watchdog (`scripts/secrets-seed.sh`) killed its subshell, not the `sleep` inside it | fixed |
-| `mediaanalysisd` | 52 CPU-min/h (85 % of a core), 331 CPU-min since boot | 0 | Photos analysis of the 20,981-asset library, never throttled on a host that is never idle | disabled |
+| `mediaanalysisd` | 52 CPU-min/h (85 % of a core), 331 CPU-min since boot | 0 for the 5 min after the last kill; the disable itself applies at the next restart | Photos analysis of the 20,981-asset library, never throttled on a host that is never idle | disabled, ends at the next restart |
 | `tailscaled` | 20 to 33 CPU-min/h (33 to 55 % of a core over 30 s), 224 CPU-min in 7.6 h | unchanged | WireGuard work for 5 to 16 MiB/s of bulk copies routed through the mini | stays, WARN line |
 | `sshd-session [postauth]` | 7 processes, up to 6.6 h old | unchanged | seven live logins from the MacBook, each with an ESTABLISHED socket; not stale | stays, WARN line |
 | CoreSimulator services | 6 processes, 76 MB, 0 CPU | unchanged | launchd starts them on demand for an `xcodebuild`; no simulator is booted | stays |
@@ -31,10 +31,14 @@ that sense, and since iCloud Photos was set to Download Originals the analysis h
 searches Photos on the mini); the nightly export reads `Photos Library.photoslibrary` through osxphotos and needs no analysis.
 
 `launchctl disable gui/$(id -u)/com.apple.mediaanalysisd` is launchd's own switch for a user-domain agent. It needs no sudo, survives reboots and
-updates of the plist, and `launchctl enable` undoes it. System Integrity Protection refuses `launchctl bootout` of an Apple agent, so a running
-daemon ignores SIGTERM until it is killed by pid (done once on 2026-11-15; launchd does not respawn a disabled label). `make photos-analysis-off`
-(run by `make setup` on the mini, idempotent) re-applies the disable; the doctor line WARNs when the agent is enabled again or still running. No
-night window: the analysis has no consumer, so bounding it would only spend the CPU later.
+updates of the plist, and `launchctl enable` undoes it. **It takes effect when the user session next loads, not at once**: the agent was loaded
+before the disable, and launchd keeps answering its XPC event until then. System Integrity Protection refuses `bootout`, `remove` and `unload` of
+an Apple agent (all `rc=150` or `Input/output error`, measured), so there is no way to unload it live without a restart. Until then the daemon is
+killed by pid (SIGTERM is ignored): after the first kill on 2026-11-15 it came back about two minutes later (pid 67286, 0.4 core over the next
+83 min), after the second it stayed away for the 5 minutes measured. The next planned restart (`make planned-restart`, `docs/recovery-drill.md` §4) ends it for good; the doctor
+line WARNs on `disabled but still running` until then.
+`make photos-analysis-off` (run by `make setup` on the mini, idempotent) re-applies the disable, and the doctor line also WARNs when the agent is
+enabled again. No night window: the analysis has no consumer, so bounding it would only spend the CPU later.
 
 Not disabled: `photoanalysisd` (0 % CPU, the coordinator) and `photolibraryd` (the sync Download Originals needs).
 
