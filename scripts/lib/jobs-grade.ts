@@ -317,11 +317,11 @@ export const restartWindow = (now: number, uptimeS: number): OutageWindow => {
 }
 
 /** The last 24 h of line outages (linewatch, loopback only, 3 s) plus the host's restart window. linewatch down or odd = only the restart window. */
-export async function readOutageWindows(now: number = Date.now(), uptimeS: number = uptime()): Promise<OutageWindow[]> {
+export async function readOutageWindows(now: number = Date.now(), uptimeS: number = uptime(), timeoutMs: number = LINEWATCH_TIMEOUT_MS): Promise<OutageWindow[]> {
   const windows = [restartWindow(now, uptimeS)]
   try {
     const base = (process.env.LINEWATCH_URL || LINEWATCH_DEFAULT_URL).replace(/\/+$/, "")
-    const res = await fetch(`${base}/api/outages?from=${now - 86400_000}&limit=50`, { signal: AbortSignal.timeout(LINEWATCH_TIMEOUT_MS) })
+    const res = await fetch(`${base}/api/outages?from=${now - 86400_000}&limit=50`, { signal: AbortSignal.timeout(timeoutMs) })
     const line = res.ok ? parseLineOutages(await res.json()) : null
     if (line) windows.push(...line)
   } catch {

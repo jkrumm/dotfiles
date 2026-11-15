@@ -6,6 +6,8 @@ import { type Graded, type JobState, type OutageWindow, HOLD_AFTER_BACK_MS, OUTA
 
 const NOW = Date.parse("2026-11-15T12:00:00Z")
 const MIN = 60_000
+// The production 3 s fetch timeout flaked the loopback call at host load 25-60: the test asserts the answer, not the deadline.
+const SLOW_HOST_MS = 60_000
 const ago = (min: number) => new Date(NOW - min * MIN).toISOString()
 const loaded = () => true
 
@@ -125,20 +127,20 @@ describe("line outage / host restart: failures it caused are held, not filed", (
     const port = server.port
     try {
       process.env.LINEWATCH_URL = `http://127.0.0.1:${port}`
-      const up = await readOutageWindows(NOW, 3600)
+      const up = await readOutageWindows(NOW, 3600, SLOW_HOST_MS)
       expect(up.map((w) => w.kind)).toEqual(["restart", "line"])
       expect(up[1].end).toBeNull()
       process.env.LINEWATCH_URL = `http://127.0.0.1:${port}/nope`
-      expect((await readOutageWindows(NOW, 3600)).map((w) => w.kind)).toEqual(["restart"])
+      expect((await readOutageWindows(NOW, 3600, SLOW_HOST_MS)).map((w) => w.kind)).toEqual(["restart"])
       await server.stop(true)
       process.env.LINEWATCH_URL = `http://127.0.0.1:${port}`
-      expect((await readOutageWindows(NOW, 3600)).map((w) => w.kind)).toEqual(["restart"])
+      expect((await readOutageWindows(NOW, 3600, SLOW_HOST_MS)).map((w) => w.kind)).toEqual(["restart"])
     } finally {
       await server.stop(true)
       if (saved === undefined) delete process.env.LINEWATCH_URL
       else process.env.LINEWATCH_URL = saved
     }
-  })
+  }, SLOW_HOST_MS * 2)
 })
 
 describe("--report: an undeliverable alert is spooled and replayed once", () => {
