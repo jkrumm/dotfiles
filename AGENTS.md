@@ -114,7 +114,7 @@ in bypass, not manual); `permissions.allow` and
 install step. Run **`make hooks-test`** (`bun test hooks/`) after any edit.
 `broad-kill-guard.ts` denies pattern kills (`pkill -f`, `killall`, `kill` fed by `pgrep -f`) — they reach other agents' sessions. Map: `docs/hooks.md`.
 `herdr-core-guard.ts` denies, in every session, restarting/stopping/updating/starting the core (`hc server restart|stop|start`, `hc update`, `hc machine update`, `make herdr-core-update`, `launchctl` on its label), reboot/shutdown/halt, killing herdr-core and wrappers at `~/.local/bin/{hc,herdr-core}` — the one update path is `make herdr-core-update`, by the owner by hand (`docs/incident-2026-11-13-mini-panic.md`).
-`review-bypass-guard.ts` denies review bypasses (`gh pr merge --admin`, except on the owner's `ADMIN_MERGE_REPOS`, the repo named by the command or, when it names none, by the cwd's remotes (a `cd` / `GH_REPO` is denied with the hint to name it); `gh api` merge / ruleset / branch-protection writes) in factory sessions (`FACTORY_SESSION`) — the owner does those by hand.
+`review-bypass-guard.ts` denies review bypasses (`gh pr merge --admin`, except on the owner's `ADMIN_MERGE_REPOS`, the repo named by the command or, when it names none, by the cwd's remotes (a `cd` / `GH_REPO` / `GH_HOST` / `GIT_*` is denied with the hint to name it); `gh api` merge / ruleset / branch-protection writes) in factory sessions (`FACTORY_SESSION`) — the owner does those by hand.
 
 **Adding a global skill:** `skills/{name}/SKILL.md` → `make setup`. **Per-repo
 skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:**
