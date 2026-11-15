@@ -58,8 +58,10 @@ still in the queue.
 
 **Expected curve** (defaults, 3 in flight, 3 s apart, tailnet wait up to 120 s): with tailnet up at T, `waiting` falls by
 one every 3 s, the last send is typed at about T + 75 s for 25 sessions, and `running = resumable` about 2 to 3 minutes
-after tailnet-up. Short at 10 minutes is a finding. The heartbeat WARNs from there on (never FAIL, never DOWN) and stops
-measuring 45 minutes after boot.
+after tailnet-up. Short at 10 minutes is a finding. The heartbeat WARNs from there on (never FAIL, never DOWN), names the
+waiting count, files one factory signal per boot when any terminal waits, and stops measuring 45 minutes after boot. hc-resume
+re-reads the roster every 15 s for 10 minutes after it connects (`docs/herdr-core.md` §Rescan), so a terminal whose
+foreground was unknown in the first snapshot is resumed by a later read; if `waiting` stays anyway, the log says why.
 
 **3. `hc-resume.log`** (UTC). The lines that carry the curve:
 
@@ -73,7 +75,8 @@ rg -n 'hc-resume started|pacing:|tailnet|no core|resume ' ~/Library/Logs/hc-resu
 | `tailnet up after N ms` / `tailnet not up after … ms: resuming anyway` | the gate: N is the tailnet's own time, not ours |
 | `no core: …` | hc-resume refused a stray or a missing core and retries; nothing is typed until a launchd-born core answers |
 | `resume <addr> <session> (<account>)` | one send; consecutive stamps should be about 3 s apart, never more than 3 within a window of 3 s |
-| `resume <addr> failed: …`, `skip <addr>: …` | the per-terminal reason |
+| `resume <addr> failed: …`, `skip <addr>: …` | the per-terminal reason; a skip is logged once per terminal and reason (`foreground unknown`, `foreground is <program>`, `live <app> session (agent status)`), and a terminal whose foreground was unknown is read again by the rescan |
+| `rescan failed: …`, `rescan done after N s: …` | a failed `terminal.list` (first of a streak); the rescan ended because every resumable terminal is running or skipped on purpose |
 | `stream ended (core restart?), reconnecting` | the core's stream ended, **or hc-resume was restarted by a deploy** (`docs/herdr-core.md` §Core restarts, classified); a real core restart is followed by `no core:` or `resume` lines, never by a new pid |
 
 **4. `devhost-snapshots.jsonl`** (UTC, one line per 5-minute heartbeat plus the recovery line while the host is under 45

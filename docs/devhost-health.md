@@ -130,9 +130,15 @@ reasons, then the pacing lines in the log.
 `~/Library/Logs/devhost-snapshots.jsonl` as `{ts, up_s, tailnet_up_s, recovery: {resumable, running, waiting, skipped, sent}}`
 (`jq -c 'select(.recovery) | [.ts,.recovery]' ~/Library/Logs/devhost-snapshots.jsonl`: the curve per 5-minute run). From 10
 minutes after the heartbeat first saw the tailnet Running (`DEVHOST_RECOVERY_WARN_AFTER_S`, stamp
-`~/.local/state/devhost-health/tailnet-up-at`) it adds a **WARN** when running is below resumable: never a FAIL, never a
-DOWN. A terminal someone closed on purpose stays labelled and counts as waiting, so the WARN can outlast a real recovery;
-the window ends it. `DEVHOST_RECOVERY=0` turns the sub-check off. It never runs when no launchd-born core answers
+`~/.local/state/devhost-health/tailnet-up-at`) it adds a **WARN** when running is below resumable, naming how many
+terminals still wait at a shell: never a FAIL, never a DOWN. When any wait, it also files **one factory signal per boot** on
+this repo (`Claude terminals still waiting at a shell after a boot`, the waiting terminals with hc-resume's verdict for
+each; stamp `~/.local/state/devhost-health/recovery-signal-at`, valid only if written after the boot; a signal the factory
+refused leaves no stamp and is retried by the next heartbeat). Added for 2026-11-15, when 11 terminals sat at a shell for
+7 h 13 min and the line read "11 waiting" without anyone being told; the rescan in `scripts/hc-resume.ts`
+(`docs/herdr-core.md` §Rescan) is the fix, this is the net under it. The clock is the tailnet-up stamp, not the core start:
+the heartbeat has no core start time, and hc-resume's own gate waits for the tailnet. A terminal someone closed on purpose
+stays labelled and counts as waiting, so the WARN can outlast a real recovery and may file the signal; the window ends it. `DEVHOST_RECOVERY=0` turns the sub-check off. It never runs when no launchd-born core answers
 (`lib/core-up.sh` first, so `hc` never starts a core) and its one `terminal.list` over `hc connect` is bounded at 5 s.
 Rollback: revert the commit; nothing else depends on it.
 
