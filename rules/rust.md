@@ -24,10 +24,10 @@ Several leads build at once on 12 cores and 32 GiB. Measured patterns, copy them
 
 | Need | Pattern | Reference |
 |-|-|-|
-| A new worktree without a cold build | a finished `target` cloned copy-on-write (`cp -c`), own sources touched afterwards; 182 s became 6.6 s | weatherorb `core/seed.sh`, `docs/v2/design/11-foundation.md` §4.3 |
+| A new worktree without a cold build | `cargo-target-seed` (on PATH on the mini): a finished `target` cloned copy-on-write, own sources touched afterwards (`--own` is required); 182 s became 6.6 s. Call it from the Makefile when `command -v cargo-target-seed` succeeds, cold otherwise; never copy the script | dotfiles `docs/cargo-target-seed.md` (origin: weatherorb `core/seed.sh`, `docs/v2/design/11-foundation.md` §4.3) |
 | The same without a seed | sccache from the Makefile's environment (only when installed, with `CARGO_INCREMENTAL=0`), never in `.cargo/config.toml`; 81 % hits in a fresh worktree | shutterflow `docs/engineering/build-cache.md` |
 | One `target` per worktree | a shared `CARGO_TARGET_DIR` serialises every build on its lock | both |
-| A job cap | five leads at cargo's default jobs took the mini to load 152; cap cargo and the test runner | weatherorb `core/core.mk` `CORE_JOBS` |
+| A job cap | five leads at cargo's default jobs took the mini to load 152; cap cargo and the test runner with `cargo-target-seed jobs` (cores / 3, `CARGO_SEED_JOBS` overrides) | dotfiles `docs/cargo-target-seed.md`, weatherorb `core/core.mk` `CORE_JOBS` |
 | Tests of what changed only | nextest's `rdeps()` filter from an xtask, or a script over the crate graph | weatherorb `cargo xtask affected`, shutterflow `scripts/check-changed/` |
 | A test runner with timeouts and JUnit | cargo-nextest, config in `.config/nextest.toml` | weatherorb `core/.config/nextest.toml` |
 
