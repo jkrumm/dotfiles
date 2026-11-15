@@ -30,6 +30,8 @@ One entry in the owner repo's `mini-services.yaml` (in a new repo, create the fi
 `container`, `door`, `needs: [vm]` for compose, `start`/`stop`, and `memory_mib`. The budget is 1.5 times the footprint after an
 hour of use: start it, wait an hour, read `make -C ~/SourceRoot/dotfiles mini-ps`, set the number. Never ship 0 or a guess.
 
+Add `bun ~/SourceRoot/dotfiles/scripts/mini-registry.ts lint` to the repo's `make check` (guard it with `[ ! -f … ] ||` where CI has no dotfiles): a name, label or container another registry already claims then fails before the merge (`docs/mini-registry.md`).
+
 ## 4. Route the heartbeat
 
 A core service reports a heartbeat: `factory door route-set --source <source> --monitor <monitor> --repo <repo> --issue <id>`

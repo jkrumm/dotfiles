@@ -10,7 +10,7 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 | Registry | `config/mini/services.yaml` (the host's list) plus a `mini-services.yaml` at the root of any repo under `~/SourceRoot` or `~/IuRoot` |
 | Tool | `scripts/mini-registry.ts` (bun), `scripts/mini-registry.test.ts` |
 | Verbs | `make mini-ps` · `make mini-up NAME=<service>` · `make mini-down NAME=<service> [FORCE=1]` · `make mini-profile NAME=<work\|dev-db> UP=1\|0` |
-| Checked by | `make doctor` (section *Service registry*) and the heartbeat component `check_registry` |
+| Checked by | `make check` (`lint`, before a merge), `make doctor` (section *Service registry*) and the heartbeat component `check_registry` |
 
 ## Tiers
 
@@ -55,6 +55,15 @@ A file may end with a top-level `debt:` list of `{ repo, target, rule, plan }` f
 A repo that adds a job registers it in the same commit: a `mini-services.yaml` at its root with the same `services:`
 list (only the repo's own entries; `repo` may be omitted). A duplicate name or label across files is an error, and a
 registry that does not parse or validate FAILs the check.
+
+**A clash fails in the adding repo, before the merge.** `bun ~/SourceRoot/dotfiles/scripts/mini-registry.ts lint` reads the
+repo's `mini-services.yaml` (`--file F`; `--repo R` names the directory it stands for, default the repo's own name even from
+a worktree; `--host` for `config/mini/services.yaml`) in place of the checkout's copy and validates it with every other
+registry: a duplicate name, a label or container two rows claim, a need nobody provides. It is static (no probe, no host
+refusal) and exits 1 naming both rows. A repo with a `mini-services.yaml` runs it in its `make check`, guarded where the
+dotfiles checkout can be absent (CI): `[ ! -f ~/SourceRoot/dotfiles/scripts/mini-registry.ts ] || bun ~/SourceRoot/dotfiles/scripts/mini-registry.ts lint`.
+This repo's own file is `make mini-registry-lint`, part of `make check`. Before it, the second row for an existing label
+(2026-11-14, `com.jkrumm.agent-workflows-host`) was found only after the deploy, by the next lead's Watch.
 
 ## `make mini-ps`
 
