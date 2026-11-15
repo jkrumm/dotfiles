@@ -107,6 +107,7 @@ MacBook (different user home): LaunchAgent programs were read over ssh; the TCC 
 | mini | Full Disk Access → `~/.local/share/herdr-core/active/Herdr Core.app` | the core, every holder and every program in a core terminal; survives updates (Developer ID identity at a fixed path). Re-grant only if the signing identifier or team changes |
 | mini | Local Network and microphone prompts for Herdr Core | answer them once at the mini's screen; unanswered, terminal programs that reach the LAN freeze or fail |
 | MacBook | Full Disk Access → the same bundle path | same; the Herdr app's terminals run in that core, and it is what spares `op` the AppData dialog (§1Password) |
+| mini | Full Disk Access → `/usr/sbin/smbd` | serving the external volume as `EXT` (`docs/external-ssd.md` §Share). Without it the client answers "the share does not exist" and the kernel log shows `Sandbox: smbd deny(1) file-read-data /Volumes/EXT`. Switched on in System Settings → Privacy & Security → Full Disk Access (over Screen Sharing from the MacBook; `+`, ⌘⇧G, `/usr/sbin/smbd`); not scriptable, TCC.db is not writable. The path is not versioned, so macOS updates keep it |
 | MacBook | Local Network and microphone prompts | as on the mini |
 | MacBook | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | only for `com.jkrumm.opbackup` (the pattern "Launcher"); granted, keyed on the binary's current cdhash |
 | MacBook | Full Disk Access → Ghostty.app (optional) | `op` and everything else started from a plain Ghostty tab |

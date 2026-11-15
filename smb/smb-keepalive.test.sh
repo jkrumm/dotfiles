@@ -254,6 +254,18 @@ check "remounted when the volume is back" grep -q "/Volumes/EXT (smbfs" "$FIX/ta
 unset KIND
 CONF="$CONF_SAVED"
 
+echo "# user '-' = no user in the URL (Kerberos sign-in): a named user would wait on a prompt"
+echo "srv.example.test - EXT yes macbook volatile" > "$CONF"
+: > "$FIX/table"; : > "$FIX/osascript.args"
+KIND=macbook run
+check "mounts" grep -q "/Volumes/EXT (smbfs" "$FIX/table"
+check "the URL names the server and share only" grep -q 'smb://srv.example.test/EXT"' "$FIX/osascript.args"
+KIND=macbook run
+check "the next run finds it healthy (the mount table has no user either)" has "EXT: healthy"
+echo "srv.example.test fixture-user EXT yes macbook volatile" > "$CONF"
+: > "$FIX/table"
+unset KIND
+
 echo "# missing declaration: exit 1"
 out=$(PATH="$FAKE:$PATH" SMB_HOST_KIND=mini SMB_SHARES_CONF="$TMP/none" bash "$HERE/smb-keepalive.sh" 2>&1); rc=$?
 check "exits 1" test "$rc" -eq 1

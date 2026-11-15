@@ -146,7 +146,10 @@ probe() {
 
 smb_mount_macbook() {
   local server="$1" user="$2" share="$3" rc
-  bounded "$MOUNT_SECONDS" osascript -e "mount volume \"smb://${user}@${server}/${share}\""
+  # User "-" = no user in the URL: the Mac signs in on its own (the mini accepts the Apple ID's Kerberos ticket,
+  # and Finder's own connect mounted as that identity). A named user would not match it and the mount waits on a prompt.
+  [ "$user" = "-" ] && user=""
+  bounded "$MOUNT_SECONDS" osascript -e "mount volume \"smb://${user:+$user@}${server}/${share}\""
   rc=$?
   case "$rc" in
     0)   log "$share: mounted at $(mount_point "$server" "$share")"; return 0 ;;

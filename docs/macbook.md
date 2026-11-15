@@ -131,7 +131,10 @@ An `Operation not permitted` from any probe is "cannot probe" (logged, mount lef
 volume can be absent on the server, like the mini's external SSD (`docs/external-ssd.md` §Share). A mount that fails there logs
 `<share>: unavailable (volatile share, …)` and does not count toward the job's exit code, so an unplugged or locked drive does not
 turn the job red every minute and file a background-job Issue; the next run mounts it when the volume is back. A stale mount of
-such a share is still force-unmounted first. Mini-served shares (`EXT`, the home folder) are scoped `macbook`: the mini reads its
+such a share is still force-unmounted first. A row's user `-` leaves the user out of the mount URL: the mini's
+shares are mounted by Finder as the Apple ID's Kerberos identity (the mount table shows a `com.apple.idms…` user), so a URL naming
+the mini user matches no credential and `osascript mount volume` waits on a login prompt until the 45 s bound (measured
+2026-11-15: a force-unmounted EXT never came back). Mini-served shares (`EXT`, the home folder) are scoped `macbook`: the mini reads its
 own disk.
 
 | Host | Mount | Password | Mount point |

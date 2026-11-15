@@ -113,8 +113,8 @@ or on the next network change (`docs/macbook.md` §HomeLab Samba). Shares are de
 |-|-|-|-|
 | `SSD` | HomeLab Samba | `/Volumes/SSD`, automount | `~/HomeLab/SSD`, automount |
 | `HDD` | HomeLab Samba | `/Volumes/HDD`, automount | `~/HomeLab/HDD`, automount |
-| `EXT` | mini (plan row `smb-ssd-share`, not built yet) | `/Volumes/EXT`, automount | local disk |
-| home folder with `~/Shuttle` | mini | mounted by hand today; automount comes with `smb-ssd-share` | local disk |
+| `EXT` | mini (macOS file sharing, SMB; share point = the volume's mount point, `docs/external-ssd.md` §Share) | `/Volumes/EXT`, automount (volatile: skipped while the drive is absent or locked) | local disk |
+| home folder with `~/Shuttle` | mini (macOS file sharing) | `/Volumes/<mini user>`, automount | local disk |
 
 Agents on the mini read and write HomeLab files with `hl` (S3). The SMB mounts are for bulk
 copies and for people. **A launchd job cannot read an SMB mount**: macOS answers `Operation not

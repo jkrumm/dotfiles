@@ -113,6 +113,10 @@ there. Plan row `smb-ssd-share`.
   point records `eDSPermissionError`, `sudo -n` asks for a password). So it is one owner step, from a Herdr terminal on the mini (that
   terminal holds the Full Disk Access the gate's sentinel read needs): `sudo ~/SourceRoot/dotfiles/scripts/external-volume-share.sh add`.
   The share point survives reboots and unlocks; it does not need repeating.
+- **`smbd` needs Full Disk Access** (`docs/tcc.md` §One-time grants), or the client says "the share does not exist". Three causes, in
+  the order they showed on 2026-11-15: no access group on the share point (the script now makes one), no `smbd` grant (kernel log:
+  `Sandbox: smbd deny(1) file-read-data /Volumes/EXT`, `log show --predicate 'eventMessage CONTAINS "smbd deny"'`), and the
+  MacBook not yet holding the Keychain entry. An ACL block would look different: a timeout or "server not found", never a reply.
 - **Users and permissions as the home share has them:** the Mac's SMB-enabled users, no guest; the volume is mounted `noowners`, so
   file permissions add nothing.
 - **The MacBook side** is two rows in `dotfiles-private/smb-shares.conf` (EXT and the home share), mounted by the keepalive
