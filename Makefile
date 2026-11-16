@@ -861,7 +861,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1125,6 +1125,13 @@ context-load: ## What this repo's texts and every repo's AGENTS.md put into agen
 
 context-load-check: ## Fail when an every-turn text of this repo is over budget (part of `make check`; the suite is in jobs-test)
 	@bun $(DOTFILES_DIR)/scripts/context-load.ts --check
+
+.PHONY: cli-refs cli-refs-check
+cli-refs: ## Quoted CLI commands and flags of the agent texts that the live CLI does not have (ARGS="--root <dir> --json")
+	@bun $(DOTFILES_DIR)/scripts/cli-refs.ts $(ARGS)
+
+cli-refs-check: ## Fail on a stale quoted command or flag; asks the installed CLIs' --help (a missing CLI is skipped); part of `make check`, the suite is in jobs-test
+	@bun $(DOTFILES_DIR)/scripts/cli-refs.ts
 
 .PHONY: jobs-test
 jobs-test: ## bun test for jobrun + jobs-grade (deadline, lock, atomic write, every grade)
@@ -3965,6 +3972,7 @@ help:
 	@echo "  make brew-upgrade-dry   Preview without upgrading"
 	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md, and every mapped label for this machine exists"
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
+	@echo "  make cli-refs           quoted CLI commands/flags in agent texts the live CLI lacks (ARGS=\"--root <dir> --json\")"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir step)"

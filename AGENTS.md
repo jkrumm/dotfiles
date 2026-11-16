@@ -140,7 +140,7 @@ Keep this file **under 40k chars** (`wc -c AGENTS.md`; the agent context limit i
 
 ## Validate
 
-`make check` (every target in `check:`, all hermetic). Any edit to
+`make check` (every target in `check:`, all hermetic bar `cli-refs`, which asks the installed CLIs' `--help` and fails on a quoted command or flag they lack; a deliberate historical mention carries `<!-- cli-refs: ignore -->`). Any edit to
 `hooks/` → `make hooks-test`; any edit to `scripts/secrets-run` → the full
 guardrail under *Secrets*. Contract: `docs/agents-md.md`.
 
