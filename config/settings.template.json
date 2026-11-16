@@ -185,6 +185,7 @@
   "awaySummaryEnabled": false,
   "spinnerTipsEnabled": false,
   "autoCompactWindow": 600000,
+  "skillListingBudgetFraction": 0.03,
   "agentPushNotifEnabled": true,
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": false

@@ -84,14 +84,23 @@ is silently absent. That is why the rule asks for proof that moved text is still
 
 The three marked "our choice" are defaults to test, not findings.
 
-## Not yet proven here
+## Proven here, and not yet
 
-- **Load-time injection** (`!` and a command in backticks in a skill body) is read from the docs, not run. Issue 1636 is to prove
-  it in an owner session and in a factory lead before any skill depends on it.
-- **Whether a session's listing drops descriptions.** At four characters a token, 1 % of a 200,000-token window
-  is about 8,000 characters, and our 26 descriptions are 9,531 characters before the built-in skills are counted. `/context` in
-  a session of that size shows what was dropped; Issue 1636 is to read it and set `skillListingBudgetFraction` if anything was.
-- **Whether a nested `AGENTS.md` is reached reliably enough** to hold what "Gotchas" held. The first repo to split is to prove
+- **Load-time injection works (2026-11-16).** A scratch skill whose body held an injected `hc --help` showed the verb
+  list to the model in three places: a factory lead's session (`Skill` returned the list, and a second, failing command
+  printed its `|| echo` fallback without aborting the skill), a session started with `rd work` (Claude Code 2.1.325; it
+  quoted `run <cmd|template> [task]`, `ls` and `get <t>` back), and a subagent whose agent file preloads the skill with
+  `skills:` (it saw the output, not the literal line). `allowed-tools: Bash(hc --help *)` in the skill's frontmatter was
+  accepted. An agent file itself cannot inject. One failure to design for: a command that exits non-zero aborts the skill,
+  so every injected line ends in `|| echo "<cli> is not on this machine"`, and `scripts/cli-refs.ts` runs each one with and
+  without its CLI.
+- **The skill listing (2026-11-16) drops descriptions on a 200,000-token window, and `skillListingBudgetFraction` fixes it.**
+  Models here are natively 1M tokens and `autoCompactWindow` is 600,000: `/context` listed all 26 descriptions (the whole
+  Skills category is 5.5k tokens with the built-in skills). With `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` the window is 200,000
+  and every one of our 26 skills was listed by name only, while the built-in skills kept theirs. A smaller
+  `autoCompactWindow` (300,000) dropped nothing, so the budget follows the model's own window. With
+  `skillListingBudgetFraction` at 0.025 descriptions were still dropped (`modern-web-guidance`, `analyze` and `distill` among them); at 0.03 all were kept. The template sets 0.03: the smallest step that keeps all, with about 500 tokens to spare.
+- **Not yet proven: whether a nested `AGENTS.md` is reached reliably enough** to hold what "Gotchas" held. The first repo to split is to prove
   it with the marker method in `docs/agents-md.md`.
 
 ## Open work
