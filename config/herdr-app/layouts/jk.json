@@ -56,17 +56,6 @@
           ]
         },
         {
-          "id": "glance",
-          "type": "block",
-          "size": {
-            "px": 388
-          },
-          "background": "chrome",
-          "content": {
-            "mod": "jk-glance"
-          }
-        },
-        {
           "id": "sidebar-footer",
           "type": "block",
           "size": {
@@ -169,13 +158,32 @@
         },
         {
           "id": "status",
-          "type": "block",
+          "type": "row",
           "size": {
             "px": 28
           },
-          "content": {
-            "mod": "jk-status"
-          }
+          "children": [
+            {
+              "id": "glance-bar",
+              "type": "block",
+              "size": {
+                "px": 780
+              },
+              "content": {
+                "mod": "jk-glance",
+                "props": {
+                  "bar": true
+                }
+              }
+            },
+            {
+              "id": "status-bar",
+              "type": "block",
+              "content": {
+                "mod": "jk-status"
+              }
+            }
+          ]
         }
       ]
     },

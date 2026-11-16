@@ -1,9 +1,11 @@
 // The status bar: CPU and memory of this computer and of every connected machine (the
-// mini), Claude Max usage per account, then branch, "needs you" and the palette hint.
+// mini), Claude Max usage per account, then branch and the palette hint. It shares the
+// status row with jk-glance's bar (the factory's items, left of this block, with the
+// "needs you" count): what does not fit its width is dropped, least important first (`fit`).
 // Click a machine or the usage for jk-details (history, top processes, quota resets).
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, theme, run, window, exec, hc, shared, setShared, openOverlay } from "herdr";
+import { spaces, theme, run, window, exec, hc, shared, setShared, openOverlay } from "herdr";
 
 // macOS: "<cpu %> <used GiB> <total GiB>", one decimal each. Used = active + wired +
 // compressed, the figure Activity Monitor calls memory used; the file cache is left out.
@@ -62,6 +64,26 @@ const HISTORY = 180; // samples per machine: 15 min at STATS_MS
 const STALE_S = 3 * 3600;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Room each item takes at the bar's 11.8 px text, gap included, rounded up: a drop costs nothing, an overlap does.
+const ROOM = { local: 180, usage: 210, kuma: 90, logins: 130, remote: 140, branch: 120, palette: 100 };
+const BAR_PAD = 16;
+
+// The items that fit `width`, in the order they matter (a missing width, before the first measurement, is everything).
+// `want` is the set of items that exist now; `remotes` how many machines are connected.
+export function fit(width, want, remotes = 0) {
+  const order = ["local", "usage", "kuma", "logins", ...Array.from({ length: remotes }, (_, i) => `remote${i}`), "branch", "palette"];
+  const shown = new Set();
+  let left = (width ?? Infinity) - BAR_PAD;
+  for (const key of order) {
+    const kind = key.startsWith("remote") ? "remote" : key;
+    if (kind !== "remote" && !want.has(key)) continue;
+    if (ROOM[kind] > left) break;
+    left -= ROOM[kind];
+    shown.add(key);
+  }
+  return shown;
+}
 
 // One popup spec, duplicated in jk-details (mods can't import each other; keep in step): frameless (the card draws
 // its own frame, so the measured card is the popup), bottom edge 10 px above the anchor.
@@ -216,18 +238,28 @@ export default class JkStatus extends View {
   render() {
     const t = theme();
     const space = spaces().find((s) => s.active);
-    const needs = agents().filter((a) => a.status === "blocked").length;
+    const want = new Set(["local", "palette"]);
+    if (this.usage.length > 0) want.add("usage");
+    if (this.issues.length > 0) want.add("logins");
+    if (space?.branch) want.add("branch");
+    if (this.kuma) want.add("kuma");
+    const shown = fit(this.width, want, this.remotes.length);
     const sep = () => div().w(1).h(12).bg(t.border);
-    return h_flex().size_full().px(8).gap(10).items_center().bg(t.chrome).border_t(1).border_color(t.border).text_size(11.8).text_color(t.muted)
+    return h_flex().size_full().px(8).gap(10).overflow_hidden().on_size_change((size, cx) => {
+      const width = Math.floor(size.width);
+      if (width === this.width) return;
+      this.width = width;
+      cx.notify();
+    }).items_center().bg(t.chrome).border_t(1).border_color(t.border).text_size(11.8).text_color(t.muted)
       .child(this.machine(t, null, this.stats[""]))
-      .children(this.remotes.map((m) => this.machine(t, m, this.stats[m])))
-      .when(this.usage.length > 0, (el) => el.child(sep())
+      .children(this.remotes.filter((_, i) => shown.has(`remote${i}`)).map((m) => this.machine(t, m, this.stats[m])))
+      .when(shown.has("usage"), (el) => el.child(sep())
         .child(h_flex().id("usage").gap(10).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
           .on_mouse_move((e) => this.track("usage", e))
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "usage"))
           .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))
           .when(pool(this.usage) != null, (el) => el.child(div().text_color(t.muted).child(`∑${pool(this.usage)}%`)))))
-      .when(this.issues.length > 0, (el) => {
+      .when(shown.has("logins"), (el) => {
         const bad = this.issues.some((x) => x.state === "fail");
         const who = [...new Set(this.issues.map((x) => `${x.id}·${x.machine === "macbook" ? "MacBook" : x.machine}`))].join(" ");
         return el.child(h_flex().id("logins").gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
@@ -236,13 +268,12 @@ export default class JkStatus extends View {
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "logins"))
           .child(`⚠ ${who}`));
       })
-      .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
-      .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
+      .when(shown.has("branch"), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .child(div().flex_1())
-      .when(Boolean(this.kuma), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).text_color(t.dim)
+      .when(shown.has("kuma"), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).text_color(t.dim)
         .tooltip(this.kuma.down.length ? `Uptime Kuma down: ${this.kuma.down.join(", ")}` : "Uptime Kuma: every active monitor up")
         .child(div().child(`▲${this.kuma.up}`))
         .child(div().text_color(this.kuma.down.length ? t.blocked : t.dim).child(`▼${this.kuma.down.length}`))))
-      .child(div().id("palette").px(6).text_color(t.dim).on_click(() => run("app.palette")).child(`${window()?.platform === "macos" ? "⌘" : "Ctrl"} Shift P`));
+      .when(shown.has("palette"), (el) => el.child(div().id("palette").px(6).text_color(t.dim).on_click(() => run("app.palette")).child(`${window()?.platform === "macos" ? "⌘" : "Ctrl"} Shift P`)));
   }
 }
