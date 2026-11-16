@@ -1,6 +1,6 @@
 ---
 name: img
-description: Manage the personal image stack — generate images with agw image, upload to the public CDN with transform URLs, and share privately via time-limited presigned links. Use whenever an image needs a URL (public or private) for an article, blog post, vault note, README, OpenGraph tag, or a one-off share; when an image must be generated or edited from a prompt; when a background must be removed ("make this transparent", "cut out"); when a favicon, PWA icon, apple-touch-icon or macOS/iOS app icon set is needed; or when the user says "upload this image", "CDN link", "private image", "share this image privately", "generate an image", "host this screenshot", "resize this", or asks where an image lives.
+description: Personal image stack: generate or edit images with agw image, remove a background ("make this transparent", "cut out"), make favicon, PWA, apple-touch-icon or macOS/iOS app icon sets, upload to the public CDN with transform URLs, share privately via presigned links. Use whenever an image needs a URL (article, blog post, vault note, README, OpenGraph tag) or the user says "upload this image", "CDN link", "private image", "generate an image", "host this screenshot", "resize this", or asks where an image lives.
 ---
 
 # Image stack

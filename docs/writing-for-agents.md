@@ -24,6 +24,12 @@ largest load, at the median close to everything global together, and the reason 
 - **Overviews are common.** dotfiles' "Symlink map" is 8,586 bytes; tinycast-extensions' "Layout" is 10,557.
 - **A CLI can be invisible.** agw has 82 commands in 48 groups; 37 groups are named in no always-loaded text.
 
+Reproduce the table with `make context-load` in dotfiles (`scripts/context-load.ts`; `--json` for rows, `--repos <dir>` to choose
+the repos, default `~/SourceRoot`). It prints `bytes<TAB>budget<TAB>kind<TAB>path` per text, skill descriptions in characters,
+then the always-loaded total of dotfiles' own texts, then one line per `AGENTS.md` of every repo, largest first. `make check`
+runs `--check`: an every-turn text of dotfiles over its budget fails it; on-reach texts and `AGENTS.md` files only warn. The
+budgets live in the script and in the rule; change both together.
+
 At about four bytes a token, a session in iris starts about 38,000 tokens deep before the task, the tool definitions and the
 system prompt.
 

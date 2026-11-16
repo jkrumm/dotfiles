@@ -1,6 +1,6 @@
 ---
 name: apple-signing
-description: Apple developer account, certificates, keys and portal setup for any of our iOS/macOS apps — which credential lives where (1Password apple-developer item, secrets-run), the one-time portal steps for a new app (App Group, App IDs, Push, App Store Connect record), headless device signing, APNs, TestFlight, the shared Apple slot (one lock for every xcodebuild), and the Mac release recipe outside the store (Developer ID signing, notarization, Sparkle appcast and its missing Team ID pin, GitHub release from the mini or a hosted runner, formula versus cask, notification permission and the time-sensitive entitlement). Use before creating, signing or releasing a new Apple app, or when xcodebuild, codesign or notarytool fails on provisioning, entitlements, App Groups, Push, the signing keychain or a notary verdict.
+description: Apple developer account, certificates, keys and portal setup for our iOS/macOS apps: where each credential lives (1Password apple-developer, secrets-run), new-app portal steps (App Group, App IDs, Push, App Store Connect record), headless device signing, APNs, TestFlight, the shared Apple slot (one xcodebuild lock), the Mac release recipe (Developer ID, notarization, Sparkle appcast, formula vs cask). Use before creating, signing or releasing an Apple app, or when xcodebuild, codesign or notarytool fails on provisioning, entitlements, App Groups, Push, the signing keychain or a notary verdict.
 ---
 
 # Apple signing
