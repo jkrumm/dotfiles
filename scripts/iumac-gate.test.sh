@@ -56,6 +56,7 @@ mkstub "$SC/claude-relogin.sh" relogin
 mkstub "$SC/claude-account-snapshot.sh" snapshot
 mkstub "$SC/lib/core-up.sh" core-up
 mkstub "$SC/macbook-sync.sh" macbook-sync
+mkstub "$SC/herdr-glance-sync.sh" glance-sync
 mkstub "$H/.local/bin/claude-account" claude-account
 mkstub "$H/.local/bin/hc" hc
 mkstub "$H/.bun/bin/bun" bun
@@ -118,6 +119,7 @@ expect_allowed "account-usage" "account-usage" "claude-account|usage|--json"
 expect_allowed "account-snapshot" "account-snapshot" "snapshot"
 expect_allowed "account-snapshot-core" "account-snapshot-core" "core-up
 hc|exec|--timeout|30|bash|$SC/claude-account-snapshot.sh"
+expect_allowed "herdr-glance-sync" "herdr-glance-sync" "glance-sync"
 expect_allowed "hc-version" "hc-version" "hc|--version"
 expect_allowed "dotfiles-sync" "dotfiles-sync" "macbook-sync"
 assert_eq "dotfiles-sync: SSH_AUTH_SOCK empty inside" "unset" "$(cat "$REC/macbook-sync.sock")"
@@ -172,6 +174,8 @@ expect_refused "hc-version extra" "hc-version x"
 expect_refused "dotfiles-sync argument" "dotfiles-sync --run"
 expect_refused "dotfiles-sync branch argument" "dotfiles-sync main"
 expect_refused "dotfiles-sync chained" "dotfiles-sync; id"
+expect_refused "herdr-glance-sync argument" "herdr-glance-sync now"
+expect_refused "herdr-glance-sync chained" "herdr-glance-sync; id"
 expect_refused "bash -c" "bash -c id"
 expect_refused "sh" "sh"
 expect_refused "op read" "op read x"

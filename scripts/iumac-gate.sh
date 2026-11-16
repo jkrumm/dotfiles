@@ -5,7 +5,7 @@
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
 # (reachability probe, human-queue dialogs, notifications, claude re-login,
-# account snapshots, a dotfiles pull with its link targets, usage-tracker pulls); this gate maps each verb to its one
+# account snapshots, a dotfiles pull with its link targets, the Herdr glance pull, usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
 # outbound credential can do what the mini needs and no more.
 #
@@ -176,6 +176,15 @@ end run' | exec osascript - "$title" "$text"
     [ "$argc" -eq 1 ] || refuse "$verb"
     log "$verb" allow
     exec bash "$H/SourceRoot/dotfiles/scripts/macbook-sync.sh"
+    ;;
+
+  herdr-glance-sync)
+    # Pull the live factory release's jk-glance through the MacBook's core and reload the Herdr layout when it
+    # changed (scripts/herdr-glance-sync.sh). No arguments; the mini's post-deploy hook is the caller.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    export PATH="$H/.local/bin:/opt/homebrew/bin:$PATH"
+    exec bash "$H/SourceRoot/dotfiles/scripts/herdr-glance-sync.sh"
     ;;
 
   hc-version)

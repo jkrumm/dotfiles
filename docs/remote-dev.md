@@ -387,8 +387,9 @@ macOS ships no Tailscale SSH server.
   | `account-usage` | `claude-account usage --json` |
   | `account-snapshot` | `scripts/claude-account-snapshot.sh` (plain-ssh fallback) |
   | `account-snapshot-core` | the same through the MacBook's own core; exit 99 = core not up |
+  | `herdr-glance-sync` | `scripts/herdr-glance-sync.sh`: pull the live factory release's `jk-glance` through the MacBook's core, check it, swap it in and reload the Herdr layout when it changed. No arguments. The caller is the mini's factory post-deploy hook (`scripts/factory-post-deploy.sh`) |
   | `hc-version` | `hc --version` |
-  | `dotfiles-sync` | `scripts/macbook-sync.sh`: fast-forward `~/SourceRoot/dotfiles` from the public repo over https (no identity), then run the `make` targets of `config/macbook-sync.tsv` whose path prefix the pulled range touched (first row: `herdr-app-setup`, with the jk-glance copy off because it needs `ssh mini`). Refuses a dirty tree, a branch other than master and a diverged master; exit 1 on a refusal or a failed target |
+  | `dotfiles-sync` | `scripts/macbook-sync.sh`: fast-forward `~/SourceRoot/dotfiles` from the public repo over https (no identity), then run the `make` targets of `config/macbook-sync.tsv` whose path prefix the pulled range touched (first row: `herdr-app-setup`). Refuses a dirty tree, a branch other than master and a diverged master; exit 1 on a refusal or a failed target |
 
   The gate serves `rsync` pulls of the four usage-tracker stats dirs only; the
   forced command overrides `sftp` and `scp`, so no other path is readable.

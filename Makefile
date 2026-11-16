@@ -132,6 +132,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
 	@$(MAKE) --no-print-directory _setup-factory-spaces
+	@$(MAKE) --no-print-directory _setup-factory-post-deploy
 	@$(MAKE) --no-print-directory claude-accounts-setup
 	@$(MAKE) --no-print-directory claude-accounts-keepalive-setup
 	@$(MAKE) --no-print-directory _setup-usage-tracker
@@ -161,6 +162,19 @@ setup:
 _setup-factory-spaces:
 	@echo "  Factory spaces..."
 	@python3 $(DOTFILES_DIR)/scripts/factory-spaces.py | sed 's/^/    · /'
+
+.PHONY: _setup-factory-post-deploy
+# The factory's deploy runs ~/.config/factory/post-deploy after a healthy deploy; ours tells the MacBook to pull the
+# live jk-glance. Mini only (backend marker == cache): the MacBook has no factory release and no `ssh iumac` key.
+_setup-factory-post-deploy:
+	@if [ "$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || true)" = "cache" ]; then \
+		echo "  Factory post-deploy hook..."; \
+		mkdir -p "$(HOME)/.config/factory"; \
+		chmod +x $(DOTFILES_DIR)/scripts/factory-post-deploy.sh; \
+		$(MAKE) --no-print-directory _link \
+			SRC="$(DOTFILES_DIR)/scripts/factory-post-deploy.sh" \
+			DST="$(HOME)/.config/factory/post-deploy"; \
+	fi
 
 .PHONY: factory-spaces-test
 factory-spaces-test: ## Hermetic suite for factory-spaces.py (temp HOME, fixture groups.json)
@@ -861,7 +875,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -3467,6 +3481,10 @@ obsidian-autostart-teardown:
 .PHONY: herdr-app-setup
 herdr-app-setup:
 	@bash $(DOTFILES_DIR)/scripts/herdr-app-setup.sh
+
+.PHONY: herdr-glance-sync-test
+herdr-glance-sync-test: ## Hermetic test for herdr-glance-sync.sh (stub hc and herdr-app, temp dirs)
+	@bash $(DOTFILES_DIR)/scripts/herdr-glance-sync.test.sh
 
 .PHONY: herdr-app-keys-test
 herdr-app-keys-test: ## Hermetic test for herdr-app-keys.sh (jq merge into a temp keys.json)
