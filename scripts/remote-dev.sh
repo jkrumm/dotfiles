@@ -883,21 +883,40 @@ cmd_reap() {
     python3 \"\$d/hc-reap.py\"$args"
 }
 
+# The reference for the command line: `rd --help` (every verb) and `rd <verb> --help` (one in full). Both print to stdout,
+# exit 0 and run nothing: help is answered before the dispatch, so no core is contacted and no agent is started.
 usage() {
   cat <<'EOF'
 
   rd — drive the mini's herdr-core agents from anywhere
 
-    rd work <repo> [--kind K] [--role R] [<prompt…>]   labelled tab + claude for that repo (idempotent);
-                              an optional prompt is claude's first message
-                              --role R: tier + effort from the factory role table
-                              (a verb that takes no more arguments exits 2 on extras)
-    rd agents                every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
-    rd read <agent> [src]     read an agent's output without attaching (src: history lines, or 'visible')
-    rd say <agent> <text…>    send a prompt to a running agent (refused while it is blocked on a dialog)
+  Usage: rd <verb> [args]        rd <verb> --help   one verb in full
+
+  Verbs:
+    rd work <repo> [--kind K] [--role R] [<prompt…>]
+        labelled tab + claude for that repo (idempotent: already running is reported, not duplicated)
+    rd agents
+        every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
+    rd read <agent> [src]
+        read an agent's output without attaching (src: a number of history lines, or 'visible')
+    rd say <agent> <text…>
+        send a prompt to a running agent (refused while it is blocked on a dialog)
+    rd repos [filter]
+        every git repo under ~/SourceRoot and ~/IuRoot on the host: ROOT NAME BRANCH ±DIRTY (filter = case-insensitive grep)
+    rd reap [--dry-run]
+        the janitor by hand (what com.jkrumm.hc-reap runs every 30 min): closes finished, clean, pushed agent terminals,
+        messages a dirty one; --dry-run (-n) only reports
 
   <agent> is a repo name, an hc address or terminal name (t7, iris-w3) or a bg session id prefix —
   whichever of them 'agents' put in front of you. A name hc does not know is an error.
+  A verb that takes no more arguments exits 2 on extras. Everything runs on the dev host, from either machine.
+
+  Retired (exit 2, points at the factory CLI): rd issue · rd issues · rd signal
+
+  Environment: REMOTE_DEV_HOST (ssh host when not on the dev host, default mini) · RD_DRY_RUN=1 (work/say: resolve and
+  print what would happen, start and send nothing) · RD_EFFORT (low|medium|high|xhigh|max for a spawned agent) ·
+  REAP_IDLE_H (reap: idle hours before a finished terminal closes, default 12)
+  Exit: 0 ok · 1 failed · 2 usage error.
 
   Lanes for starting agent work (docs/agent-platform.md):
     Issue         `factory issue new --repo <repo> --title … --facts @file` — work for a repo that should ship on its own
@@ -912,8 +931,89 @@ usage() {
 EOF
 }
 
+# One verb in full; returns 1 for a word that is not a verb (the caller then falls through to the real dispatch).
+usage_verb() {
+  case "${1:-}" in
+    work) cat <<'EOF'
+rd work <repo> [--kind K] [--role R] [<prompt…>]
+
+  <repo>       a repo name under ~/SourceRoot or ~/IuRoot on the host (never a path; `rd repos <filter>` finds it)
+  --kind K     the agent kind; only `claude` exists (opencode is rejected: Herdr agents run on the Max subscriptions only)
+  --role R     tier + effort from the factory role table: lead|implementer|verifier|reviewer|Explore (`factory role list`);
+               a dead factory only costs one stderr line, an unknown role exits 2
+  <prompt…>    claude's first message; the first word after the repo starts it, so a prompt may itself contain --kind
+  --kind and --role are read only before the repo and right after it.
+
+Opens a labelled tab in the repo's space and starts claude there on the account the picker chooses (interactive lane).
+Idempotent: a repo that already has an agent prints `already running: agent <addr>` and starts nothing.
+Paused when no account has headroom (`paused: …`): work never spills to IU API tokens.
+RD_DRY_RUN=1 prints `would start …` and starts nothing. RD_EFFORT=<level> overrides the effort.
+EOF
+      ;;
+    agents) cat <<'EOF'
+rd agents
+
+  Takes no arguments. One line per agent across every lane, shape: SOURCE NAME STATUS CWD ID
+  (STATUS: working, idle, done, blocked, …; tooling greps this text, so the shape is a contract).
+  Sources: hc terminals, background sessions of every enabled Claude account, interactive sessions.
+EOF
+      ;;
+    read) cat <<'EOF'
+rd read <agent> [src]
+
+  <agent>   repo name, hc address or terminal name, or a bg session id prefix (what `rd agents` printed)
+  src       a number = that many history lines above the screen (default 200); `visible` = the screen alone
+Reads without attaching and without sending a key. A background session prints the last assistant text and tool names
+of its transcript; an hc terminal prints its screen. A name hc does not know is an error.
+EOF
+      ;;
+    say) cat <<'EOF'
+rd say <agent> <text…>
+
+  <agent>   as for `rd read`
+  <text…>   every remaining word, sent as one message
+Types into a live session: the text is pasted and Enter pressed once nobody is typing. A working agent queues it
+(`queued: agent busy`); a blocked one is refused (the text would answer its dialog) with `NOT delivered`, exit 1.
+`rd say --help` is help; `rd say <agent> --help` sends the text `--help`.
+RD_DRY_RUN=1 resolves the target, prints it and sends nothing.
+EOF
+      ;;
+    repos) cat <<'EOF'
+rd repos [filter]
+
+  filter   optional, a case-insensitive grep over the lines
+One line per git repo under ~/SourceRoot and ~/IuRoot on the host: ROOT NAME BRANCH ±N (N = dirty files). Read-only.
+EOF
+      ;;
+    reap) cat <<'EOF'
+rd reap [--dry-run | -n]
+
+  --dry-run, -n   report what would be closed or messaged; touch nothing
+The janitor (scripts/hc-reap.py, also com.jkrumm.hc-reap every 30 min): closes finished factory-spawned agent terminals
+(idle past REAP_IDLE_H hours, default 12; clean and pushed tree), messages a dirty one, closes orphan shells, stops old
+background sessions. Never a working agent.
+EOF
+      ;;
+    issue | issues | signal) cat <<'EOF'
+rd issue | rd issues | rd signal — retired. Use the factory CLI:
+  factory issue new | factory issue list | factory signal file --from agent:<repo>; `factory issue schema` prints the filing contract.
+EOF
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # Sourced (by the test suite) rather than run: define the functions, dispatch nothing.
 [[ ${BASH_SOURCE[0]} == "$0" ]] || return 0
+
+# Help before dispatch, so it never reaches a verb: `rd work --help` starts no agent. Only the word right after the verb counts,
+# so `rd say <agent> --help` still sends the text `--help` and a `work` prompt may contain it.
+case "${1:-}" in
+  help) usage_verb "${2:-}" || usage; exit 0 ;;
+esac
+case "${2:-}" in
+  --help|-h) if usage_verb "${1:-}"; then exit 0; fi ;;
+esac
 
 case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;
