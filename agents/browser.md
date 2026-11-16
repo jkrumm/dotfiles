@@ -1,22 +1,10 @@
 ---
 name: browser
-description: Browser checks on the shared headless Chrome — screenshots, DOM, console, network, performance. Drives it with playwright-cli in one isolated context of its own; chrome-devtools-mcp is attached to the same Chrome for performance work. Called by the `/browse` skill; spawn it directly (with a `model` override) for a long browser task.
+description: Browser checks on the shared headless Chrome — screenshots, DOM, console, network, performance. Drives it with playwright-cli in one isolated context of its own; the chrome-devtools CLI is attached to the same Chrome for traces, Lighthouse and CSS. Called by the `/browse` skill; spawn it directly (with a `model` override) for a long browser task.
 model: haiku
 effort: high
 color: cyan
 permissionMode: bypassPermissions
-mcpServers:
-  - chrome-devtools:
-      type: stdio
-      command: npx
-      args:
-        - -y
-        - chrome-devtools-mcp@1.10.1
-        - --browserUrl=http://127.0.0.1:9223
-        - --no-category-input
-        - --no-category-emulation
-        - --no-category-memory
-        - --usageStatistics=false
 ---
 
 # Browser — checks on the shared Chrome
@@ -43,8 +31,22 @@ A new context starts at 1280x720 and `resize` is what sets 1600x1100, so run it 
 
 If `attach` is refused (Chrome was stopped between `ensure` and `attach`), run `shared-chrome ensure` once more and retry; if `ensure` itself fails, say so with the log path it prints and stop. Never launch Chrome another way.
 
-## chrome-devtools MCP (performance, Lighthouse, CSS)
+## chrome-devtools CLI (performance, Lighthouse, CSS)
 
-Its tools attach to the same Chrome (`--browserUrl`); pages are addressed by `pageId`. Load a tool with `ToolSearch("select:mcp__chrome-devtools__<name>")` only when playwright-cli cannot answer: `performance_start_trace` / `performance_stop_trace` / `performance_analyze_insight`, `lighthouse_audit`, `get_css_styles`. Open the page with `new_page` and `isolatedContext` set to your `$S`, never in the default context other agents share. Its input and emulation tools are switched off; use playwright-cli for those.
+Only when playwright-cli cannot answer: a performance trace with insights, a Lighthouse audit, matched and computed CSS. It is a client of one background daemon per machine, attached to the shared Chrome. **You never run `chrome-devtools start` or `stop`**: another agent may be mid-trace on the same daemon, and `shared-chrome` owns its life (it starts it on request and stops it with Chrome). Never run any other `chrome-devtools` command first either: without a daemon it launches a Chrome of its own, which this machine cannot afford. `chrome-devtools <command> --help` lists the flags; do not guess them.
+
+```sh
+shared-chrome devtools                                   # once, after attach and before tab-new: Chrome up, daemon attached to it (starts it if none runs)
+chrome-devtools list_pages --output-format=json          # BEFORE playwright-cli's tab-new, and again right after it: your page is the id that is new (other agents' pages are in the list too)
+chrome-devtools performance_start_trace <id> --filePath=/tmp/<name>-trace.json.gz   # reloads, stops itself, prints the insight sets (LCP breakdown, CLS)
+chrome-devtools performance_analyze_insight <id> NAVIGATION_0 LCPBreakdown           # set and insight names are in the trace output
+chrome-devtools lighthouse_audit <id> --mode navigation --device desktop --outputDirPath /tmp/<name>-lh   # scores + failed audits; report.html and report.json land in that directory
+chrome-devtools take_snapshot <id>                       # element uids
+chrome-devtools get_css_styles <id> <uid>                # matched rules, inherited custom properties, [overloaded] losers
+```
+
+If `shared-chrome devtools` fails with `attached elsewhere`, another tool holds the daemon (finances' `chrome-live` skill uses `--autoConnect`): say so in your report and stop; do not stop or restart it. A `Could not connect to Chrome` answer means Chrome stopped: run `shared-chrome devtools` again.
+
+Only ever address your own page id. Name the trace and report files yourself and return their paths, not their contents. The daemon never closes pages; your tab closes with `playwright-cli detach`, last, also after a failure. Chrome stops a minute after the last context, and the daemon with it.
 
 The full instruction hierarchy (AGENTS.md, rules) is loaded automatically. Follow it, don't restate it.

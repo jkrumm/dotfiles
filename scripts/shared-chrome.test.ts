@@ -1,10 +1,10 @@
 // shared-chrome: the idle decision as pure cases, then the supervisor end to end against a fake DevTools
 // endpoint (scripts/lib/shared-chrome-fake.ts) standing in for Chrome.
 import { afterAll, describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { DISPATCHED, HELP, VERB_HELP, plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
+import { DISPATCHED, HELP, VERB_HELP, daemonOf, plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
 
 const cfg = { idleMs: 1000, graceMs: 500 }
 const page = (id: string, ctx: string, url = "https://a.test/", title = ""): TargetInfo => ({
@@ -100,12 +100,45 @@ describe("help", () => {
   })
 })
 
+describe("daemonOf", () => {
+  const url = "http://127.0.0.1:9223"
+  const running = (args: string) => `chrome-devtools-mcp daemon is running.\npid=4242 socket=/tmp/x start-date=2026-11-16T08:47:11.447Z version=1.13.0\nargs=${args}\n`
+  test("no daemon", () => {
+    expect(daemonOf("chrome-devtools-mcp daemon is not running.\n", url)).toEqual({ kind: "none" })
+  })
+  test("a daemon whose arguments name this Chrome is ours", () => {
+    expect(daemonOf(running(`["--viaCli","--browser-url=${url}"]`), url)).toEqual({ kind: "ours", pid: 4242, startedAt: Date.parse("2026-11-16T08:47:11.447Z") })
+  })
+  test("a daemon attached elsewhere is foreign, whatever else it says", () => {
+    expect(daemonOf(running(`["--viaCli","--auto-connect"]`), url).kind).toBe("foreign")
+    expect(daemonOf(running(`["--viaCli","--browser-url=http://127.0.0.1:9222"]`), url).kind).toBe("foreign")
+    expect(daemonOf(running("not json"), url).kind).toBe("foreign")
+  })
+})
+
 describe("supervisor against a fake Chrome", () => {
   const dir = mkdtempSync(join(tmpdir(), "shared-chrome-"))
   const port = 20000 + Math.floor(Math.random() * 20000)
   const fakeBin = join(dir, "fake-chrome")
   writeFileSync(fakeBin, `#!/bin/sh\nexec ${process.execPath} ${join(import.meta.dir, "lib/shared-chrome-fake.ts")} "$@"\n`)
   chmodSync(fakeBin, 0o755)
+  // A stand-in for the chrome-devtools CLI: one daemon per "user", its state in a file.
+  const daemonFile = join(dir, "daemon")
+  const fakeCdt = join(dir, "chrome-devtools")
+  writeFileSync(
+    fakeCdt,
+    `#!/bin/sh
+S="$FAKE_DEVTOOLS_STATE"
+case "$1" in
+status) if [ -f "$S" ]; then echo "chrome-devtools-mcp daemon is running."; cat "$S"; else echo "chrome-devtools-mcp daemon is not running."; fi ;;
+start) shift; args='"--viaCli"'; for a in "$@"; do a=$(printf %s "$a" | sed 's/^--browserUrl=/--browser-url=/'); args="$args,\\"$a\\""; done
+  printf 'pid=%s socket=/tmp/fake start-date=%s version=1\nargs=[%s]\n' "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$args" > "$S" ;;
+stop) rm -f "$S" ;;
+list_pages) [ -f "$S" ] && [ ! -f "$S.dead" ] && { [ ! -f "$S.busy" ] || sleep 3; } ;;
+esac
+`,
+  )
+  chmodSync(fakeCdt, 0o755)
   const env = {
     ...process.env,
     SHARED_CHROME_PORT: String(port),
@@ -115,10 +148,15 @@ describe("supervisor against a fake Chrome", () => {
     SHARED_CHROME_LOG: join(dir, "shared-chrome.log"),
     SHARED_CHROME_LABEL: `com.jkrumm.shared-chrome-test-${process.pid}`, // not loaded: ensure falls back to a detached run
     SHARED_CHROME_IDLE_MS: "1500",
-    SHARED_CHROME_GRACE_MS: "800",
+    SHARED_CHROME_GRACE_MS: "2500", // longer than the 800 ms probe: a devtools call must not outlast the lease it took
     SHARED_CHROME_POLL_MS: "250",
+    SHARED_CHROME_DEVTOOLS_BIN: fakeCdt,
+    SHARED_CHROME_PROBE_MS: "800",
+    FAKE_DEVTOOLS_STATE: daemonFile,
   }
-  const cli = (verb: string) => Bun.spawnSync([process.execPath, join(import.meta.dir, "shared-chrome.ts"), verb], { env })
+  const cli = (verb: string, extra: Record<string, string> = {}) =>
+    Bun.spawnSync([process.execPath, join(import.meta.dir, "shared-chrome.ts"), verb], { env: { ...env, ...extra } })
+  const daemonText = () => (existsSync(daemonFile) ? readFileSync(daemonFile, "utf8") : null)
   const base = `http://127.0.0.1:${port}`
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", body: JSON.stringify(body) })
   const state = async () => (await (await fetch(`${base}/_fake/state`)).json()) as { contexts: string[]; pages: { targetId: string }[] }
@@ -142,6 +180,45 @@ describe("supervisor against a fake Chrome", () => {
     expect(cli("ensure").stdout.toString().trim()).toBe(base)
   })
 
+  test("devtools starts the daemon on the shared Chrome when none runs, and leaves a running one alone", () => {
+    const r = cli("devtools")
+    expect(r.exitCode).toBe(0)
+    const first = daemonText()
+    expect(first).toContain(`--browser-url=${base}`)
+    expect(first).toContain("--usageStatistics=false")
+    expect(cli("devtools").exitCode).toBe(0)
+    expect(daemonText()).toBe(first) // same pid, not restarted
+    expect(cli("status").stdout.toString()).toMatch(/devtools: +daemon pid \d+ on the shared Chrome/)
+  })
+
+  test("a daemon that answers late is busy, not dead: it is not restarted", () => {
+    const before = daemonText()
+    writeFileSync(`${daemonFile}.busy`, "")
+    expect(cli("devtools").exitCode).toBe(0)
+    expect(daemonText()).toBe(before)
+    rmSync(`${daemonFile}.busy`)
+  })
+
+  test("a daemon started before this Chrome is stale and replaced, even when it only hangs", () => {
+    const before = daemonText()!
+    writeFileSync(daemonFile, before.replace(/start-date=\S+/, "start-date=2001-01-01T00:00:00Z"))
+    writeFileSync(`${daemonFile}.busy`, "") // its probe would hang: only the start time can tell
+    const r = cli("devtools")
+    expect(r.stderr.toString()).toBe("")
+    expect(r.exitCode).toBe(0)
+    expect(daemonText()).not.toContain("2001-01-01")
+    rmSync(`${daemonFile}.busy`)
+  })
+
+  test("a daemon of ours that fails to answer is replaced", () => {
+    const before = daemonText()
+    writeFileSync(`${daemonFile}.dead`, "")
+    expect(cli("devtools").exitCode).toBe(0) // stop + start: the fake's start writes a new pid
+    expect(daemonText()).not.toBe(before)
+    expect(daemonText()).toContain(`--browser-url=${base}`)
+    rmSync(`${daemonFile}.dead`)
+  })
+
   test("an idle context is closed, an active one stays, and Chrome stops when none is left", async () => {
     await post("/_fake/context", { id: "idle" })
     await post("/_fake/page", { id: "pi", context: "idle" })
@@ -159,14 +236,41 @@ describe("supervisor against a fake Chrome", () => {
     expect(s.contexts).toEqual(["busy"])
     expect(s.pages.map((p) => p.targetId).sort()).toEqual(["p0", "pb"])
 
-    expect(await until(async () => !(await up()), 8000)).toBe(true)
-  }, 20_000)
+    expect(await until(async () => !(await up()), 14_000)).toBe(true)
+    expect(await until(async () => daemonText() === null, 3000)).toBe(true) // the daemon went with Chrome
+  }, 30_000)
 
   test("after Chrome is gone the next ensure starts it again", async () => {
     expect(await up()).toBe(false)
     expect(cli("ensure").stdout.toString().trim()).toBe(base)
     expect(await up()).toBe(true)
+    expect(cli("devtools").exitCode).toBe(0)
+    expect(daemonText()).not.toBeNull()
     expect(cli("stop").stdout.toString().trim()).toBe("stopped")
     expect(await up()).toBe(false)
+    expect(await until(async () => daemonText() === null, 3000)).toBe(true) // `stop` ends the daemon too
+  }, 20_000)
+
+  test("a CLI that cannot run is unknown, not 'no daemon': devtools fails naming it, status says unreadable", () => {
+    const broken = { SHARED_CHROME_DEVTOOLS_BIN: join(dir, "no-such-cli") }
+    const r = cli("devtools", broken)
+    expect(r.exitCode).toBe(1)
+    expect(r.stderr.toString()).toContain("status failed")
+    expect(cli("status", broken).stdout.toString()).toMatch(/devtools: +unreadable/)
+  })
+
+  test("a daemon attached elsewhere is refused and never stopped", async () => {
+    const foreign = `pid=777 socket=/tmp/fake start-date=now version=1\nargs=["--viaCli","--auto-connect"]\n`
+    writeFileSync(daemonFile, foreign)
+    const r = cli("devtools")
+    expect(r.exitCode).toBe(1)
+    const err = r.stderr.toString()
+    expect(err).toContain("pid 777")
+    expect(err).toContain("attached elsewhere")
+    expect(daemonText()).toBe(foreign)
+    expect(cli("status").stdout.toString()).toMatch(/devtools: +daemon pid 777 attached elsewhere/)
+    expect(cli("stop").stdout.toString().trim()).toBe("stopped")
+    expect(await up()).toBe(false)
+    expect(daemonText()).toBe(foreign) // Chrome stopped, the foreign daemon did not
   }, 20_000)
 })

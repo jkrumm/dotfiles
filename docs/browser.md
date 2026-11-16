@@ -110,6 +110,57 @@ All on 2026-11-16. **To reopen a verdict, bring a measurement taken on the mini.
 - **Local:** open source since 2026-11-13, but the local engine is wrangler plus workerd at about 680 MiB idle in the one
   independent test.
 
+## chrome-devtools CLI
+
+`agents/browser.md` used to declare the chrome-devtools MCP inline for traces, Lighthouse and CSS. The same package ships a
+command-line client, and since 2026-11-16 the agent uses that: no MCP server is registered anywhere for the browser path.
+Checked on the mini with `chrome-devtools-mcp` 1.13.0 (pinned in the Makefile, `CHROME_DEVTOOLS_VERSION`) against the shared
+Chrome 157 on `127.0.0.1:9223`; CLI reference: [docs/cli.md](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md).
+
+| Need | Result |
+|-|-|
+| Attach to the shared Chrome | `chrome-devtools start --browserUrl=http://127.0.0.1:9223` attaches; no second Chrome (`ps`: one Chrome on `:9223`) |
+| Isolated page | works on a tab playwright-cli opened with `tab-new --isolated-context`: `list_pages` shows it, its id is the one that is new |
+| Performance trace with insights | `performance_start_trace <id> --filePath=…`: reloads, stops itself, prints LCP and its breakdown (TTFB, render delay), CLS; `performance_analyze_insight <id> NAVIGATION_0 LCPBreakdown` goes deeper |
+| Lighthouse | `lighthouse_audit <id> --mode navigation --device desktop or mobile --outputDirPath <dir>`: category scores, failed audits, `report.html` and `report.json` |
+| Computed CSS | `take_snapshot <id>` for uids, `get_css_styles <id> <uid>`: matched rules, inherited custom properties, `[overloaded]` losers, source lines |
+
+### The daemon
+
+- **It is one Node process.** `chrome-devtools start` forks `daemon/daemon.js` on a Unix socket under `/tmp/chrome-devtools-mcp-<uid>`.
+  `footprint -p`: 122 MiB idle, 314 MiB after a trace, a Lighthouse run and a snapshot. With `--usageStatistics=false` there is no
+  telemetry watchdog process. The MCP it replaces is an `npx` wrapper plus the server, per running agent.
+- **It is one per user, and `start` is start-or-restart.** A second `start` replaces the first one's arguments and page ids, and
+  `stop` ends whatever runs. So an agent never runs either. A first call without a daemon starts one with default arguments: a
+  **second Chrome of its own** (measured), hence `shared-chrome devtools` before any other command.
+- **It has no idle exit and no parent.** It outlives the shell, the agent and the Chrome it was attached to (measured: it kept
+  running after `shared-chrome stop`). Only `stop` ends it.
+- **It does not clean up what it opens.** A page made with `new_page --isolatedContext` survived `stop`, and closing it left an
+  empty browser context behind (the shared Chrome only stops 60 s after the last *context*); the CLI also refuses to close the
+  last page. So the agent never opens pages through it: playwright-cli opens the tab and its `detach` closes the context.
+  `get_css_styles` was exercised here: matched rules, inherited custom properties, `[overloaded]` losers, source lines.
+- **A per-agent `--sessionId`** (a hidden global flag, absent from `--help` and the CLI documentation) gives each agent its own
+  socket and measured fine alongside the default daemon. It was not adopted: the owner's rule is one daemon with one owner, and
+  an agent that dies before its own `stop` leaves an orphan with no reaper.
+
+### Who owns the daemon
+
+`scripts/shared-chrome.ts` does, in two places (`scripts/shared-chrome.test.ts` covers each):
+
+| When | What |
+|-|-|
+| `shared-chrome devtools` | ensures Chrome, then starts the daemon (`start --browserUrl=<shared Chrome> --usageStatistics=false --performanceCrux=false`) if `chrome-devtools status` shows none; leaves a running one alone; restarts one of its own that started before the current Chrome or whose `list_pages` fails (an answer later than 15 s counts as busy with another agent's trace, not dead); the check-then-start runs under a lock, so two agents never start two |
+| the supervisor stops Chrome (idle exit, `shared-chrome stop`, a crashed Chrome) | `chrome-devtools stop`, when `status` names this Chrome's URL |
+| `shared-chrome status` | one `devtools:` line: no daemon, the daemon's pid on the shared Chrome, or one attached elsewhere |
+
+- **A daemon attached elsewhere is never touched.** Finances' `chrome-live` skill starts the default daemon with `--autoConnect`
+  against the owner's signed-in Chrome, and `--autoConnect` cannot run next to a `--browserUrl` daemon. Whichever runs first holds
+  the one daemon slot; the other waits. `shared-chrome devtools` then exits 1 naming the pid and its arguments, and the browser agent
+  reports that and stops. Mirror rule: the finances skill reads `chrome-devtools status` and refuses to restart a daemon that
+  serves the shared Chrome.
+- **Page ids are shared** by every agent using the daemon, so an agent finds its page as the id that is new after its own `tab-new`
+  and addresses only that one.
+
 ## Open work
 
 finances' `chrome-live` moved off its `.mcp.json` on 2026-11-16 (Issue 1619, closed): the attach to a scratch profile is proven,
@@ -121,7 +172,9 @@ the attach to the owner's default profile behind Chrome's prompt is proven at it
 | 1611 | agent-workflows | Stack Exchange API and Wayback legs for pages behind an interactive check |
 | 1612 | basalt-ui | layout and quality-matrix suites on the headless shell where results match |
 | 1613 | shutterflow | e2e projects on the headless shell where they pass |
-| 1615 | dotfiles | `chrome-devtools` CLI in place of the MCP in `agents/browser.md` and in `config/opencode/opencode.json`, if it can attach to the shared Chrome |
 | 1616 | software-factory | hygiene probe: a suite that pins installed Chrome without a reason, and a checked-in `.mcp.json` |
 | 1620 | software-factory | `--strict-mcp-config` on the lead launcher, after 1622 |
 | 1622 | dotfiles | `--strict-mcp-config` on `c`/`cs`, `rd work` and the resume path, if plugin tools survive it |
+
+dotfiles ships no MCP entry since Issue 1615: the `browser` agent and `config/opencode/opencode.json` both went to the CLI.
+The `--strict-mcp-config` guard is Issues 1620 and 1622 above, not this one.

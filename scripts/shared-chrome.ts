@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // shared-chrome — the one headless Chrome the browse path drives (`/browse`, agents/browser.md).
 //
-// Verbs and flags: `shared-chrome --help` (HELP below). `ensure` is the only verb an agent needs.
+// Verbs and flags: `shared-chrome --help` (HELP below). An agent needs `ensure`, and `devtools` before a trace, Lighthouse or CSS read.
 //
 // One Chrome, its own profile (~/.local/share/shared-chrome), DevTools on 127.0.0.1 only. Every agent works in
 // its own isolated browser context (playwright-cli `tab-new --isolated-context=<name>`), so cookies and storage
@@ -13,8 +13,13 @@
 //     playwright-cli's `attach --idle-timeout` detaches, and so closes, a session that ran no command);
 //   - when no context is left for GRACE_MS, Chrome is stopped and the supervisor exits.
 // A crashed Chrome ends the supervisor; the next `ensure` starts both again.
+//
+// The chrome-devtools CLI's background daemon is one per user, and `start`/`stop` act on whoever runs it, so an agent
+// never runs either: `devtools` starts it when none runs, and the supervisor stops it whenever it stops Chrome
+// (idle exit, `stop`, a crashed Chrome). It touches only a daemon whose arguments name this Chrome's URL; one attached
+// elsewhere (`--autoConnect`, finances' chrome-live) is never restarted or stopped, and `devtools` then fails naming it.
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 const env = process.env
@@ -23,8 +28,9 @@ const HOME = env.HOME ?? ""
 /** Every verb the dispatch accepts, in help order; `caller` set = meant for a job, not for agents. */
 export const VERB_HELP: { name: string; summary: string; caller?: string }[] = [
   { name: "ensure", summary: "start Chrome if it is not answering, print its DevTools URL on stdout, exit 0 (1 when it did not come up in 25 s)" },
-  { name: "status", summary: "chrome up/down, supervisor pid, one line per browser context; exit 0 when up, 1 when down" },
-  { name: "stop", summary: "stop the supervisor and with it Chrome; prints `stopped` (exit 0) or `still answering` (exit 1)" },
+  { name: "devtools", summary: "ensure Chrome, then the chrome-devtools daemon attached to it (starts it when none runs): the one verb to run before `chrome-devtools` traces, Lighthouse and CSS; exit 1 when the daemon is attached elsewhere (--autoConnect), which it never touches" },
+  { name: "status", summary: "chrome up/down, supervisor pid, the chrome-devtools daemon, one line per browser context; exit 0 when up, 1 when down" },
+  { name: "stop", summary: "stop the supervisor and with it Chrome and the chrome-devtools daemon; prints `stopped` (exit 0) or `still answering` (exit 1)" },
   { name: "run", summary: "the supervisor itself: owns the idle rules and exits when no context is left", caller: "launchd com.jkrumm.shared-chrome (`ensure` starts it); never by hand" },
 ]
 
@@ -40,8 +46,10 @@ ${VERB_HELP.filter((v) => v.caller).map((v) => `  shared-chrome ${v.name}\n     
 
 No verb takes a flag. Chrome listens on 127.0.0.1 only; every agent works in its own isolated context
 (playwright-cli \`tab-new --isolated-context=<name>\`). A context idle for 15 min is closed; Chrome stops 60 s after the last one.
+The chrome-devtools daemon is one per user and shared-chrome owns it: agents never run its \`start\` or \`stop\`; it stops with Chrome.
 Environment (defaults in CONFIG): SHARED_CHROME_PORT (9223), SHARED_CHROME_BIN, SHARED_CHROME_PROFILE, SHARED_CHROME_STATE,
-SHARED_CHROME_LABEL, SHARED_CHROME_LOG, SHARED_CHROME_IDLE_MS, SHARED_CHROME_GRACE_MS, SHARED_CHROME_POLL_MS.
+SHARED_CHROME_LABEL, SHARED_CHROME_LOG, SHARED_CHROME_IDLE_MS, SHARED_CHROME_GRACE_MS, SHARED_CHROME_POLL_MS,
+SHARED_CHROME_DEVTOOLS_BIN (chrome-devtools), SHARED_CHROME_PROBE_MS (15000).
 Exit: 0 ok · 1 verb failed or Chrome down (status) · 2 unknown verb.
 `
 
@@ -55,6 +63,28 @@ export const CONFIG = {
   idleMs: Number(env.SHARED_CHROME_IDLE_MS ?? 15 * 60_000),
   graceMs: Number(env.SHARED_CHROME_GRACE_MS ?? 60_000),
   pollMs: Number(env.SHARED_CHROME_POLL_MS ?? 30_000),
+  devtoolsBin: env.SHARED_CHROME_DEVTOOLS_BIN ?? "chrome-devtools",
+  probeMs: Number(env.SHARED_CHROME_PROBE_MS ?? 15_000), // a daemon busy with another agent's trace answers late, not never
+}
+
+// ---- chrome-devtools daemon (pure) ----------------------------------------------------------------------------
+
+export type Daemon = { kind: "none" } | { kind: "ours"; pid: number; startedAt: number } | { kind: "foreign"; pid: number; args: string }
+
+/** Read `chrome-devtools status`: running or not, its pid, and whether its arguments name `url` (this Chrome). */
+export function daemonOf(statusOutput: string, url: string): Daemon {
+  if (!/daemon is running/.test(statusOutput)) return { kind: "none" }
+  const pid = Number(/pid=(\d+)/.exec(statusOutput)?.[1] ?? 0)
+  const args = /^args=(.*)$/m.exec(statusOutput)?.[1] ?? ""
+  const named = (a: string) => a === `--browser-url=${url}` || a === `--browserUrl=${url}` || a === `--browser-url ${url}`
+  let list: string[] = []
+  try {
+    list = JSON.parse(args) as string[]
+  } catch {
+    /* an unreadable args line is not ours */
+  }
+  const startedAt = Date.parse(/start-date=(\S+)/.exec(statusOutput)?.[1] ?? "") // NaN when unreadable: never "older"
+  return list.some(named) ? { kind: "ours", pid, startedAt } : { kind: "foreign", pid, args }
 }
 
 // ---- idle decision (pure) ------------------------------------------------------------------------------------
@@ -227,6 +257,61 @@ function listenerPid(): number | null {
 }
 
 const log = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`)
+
+// ---- chrome-devtools daemon (process) ---------------------------------------------------------------------------
+
+function devtools(args: string[], timeout = 60_000) {
+  return spawnSync(CONFIG.devtoolsBin, args, { encoding: "utf8", timeout })
+}
+
+/** One `devtools` check-then-start at a time: two agents that both see no daemon would otherwise each start one. */
+async function withDaemonLock<T>(fn: () => Promise<T>): Promise<T> {
+  mkdirSync(CONFIG.stateDir, { recursive: true })
+  const lock = join(CONFIG.stateDir, "devtools.lock")
+  const end = Date.now() + 120_000
+  for (;;) {
+    try {
+      mkdirSync(lock)
+      break
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e // a read-only or full state dir is not contention
+    }
+    // A holder runs status, the probe, stop and start: 195 s at the worst. Older than that, it died.
+    const age = (() => {
+      try {
+        return Date.now() - statSync(lock).mtimeMs
+      } catch {
+        return 0 // released between the two calls
+      }
+    })()
+    if (age > 300_000) rmSync(lock, { recursive: true, force: true })
+    else if (Date.now() > end) throw new Error("another shared-chrome devtools holds the lock")
+    else await sleep(200)
+  }
+  try {
+    return await fn()
+  } finally {
+    rmSync(lock, { recursive: true, force: true })
+  }
+}
+let daemonProblem = ""
+/** `null` when `chrome-devtools status` cannot be read (not installed, not runnable under this PATH, odd output): never "none". */
+function daemon(): Daemon | null {
+  const r = devtools(["status"])
+  if (r.error || r.status !== 0 || !/daemon is (not )?running/.test(r.stdout)) {
+    daemonProblem = r.error?.message ?? `exit ${r.status}: ${(r.stderr || r.stdout).trim().slice(0, 200)}`
+    return null
+  }
+  return daemonOf(r.stdout, endpoint())
+}
+/** Stop the daemon if it is attached to this Chrome; a daemon attached elsewhere is left alone. */
+function stopDaemon(): void {
+  const d = daemon()
+  if (!d) log(`cannot read the chrome-devtools daemon status, so it is left running: ${daemonProblem}`)
+  if (d?.kind !== "ours") return
+  log(`stopping the chrome-devtools daemon (pid ${d.pid})`)
+  devtools(["stop"])
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function waitFor(cond: () => boolean | Promise<boolean>, ms: number, step = 200): Promise<boolean> {
@@ -285,6 +370,7 @@ async function run(): Promise<number> {
   // Installed before anything waits: a `stop` that lands while Chrome is still coming up must end Chrome too.
   let stopping = false
   const stopChrome = async () => {
+    stopDaemon()
     kill(chromeProc)
     if (!(await waitFor(() => !alive(chromeProc), 10_000, 100))) process.kill(chromeProc, "SIGKILL")
   }
@@ -311,6 +397,7 @@ async function run(): Promise<number> {
     await sleep(CONFIG.pollMs)
     if (!alive(chromeProc)) {
       log("Chrome exited; the next ensure starts it again")
+      stopDaemon()
       rmSync(pidFile(), { force: true })
       return 1
     }
@@ -360,11 +447,14 @@ function kill(pid: number) {
 // ---- verbs ---------------------------------------------------------------------------------------------------
 
 async function ensure(): Promise<number> {
+  if (!(await ensureChrome())) return 1
+  console.log(endpoint())
+  return 0
+}
+
+async function ensureChrome(): Promise<boolean> {
   writeLease()
-  if ((await version()) && supervisorPid()) {
-    console.log(endpoint())
-    return 0
-  }
+  if ((await version()) && supervisorPid()) return true
   const uid = process.getuid?.() ?? 501
   const k = spawnSync("/bin/launchctl", ["kickstart", `gui/${uid}/${CONFIG.label}`], { encoding: "utf8" })
   if (k.status !== 0) {
@@ -375,9 +465,62 @@ async function ensure(): Promise<number> {
   }
   if (!(await waitFor(async () => (await version()) !== null && supervisorPid() !== null, 25_000, 250))) {
     console.error(`shared Chrome did not come up; see ${CONFIG.log}`)
+    return false
+  }
+  return true
+}
+
+/** Chrome up, then a daemon attached to it. Start it when none runs; refuse one attached elsewhere. */
+async function devtoolsVerb(): Promise<number> {
+  if (!(await ensureChrome())) return 1
+  try {
+    return await withDaemonLock(startDaemonIfAbsent)
+  } catch (e) {
+    console.error((e as Error).message)
     return 1
   }
-  console.log(endpoint())
+}
+
+async function startDaemonIfAbsent(): Promise<number> {
+  const url = endpoint()
+  let d = daemon()
+  if (!d) {
+    console.error(`${CONFIG.devtoolsBin} status failed (${daemonProblem}); is it installed and on this PATH? make setup`)
+    return 1
+  }
+  if (d.kind === "foreign") {
+    console.error(
+      `the chrome-devtools daemon (pid ${d.pid}) is attached elsewhere (args ${d.args}) and its owner holds it: ` +
+        `shared-chrome never restarts or stops it. Retry when it has been stopped, or run \`${CONFIG.devtoolsBin} status\`.`,
+    )
+    return 1
+  }
+  // A daemon of ours that outlived its Chrome (a SIGKILLed supervisor, then a new Chrome) holds a dead connection:
+  // replace it. One started before this Chrome did is stale however it answers; otherwise one that does not answer
+  // in time is busy with someone's trace, not dead, and only a real failure counts.
+  if (d.kind === "ours") {
+    const chromeStart = Date.parse(spawnSync("/bin/ps", ["-o", "lstart=", "-p", String(listenerPid() ?? 0)], { encoding: "utf8" }).stdout)
+    const stale = d.startedAt < chromeStart - 2000
+    const probe = stale ? null : devtools(["list_pages"], CONFIG.probeMs)
+    if (stale || (probe && !probe.error && probe.status !== 0)) {
+      log(`the chrome-devtools daemon (pid ${d.pid}) does not answer: restarting it`)
+      devtools(["stop"])
+      d = { kind: "none" }
+    }
+  }
+  if (d.kind === "none") {
+    const r = devtools(["start", `--browserUrl=${url}`, "--usageStatistics=false", "--performanceCrux=false"])
+    if (r.status !== 0) {
+      console.error(`chrome-devtools start failed: ${(r.stderr || r.stdout).trim()}`)
+      return 1
+    }
+  }
+  const now = daemon()
+  if (now?.kind !== "ours") {
+    console.error("the chrome-devtools daemon is not attached to the shared Chrome after start")
+    return 1
+  }
+  console.log(`chrome-devtools daemon (pid ${now.pid}) on ${url}`)
   return 0
 }
 
@@ -386,6 +529,10 @@ async function status(): Promise<number> {
   const up = (await version()) !== null
   console.log(`chrome:     ${up ? `up on ${endpoint()} (pid ${listenerPid() ?? "?"})` : "down"}`)
   console.log(`supervisor: ${sup ?? "none"}`)
+  const d = daemon()
+  console.log(
+    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
+  )
   if (up) {
     for (const u of await observe()) console.log(`context ${u.id}${u.isDefault ? " (default)" : ""}: ${u.targetIds.length} page(s)`)
   }
@@ -396,6 +543,7 @@ async function stop(): Promise<number> {
   const sup = supervisorPid()
   if (sup) kill(sup)
   else {
+    stopDaemon()
     const l = (await version()) ? listenerPid() : null
     if (l) kill(l)
   }
@@ -404,7 +552,7 @@ async function stop(): Promise<number> {
   return down ? 0 : 1
 }
 
-const verbs: Record<string, () => Promise<number>> = { ensure, status, stop, run }
+const verbs: Record<string, () => Promise<number>> = { ensure, devtools: devtoolsVerb, status, stop, run }
 /** The verbs the dispatch accepts (the drift test compares them with VERB_HELP). */
 export const DISPATCHED = Object.keys(verbs)
 

@@ -13,7 +13,7 @@ Drive a page in a real browser from an isolated forked context.
 
 ## How It Works
 
-One headless Chrome serves every browser agent on the machine (`shared-chrome ensure` starts it on the first use; it stops by itself 60 s after the last context). The `browser` subagent drives it with **playwright-cli**, one isolated context per run (own cookies and storage), viewport **1600x1100** by default. A task that needs another size says so (a repo's design bar names it) and the agent resizes before its first screenshot. The `chrome-devtools` MCP is declared in `agents/browser.md`, attached to the same Chrome, and used only for performance traces, Lighthouse and CSS inspection. Nothing is registered per session; the fork also keeps screenshots and DOM dumps (5-20k tokens) out of the main thread.
+One headless Chrome serves every browser agent on the machine (`shared-chrome ensure` starts it on the first use; it stops by itself 60 s after the last context). The `browser` subagent drives it with **playwright-cli**, one isolated context per run (own cookies and storage), viewport **1600x1100** by default. A task that needs another size says so (a repo's design bar names it) and the agent resizes before its first screenshot. The `chrome-devtools` command-line client (one background daemon attached to the same Chrome, started on request and stopped with it by `shared-chrome`) is used only for performance traces, Lighthouse and CSS inspection. No MCP server is registered anywhere; the fork also keeps screenshots and DOM dumps (5-20k tokens) out of the main thread.
 
 Not for basalt-ui's own layout and quality suites (they start their own Chrome inside test slots) and not for the research Chrome on port 9222 (`agw web`).
 
