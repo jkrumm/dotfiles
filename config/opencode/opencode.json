@@ -16,20 +16,6 @@
     "~/.claude/rules/security.md",
     "~/.claude/rules/typescript.md"
   ],
-  "mcp": {
-    "servers": {
-      "chrome-devtools": {
-        "type": "local",
-        "command": [
-          "npx",
-          "-y",
-          "chrome-devtools-mcp@1.10.1",
-          "--browserUrl=http://127.0.0.1:9223",
-          "--usageStatistics=false"
-        ]
-      }
-    }
-  },
   "agents": {
     "title": {
       "model": "iu-responses/gpt-6-luna"

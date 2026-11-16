@@ -42,11 +42,9 @@ shared `opencode.db` — retry. agent-workflows' agent steps are NOT on this lan
 server over HTTP, configured by that process (`packages/opencode-host` in agent-workflows).
 
 **Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
-`chrome-devtools` (local, attached to the shared Chrome with `--browserUrl=http://127.0.0.1:9223`; run `shared-chrome ensure`
-first and open pages with `new_page` + `isolatedContext`; reach for it only for browser work) in `opencode.json`'s `mcp`;
 `plugins/protect-branches.js` throws on whatever `hooks/protect-branches.ts` denies;
-`agent/{implementer,verifier}.md` are rendered from `agents/` (frontmatter differs,
-body is verbatim; `reviewer`, `review-verifier`, `Explore` and `general-purpose` are Claude Code only and skipped via `SKIP` in the script). Instructions stay the always-on rules plus the four small
+`agent/{implementer,verifier,browser}.md` are rendered from `agents/` (frontmatter differs,
+body is verbatim, so `browser` carries the playwright-cli and `chrome-devtools` CLI instructions for the shared Chrome; `reviewer`, `review-verifier`, `Explore` and `general-purpose` are Claude Code only and skipped via `SKIP` in the script). Instructions stay the always-on rules plus the four small
 stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
 `tanstack-*`, `visx-charts`, `makefile-conventions`, ~40k chars) are **not** listed
 because OpenCode ignores `paths:` and would load them on every turn of every repo;
@@ -79,8 +77,8 @@ main checkout (never from a linked worktree) and `make deploy`.
 The first start on a new version shows a one-time release-notes dialog that swallows the terminal's
 initial prompt — press Enter once, then `rd say` it again.
 
-**One MCP server is wired in:** `chrome-devtools` (`config/opencode/opencode.json`). Everything else
-OpenCode reaches like Claude Code does: the `agw` CLI. External skills load natively from `~/.claude/skills`, so `/check`,
+**No MCP server is wired in** (the last, `chrome-devtools`, went with Issue 1615: the browser path is the `browser` agent and its CLI
+tools). OpenCode reaches everything like Claude Code does: the `agw` CLI. External skills load natively from `~/.claude/skills`, so `/check`,
 `/review` and friends resolve to real tools on the mini.
 
 **Yolo is the default here, deliberately** — `permission: "allow"` (normalized by v2 into an allow-all `permissions` rule), so `oc`
@@ -124,4 +122,4 @@ symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
 happily with no model, no provider, no rules. `make status` lists all three
 opencode links for exactly this; run it when `oc` looks unconfigured.
 
-**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is hand-maintained against `agw routes`. `iu-anthropic` (Haiku 5.5, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
+**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `agents.title`). The `providers` block is hand-maintained against `agw routes`. `iu-anthropic` (Haiku 5.5, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
