@@ -43,7 +43,7 @@ cfg() { # cfg <attached> <passphraseRef>
 }
 mkvol() { mkdir -p "$VOL"; cp "$T/sentinel-content" "$VOL/.volume-gate"; echo present > "$T/mode"; }
 rmvol() { rm -rf "$VOL"; echo absent > "$T/mode"; }
-export VOLUME_GATE_CONFIG="$T/cfg.json" VOLUME_GATE_DISKUTIL="$T/bin/diskutil" VOLUME_GATE_READ_TIMEOUT=1
+export VOLUME_GATE_CONFIG="$T/cfg.json" VOLUME_GATE_DISKUTIL="$T/bin/diskutil" VOLUME_GATE_READ_TIMEOUT=1 VOLUME_GATE_READ_ATTEMPTS=1
 gate() { bash "$GATE" "$@"; }
 snapshot() { (cd "$T" && find scratch vol -mindepth 0 2>/dev/null | sort | tr '\n' ' '); }
 
@@ -110,6 +110,37 @@ start=$SECONDS; st=$(PATH="$T/bin:$PATH" gate state); took=$((SECONDS - start))
 eq "a frozen sentinel read is unreadable" unreadable "$st"
 [ "$took" -lt 10 ] && ok "the frozen read was cut at the bound (${took}s)" || bad "the read was not bounded (${took}s)"
 rm "$T/bin/cat"
+
+# --- a slow read is tried again, a stalled one says why ---
+mkvol
+cat > "$T/bin/cat" <<STUB
+#!/bin/bash
+# the first read stalls (a busy host), the second answers
+if [ ! -e "$T/cat-ran" ]; then touch "$T/cat-ran"; exec sleep 30; fi
+exec /bin/cat "\$@"
+STUB
+chmod +x "$T/bin/cat"; rm -f "$T/cat-ran"
+eq "a read that stalls once and then answers is present (3 attempts)" present "$(VOLUME_GATE_READ_ATTEMPTS=3 PATH="$T/bin:$PATH" gate state)"
+rm -f "$T/cat-ran"
+eq "...but is unreadable when only one attempt is allowed" unreadable "$(PATH="$T/bin:$PATH" gate state)"
+printf '#!/bin/bash\nexec sleep 30\n' > "$T/bin/cat"
+out=$(VOLUME_GATE_READ_ATTEMPTS=2 PATH="$T/bin:$PATH" gate run -- true); rc=$?
+case "$out" in "skipped: volume unreadable (the read stalled 2 x 1s ("*"load "*"reader state "*"))") ok "an unreadable skip names the attempts, the load and the reader's state" ;; *) bad "unreadable detail" "$out" ;; esac
+eq "an unreadable skip still exits 0 by default" 0 "$rc"
+rm "$T/bin/cat"
+
+# --- --skip-rc: a skip is not a green run ---
+out=$(gate run --skip-rc 3 -- sh -c 'echo ran'); rc=$?
+eq "--skip-rc leaves a run that went through alone" "ran 0" "$out $rc"
+rmvol
+out=$(gate run --skip-rc 3 -- sh -c "touch '$T/ran'"); rc=$?
+eq "--skip-rc: an absent volume exits with the skip rc" 3 "$rc"; eq "--skip-rc: the same one line" "skipped: volume absent" "$out"
+[ ! -e "$T/ran" ] && ok "--skip-rc: still runs nothing" || bad "--skip-rc ran the command"
+mkvol
+out=$(gate run --skip-rc 3 -- sh -c "rm -rf '$VOL'; echo absent > '$T/mode'; exit 1"); rc=$?
+eq "--skip-rc: a volume that vanished mid-run exits with the skip rc" "3 skipped: volume vanished during run" "$rc $out"
+gate run --skip-rc x -- true >/dev/null 2>&1; eq "--skip-rc wants a number" 2 $?
+mkvol
 
 # --- the unlock job ---
 export EXTERNAL_VOLUME_STATE_DIR="$T/state"

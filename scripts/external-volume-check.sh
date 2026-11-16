@@ -15,6 +15,6 @@ volume_gate_state
 case "$VG_STATE" in
   unattached) exit 0 ;;
   present) echo "external volume present"; exit 0 ;;
-  unreadable) echo "external volume unreadable (mounted, but the sentinel did not read in ${VG_READ_TIMEOUT}s: wrong volume, or a Removable Volumes grant is pending; docs/external-ssd.md §TCC)"; exit 2 ;;
+  unreadable) echo "external volume unreadable (mounted, but the sentinel did not read${VG_DETAIL:+: $VG_DETAIL}: wrong volume, a busy host, or a Removable Volumes grant is pending; docs/external-ssd.md §TCC)"; exit 2 ;;
   *) echo "external volume $VG_STATE (dependents skip themselves; docs/external-ssd.md)"; exit 2 ;;
 esac
