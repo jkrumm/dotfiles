@@ -45,6 +45,8 @@ the direct callers of what it changes.
    makes false is an intent finding: the repo's rule is that docs move in the same commit as the code. Judge each item
    `intent.md` asks for into `criteria` (met, not-met or unclear, with the `file:line` that shows it); a `not-met` item
    is also an `important` intent finding.
+   The stated intent bounds scope and duplication findings: what `intent.md` says the change owns, must not touch or
+   deliberately repeats is not a finding.
 2. **Domain rules.** Each `REVIEW.md` and `AGENTS.md` rule that the touched paths fall under. `prior.json` entries
    marked `wrong` or `intentional` are settled: never raise the same point again.
 3. **System fit and duplication.** For every new function, module, type, fake, script, config table or retry loop
@@ -95,12 +97,12 @@ finding if it answers `real: true`; otherwise drop it. Record `votes: "1/1"` or 
 
 ## Reply
 
-Only this JSON, nothing before or after it:
+Only this JSON, nothing before or after it. `files` is the exact set of paths in `stat.txt`, copied verbatim, reviewed or not: submit refuses any other set and the review runs again. Name a path you did not review in `summary`.
 
 ```json
 { "tier": "standard", "round": 1, "intent": "<one line>",
   "summary": "<count first: '2 important, 1 nit.' or 'Nothing needs fixing.'>",
-  "files": ["<every path in stat.txt you reviewed>"],
+  "files": ["<every path in stat.txt, copied verbatim>"],
   "findings": [ { "tag": "important|nit|pre-existing", "class": "intent|domain|duplication|architecture|bug|security",
                   "file": "...", "line": 0, "existing": "<file:line, duplication only>",
                   "message": "<one sentence>", "failureScenario": "<concrete input or state -> wrong result>",

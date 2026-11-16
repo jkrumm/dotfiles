@@ -6,7 +6,7 @@ description: Deep technical research via the agw CLI (agent-workflows) — one a
 # Research — via `agw`
 
 1. Run `agw research "<question>" --depth quick|standard|deep --format json` via Bash (`standard` is the default). Add `--context "<background>"` for what the caller already knows: it is treated as established, never re-searched, never cited. `quick` = one fact, `standard` = a few sources, `deep` = a survey.
-2. Exit 10 = still running (wait budget `AGW_WAIT_BUDGET_S`, default 110 s). The JSON names the run: run `agw run wait <runId> --format json`, repeat until the exit is not 10. Never wrap it in a short timeout.
+2. Set the wait budget to fit the depth: `AGW_WAIT_BUDGET_S=300 agw research …` for `standard`, up to 540 for `deep` (default 110 s; stay under the Bash tool's 600 s foreground limit). Exit 10 = still running: resume once with `agw run wait <runId> --format json`, never in a loop; if it is still pending, run the wait in the background and end the turn. Never pipe agw into `head`/`tail` (the pipe hides the exit code and cuts the error envelope).
 3. Exit 0 = the run finished. Read `status` (`done` | `failed` | `cancelled`), then `output`:
    - `report` — narrative, cited answer in markdown
    - `citations` — `[{ claim, url, confidence }]`, each key claim tied to a source, carrying the researching agent's `high` | `medium` | `low` confidence in that specific claim
@@ -22,16 +22,6 @@ description: Deep technical research via the agw CLI (agent-workflows) — one a
 
 **Follow-up on a finished report:** `agw research "<new question>" --follow-up <runId>`, with the `runId` of a `done` research run. The earlier question, report and citations become the agent's context; the answer has the same shape. `--context` stays for background the caller brings itself.
 
-Exit codes a caller acts on (`agw schema --exit-codes`):
-
-| Code | Meaning | Action |
-|-|-|-|
-| 0 | run finished | read `status`, then `output.status` |
-| 10 | still running | `agw run wait <runId>` |
-| 1 | run failed/cancelled, or a 5xx | state is on stdout; report it |
-| 2 | bad flag/value | fix the call |
-| 3 | no secret, or 401/403 | credentials in `~/.config/agw/env` |
-| 7 | host unreachable | report; don't retry-loop |
-| 8 | rate limited | retry after `details.retryAfterS` |
+Exit codes: `agw schema --exit-codes`.
 
 A cut-off session recovers with `agw run wait <runId>`, never by resubmitting.

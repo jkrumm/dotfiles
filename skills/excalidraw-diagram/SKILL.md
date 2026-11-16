@@ -185,9 +185,10 @@ The worker handles colors, sizes, fonts, bindings, and JSON shape.
 
 ### Step 5: Run it
 The result is the run envelope; the file is its `.output.document` string.
-(`--format plain` is documented to print just the document, but the installed
-CLI prints the whole envelope — extract with jq, do not redirect plain output
-straight into the file.)
+(`--format plain` prints just the document: `agw schema diagram` sets
+`plainField: document`. The default JSON envelope below also carries
+`.output.viewport` and `.output.rationale`; use plain only when the document
+alone is wanted.)
 
 ```bash
 OUT=$(mktemp)
