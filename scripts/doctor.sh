@@ -529,6 +529,39 @@ section_host_waste() {
   done
 }
 
+# --- Agent notes (both machines) ------------------------------------------------
+# `agent-note` (docs/remote-dev.md §Agent notes): the command is on PATH, and the path to the other machine
+# answers. Mini: the gate verb `term-ls` over ssh iumac. MacBook: the mini is linked in this machine's core.
+# A MacBook that is off or has not pulled the new gate is a host condition (WARN), never a failure.
+section_agent_notes() {
+  hdr "Agent notes (agent-note)"
+  if command -v agent-note >/dev/null 2>&1; then
+    ok "agent-note" "on PATH"
+  else
+    bad "agent-note" "not on PATH — make setup"
+    return
+  fi
+  local out rc=0
+  if [ "$BACKEND" = "cache" ]; then
+    out=$(ssh -o ConnectTimeout=8 -o BatchMode=yes iumac term-ls 2>/dev/null) || rc=$?
+    case "$rc" in
+      0) if printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1; then
+           ok "mini → MacBook" "ssh iumac term-ls: $(printf '%s' "$out" | jq 'length') terminal(s) take notes"
+         else
+           warn "mini → MacBook" "term-ls answered with something that is not a list"
+         fi ;;
+      126) warn "mini → MacBook" "the MacBook gate has no term-ls yet — ssh iumac dotfiles-sync" ;;
+      *) warn "mini → MacBook" "ssh iumac term-ls failed (rc=$rc): the MacBook is off, asleep or off the tailnet" ;;
+    esac
+  else
+    if hc machine ls --json 2>/dev/null | jq -e '.machines | tostring | test("\"mini\"")' >/dev/null 2>&1; then
+      ok "MacBook → mini" "the mini is linked in this machine's core (hc machine ls)"
+    else
+      warn "MacBook → mini" "the mini is not linked in this core — hc machine add mini"
+    fi
+  fi
+}
+
 # --- Run -----------------------------------------------------------------------
 
 want launchagents && section_launchagents
@@ -547,8 +580,10 @@ if [ "$BACKEND" = "cache" ]; then
   want drift && section_drift
   want claude_accounts && section_claude_accounts
   want devhost_heartbeat && section_devhost_heartbeat
+  want agent_notes && section_agent_notes
 elif [ "$BACKEND" = "op" ]; then
   want remote_path && section_remote_path
+  want agent_notes && section_agent_notes
   want kuma && section_kuma
 
   if [ "$LOCAL_ONLY" -eq 0 ] && want mini; then

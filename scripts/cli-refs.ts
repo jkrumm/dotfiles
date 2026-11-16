@@ -53,6 +53,7 @@ export const CLIS: Record<string, Spec> = {
   "claude-account": { verbs: true, deep: true },
   "secrets-run": { verbs: true, deep: true },
   jobrun: { verbs: false, deep: false },
+  "agent-note": { verbs: false, deep: false }, // <machine>:<terminal> is its first word, not a verb
   home: { verbs: true, deep: false, passthrough: true },
 }
 

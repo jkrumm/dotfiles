@@ -43,6 +43,7 @@ Agents run on the mini and outlive the MacBook. The stack is Tailscale (reach), 
 - Never restart, stop or update the core outside `make herdr-core-update` (the owner, by hand, in a quiet window). A core restart keeps terminals; a reboot or `kill -9` loses them. `hooks/herdr-core-guard.ts` denies the commands.
 - Choose the Claude account on the command (`CLAUDE_CONFIG_DIR`, unset means `iu`), never by inheritance: a core's env is every terminal's env and `hc run` forwards nothing.
 - Commands take a repo name, never a path; the host resolves it.
+- An agent reaches an agent on the other machine with `agent-note <mini|macbook>:<terminal> "<text>"` (reply the same way), never by asking the owner to carry it: skill `/remote-dev`, `docs/remote-dev.md` §Agent notes. `ask-human` works from a MacBook session too.
 - Work that needs a present human (biometric `op`, an ACL push): `ask-human ask "…" [--cmd … | --need secret|hands|place]`, which pushes a dialog to the MacBook. `ssh iumac` runs fixed verbs only. Detail: `docs/remote-dev.md` §human-queue.
 - Changing `scripts/ask-human.sh`, `scripts/human-queue.sh`, `scripts/lib/human-queue-json.sh` or `scripts/human-queue-notify-hook.sh` needs the owner's re-pin of the IuRoot deploy gate: `scripts/AGENTS.md` §Deploy gate pins.
 - Work for another repo goes through `factory issue new` (skill `factory`); an edit in this tree goes to `@implementer`.

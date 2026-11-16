@@ -5,7 +5,9 @@
  *
  * SessionStart: `hc label $HC_TERMINAL_ID jk.claude.session=<id> jk.claude.config=<CLAUDE_CONFIG_DIR>`
  * (`jk.claude.config=` removes the label for the `iu` account, so a reused terminal never keeps the
- * previous account). SessionEnd: `jk.claude.session=` — a session the user quit is never resumed;
+ * previous account), and `jk.notes=accept`: the terminal takes notes from other agents (`agent-note`, docs/remote-dev.md
+ * §Agent notes; `agent-note accept --off` withdraws it until the next session start). SessionEnd: `jk.claude.session=`
+ * and `jk.notes=` — a session the user quit is never resumed and takes no more notes;
  * a lost program fires no SessionEnd, which is the case resume is for.
  *
  * Only inside a core terminal (HC_TERMINAL_ID set): any `hc` call auto-starts a core otherwise.
@@ -29,13 +31,14 @@ export function labelArgs(
   const terminal = env.HC_TERMINAL_ID
   if (!terminal) return null
   if (input.hook_event_name === "SessionEnd") {
-    return DELIBERATE_EXIT.has(input.reason ?? "") ? ["label", terminal, "jk.claude.session="] : null
+    return DELIBERATE_EXIT.has(input.reason ?? "") ? ["label", terminal, "jk.claude.session=", "jk.notes="] : null
   }
   if (input.hook_event_name !== "SessionStart" || !input.session_id) return null
   return [
     "label", terminal,
     `jk.claude.session=${input.session_id}`,
     `jk.claude.config=${env.CLAUDE_CONFIG_DIR ?? ""}`,
+    "jk.notes=accept",
   ]
 }
 

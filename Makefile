@@ -875,7 +875,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test herdr-app-keys-test kuma-door-test lenses-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1363,13 +1363,18 @@ _setup-scripts:
 	@# rd, ask-human: agent-control commands as real executables on PATH
 	@# (not only zsh functions), so ssh remote commands, OpenCode, Codex and
 	@# agw workers resolve them.
-	@chmod +x $(DOTFILES_DIR)/scripts/remote-dev.sh $(DOTFILES_DIR)/scripts/ask-human.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/remote-dev.sh $(DOTFILES_DIR)/scripts/ask-human.sh $(DOTFILES_DIR)/scripts/ask-human-local.sh $(DOTFILES_DIR)/scripts/agent-note.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/remote-dev.sh" \
 		DST="$(HOME)/.local/bin/rd"
+	@# ask-human is the entry point: ask-human.sh on the mini; on the MacBook the same with the dialog local (ask-human-local.sh)
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/scripts/ask-human.sh" \
+		SRC="$(DOTFILES_DIR)/scripts/ask-human-local.sh" \
 		DST="$(HOME)/.local/bin/ask-human"
+	@# agent-note: agent to agent across the machines (docs/remote-dev.md §Agent notes)
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/agent-note.sh" \
+		DST="$(HOME)/.local/bin/agent-note"
 	@# hl: HomeLab files over S3 (rclone + an env-defined remote; key per machine)
 	@chmod +x $(DOTFILES_DIR)/scripts/hl
 	@$(MAKE) --no-print-directory _link \
@@ -2684,6 +2689,13 @@ human-queue-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/human-queue.sh $(DOTFILES_DIR)/scripts/ask-human.sh $(DOTFILES_DIR)/scripts/lib/human-queue-json.sh $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@$(DOTFILES_DIR)/scripts/human-queue.test.sh
+
+.PHONY: agent-note-test
+agent-note-test: ## agent-note (mini <-> MacBook notes) and the MacBook ask-human entry point, hermetic
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/agent-note.sh $(DOTFILES_DIR)/scripts/agent-note.test.sh $(DOTFILES_DIR)/scripts/ask-human-local.sh $(DOTFILES_DIR)/scripts/ask-human-local.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/agent-note.test.sh $(DOTFILES_DIR)/scripts/ask-human-local.test.sh
+	@$(DOTFILES_DIR)/scripts/agent-note.test.sh
+	@$(DOTFILES_DIR)/scripts/ask-human-local.test.sh
 
 .PHONY: iumac-gate-test macbook-sync-test authorized-keys-sync-test
 iumac-gate-test:

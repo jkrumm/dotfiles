@@ -35,18 +35,18 @@ function run(event: object, env: Record<string, string>) {
 test("SessionStart labels the terminal with session and config", () => {
   const r = run({ session_id: "s1", hook_event_name: "SessionStart" }, { HC_TERMINAL_ID: "t7", CLAUDE_CONFIG_DIR: "/h/.claude-me" })
   expect(r.code).toBe(0)
-  expect(r.log).toBe("label t7 jk.claude.session=s1 jk.claude.config=/h/.claude-me")
+  expect(r.log).toBe("label t7 jk.claude.session=s1 jk.claude.config=/h/.claude-me jk.notes=accept")
 })
 
 test("iu (CLAUDE_CONFIG_DIR unset) removes the config label", () => {
   const r = run({ session_id: "s1", hook_event_name: "SessionStart" }, { HC_TERMINAL_ID: "t7" })
-  expect(r.log).toBe("label t7 jk.claude.session=s1 jk.claude.config=")
+  expect(r.log).toBe("label t7 jk.claude.session=s1 jk.claude.config= jk.notes=accept")
 })
 
 test("SessionEnd clears the session label only for a deliberate exit", () => {
   for (const reason of ["prompt_input_exit", "logout"]) {
     const r = run({ session_id: "s1", hook_event_name: "SessionEnd", reason }, { HC_TERMINAL_ID: "t7" })
-    expect(r.log).toBe("label t7 jk.claude.session=")
+    expect(r.log).toBe("label t7 jk.claude.session= jk.notes=")
   }
 })
 

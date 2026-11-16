@@ -91,6 +91,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | Code / a repo | rd, or git |
 | Vault pages | brain-sync through GitHub |
 | Anything a mini-side agent/LaunchAgent reads | put it **on the mini** — the SMB mount is client-side and dies with the MacBook |
+| Text to an agent on the other machine | `agent-note <mini|macbook>:<terminal> "<text>"`: delivered as a marked note, the reply comes back the same way, no owner step (`agent-note ls` lists who takes notes; exit 75 = queued until the receiver is idle). Never ask the owner to carry a message |
 | A file/state pull the other direction | `rsync … iumac:<path>` from the mini (`usage-tracker` stats dirs); `ssh iumac` runs fixed verbs only — anything else MacBook-side (`op`, installers) goes through `ask-human ask … --cmd …`; a read-only fact is `ssh iumac report <name>`, a pull of another checkout `ssh iumac repo-pull <name>` (dialog, then Touch ID) |
 
 If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
@@ -101,6 +102,7 @@ If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
 ```bash
 ask-human ask "<text>" [--cmd <command> | --need secret|hands|place] [--wait <seconds>] [--no-push]  # on the mini; pushes by default
 ask-human push <id>       # trigger the dialog for an already-enqueued request
+# the same command works in a MacBook session: the dialog opens there and the answer is this call's exit code
 make human-queue          # walk pending requests (run/deny/skip each), on the MacBook
 make human-queue-count    # just the count, on the MacBook
 ```
@@ -113,7 +115,7 @@ it with `make human-queue` (typed `yes` on a real TTY). Still no path that skips
 a present human. `--wait` polls and exits 0/1/2/3 for done/denied/failed/timeout;
 it is ignored when the push resolves synchronously.
 A pushed `--cmd` runs in an hc terminal on the MacBook (TTY, `sudo`, SSH agent, Full Disk Access); still running at the wait (a `Password:` prompt) it is **pending**, exit 76, with the terminal id on stderr, never failed 124. Don't wrap it in `hc run` yourself.
-Full model: `dotfiles/docs/remote-dev.md` → *human-queue*.
+Full model: `dotfiles/docs/remote-dev.md` → *human-queue*. Agent notes: `dotfiles/docs/remote-dev.md` → *Agent notes*.
 
 ## Monitoring and the maintenance round
 

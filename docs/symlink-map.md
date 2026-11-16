@@ -34,7 +34,8 @@ What links where, and what is rendered or copied instead. Edit at either end of 
 | `scripts/shared-chrome.ts` | `~/.local/bin/shared-chrome` | `ensure`/`devtools`/`status`/`stop` for the one headless Chrome behind `/browse` (and the one chrome-devtools daemon on it); its supervisor is `com.jkrumm.shared-chrome` (`make shared-chrome-setup`, in `make setup`) |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (`AGENTS.md` §Secrets, `scripts/AGENTS.md` §Secrets) |
 | `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd work\|agents\|read\|say` (`AGENTS.md` §Machines & remote dev) |
-| `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (`docs/remote-dev.md` §human-queue) |
+| `scripts/ask-human-local.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human; `ask-human.sh` on the mini, the dialog local on the MacBook (`docs/remote-dev.md` §human-queue) |
+| `scripts/agent-note.sh` | `~/.local/bin/agent-note` | Agent to agent across the mini and the MacBook (`docs/remote-dev.md` §Agent notes) |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |

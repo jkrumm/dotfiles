@@ -5,7 +5,7 @@
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
 # (reachability probe, human-queue dialogs, notifications, claude re-login,
-# account snapshots, a dotfiles pull with its link targets, the Herdr glance pull, a read-only report, a repo fast-forward,
+# account snapshots, a dotfiles pull with its link targets, the Herdr glance pull, agent notes (term-ls, term-note), a read-only report, a repo fast-forward,
 # usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
 # outbound credential can do what the mini needs and no more.
@@ -225,6 +225,22 @@ end run' | exec osascript - "$title" "$text"
     log "$verb" allow
     export PATH="$H/.local/bin:/opt/homebrew/bin:$PATH"
     exec bash "$H/SourceRoot/dotfiles/scripts/herdr-glance-sync.sh"
+    ;;
+
+  term-ls)
+    # The MacBook core's terminals that take notes (label jk.notes=accept): id, name, program, state, space. No screen text.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    exec bash "$H/SourceRoot/dotfiles/scripts/agent-note.sh" ls-local
+    ;;
+
+  term-note)
+    # A note from a mini agent to a MacBook agent terminal (agent-note). stdin: target id, sender, body. The script
+    # delivers only into a terminal labelled jk.notes=accept, caps and strips the body, rate limits, logs; it prints
+    # one JSON line and exits 0 delivered, 75 queued, 64 refused.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    exec bash "$H/SourceRoot/dotfiles/scripts/agent-note.sh" deliver
     ;;
 
   hc-version)
