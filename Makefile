@@ -1127,10 +1127,10 @@ context-load-check: ## Fail when an every-turn text of this repo is over budget 
 	@bun $(DOTFILES_DIR)/scripts/context-load.ts --check
 
 .PHONY: cli-refs cli-refs-check
-cli-refs: ## Quoted CLI commands and flags of the agent texts that the live CLI does not have (ARGS="--root <dir> --json")
+cli-refs: ## Quoted CLI commands and flags of the agent texts that the live CLI does not have, the rules/clis.md rows, the skills' injected commands (ARGS="--root <dir> --json")
 	@bun $(DOTFILES_DIR)/scripts/cli-refs.ts $(ARGS)
 
-cli-refs-check: ## Fail on a stale quoted command or flag; asks the installed CLIs' --help (a missing CLI is skipped); part of `make check`, the suite is in jobs-test
+cli-refs-check: ## Fail on a stale quoted command or flag, a bad rules/clis.md row or a failing injected command; asks the installed CLIs' --help (a missing CLI is skipped); part of `make check`, the suite is in jobs-test
 	@bun $(DOTFILES_DIR)/scripts/cli-refs.ts
 
 .PHONY: jobs-test
@@ -3972,7 +3972,7 @@ help:
 	@echo "  make brew-upgrade-dry   Preview without upgrading"
 	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md, and every mapped label for this machine exists"
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
-	@echo "  make cli-refs           quoted CLI commands/flags in agent texts the live CLI lacks (ARGS=\"--root <dir> --json\")"
+	@echo "  make cli-refs           quoted CLI commands/flags in agent texts the live CLI lacks, CLI index rows, injected commands (ARGS=\"--root <dir> --json\")"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir step)"

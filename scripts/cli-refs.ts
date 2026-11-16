@@ -7,6 +7,11 @@
 //   bun scripts/cli-refs.ts --root <dir>    scan another repo (AGENTS.md, config/global.CLAUDE.md, rules/, skills/, agents/, docs/, .claude/{rules,skills})
 //   bun scripts/cli-refs.ts --json          {findings, skipped, files, commands} on stdout
 //
+// Two more checks ride on the same run. Rule rows: every CLI in the table of rules/clis.md has an adapter in CLIS, a list command
+// that exits 0 where the CLI is installed, and every adapter has a row. Injected commands: every !`cmd` line and ```! block under
+// skills/ is run twice, once as is and once with the directories of its CLI removed from PATH; both exit 0, and a skill's
+// normal runs print at most INJECT_MAX bytes together. Injected lines are not quotes: the run proves them.
+//
 // Exit 0 clean · 1 a finding · 2 usage error. A deliberate historical mention carries `<!-- cli-refs: ignore -->` on its line
 // or alone on the line above (above a code fence: the whole block).
 //
@@ -22,11 +27,12 @@ type Spec = {
   valueFlags?: string[] // flags before the verb that take a value (`--format plain`)
   globalFlags?: string[]
   passthrough?: boolean // an unknown first word is forwarded to another program, so it is no finding
+  helpVerbs?: string[] // verbs whose own help is asked although the CLI is not deep (the verb's flags are in its help alone)
 }
 
 // The one table: which CLIs are checked and how each is asked. Add a CLI here and nowhere else.
 export const CLIS: Record<string, Spec> = {
-  agw: { verbs: true, deep: false, extra: ["schema"] },
+  agw: { verbs: true, deep: false, extra: ["schema"], helpVerbs: ["schema"] },
   factory: {
     verbs: true,
     deep: true,
@@ -51,12 +57,29 @@ export const CLIS: Record<string, Spec> = {
 }
 
 export const IGNORE = "cli-refs: ignore"
+const LABEL: Record<Finding["kind"], string> = {
+  "unknown-flag": "no such flag",
+  "unknown-command": "no such command",
+  "rule-row": "rule row",
+  injected: "injected command",
+}
 const TIMEOUT_MS = 25_000
 const SPAWNS = 8
 const WORD = /^[a-z][a-z0-9_-]*$/
 const SHELL_LANGS = new Set(["", "bash", "sh", "zsh", "shell", "console", "shell-session"])
 
-export type Finding = { file: string; line: number; kind: "unknown-command" | "unknown-flag"; cli: string; what: string; text: string }
+export const RULE_FILE = "rules/clis.md"
+export const INJECT_MAX = 4_000
+export const FALLBACK = "is not on this machine"
+
+export type Finding = {
+  file: string
+  line: number
+  kind: "unknown-command" | "unknown-flag" | "rule-row" | "injected"
+  cli: string
+  what: string
+  text: string
+}
 type Quote = { file: string; line: number; cli: string; rest: string; text: string }
 type Result = { code: number; out: string; err: string }
 
@@ -121,7 +144,7 @@ export function extract(file: string, text: string): Quote[] {
   let fence: { mark: string; shell: boolean; ignored: boolean } | null = null
   for (let n = 0; n < lines.length; n++) {
     const line = lines[n]!
-    const open = line.match(/^\s*(`{3,}|~{3,})\s*([\w-]*)/)
+    const open = line.match(/^\s*(`{3,}|~{3,})\s*([\w!-]*)/)
     if (fence) {
       if (open && open[1]!.startsWith(fence.mark) && !open[2]) fence = null
       else if (fence.shell && !fence.ignored && !ignored(n) && !/^\s*#/.test(line)) {
@@ -139,7 +162,11 @@ export function extract(file: string, text: string): Quote[] {
       continue
     }
     if (ignored(n)) continue
-    for (const span of line.matchAll(/`([^`\n]+)`/g)) add(n, span[1]!, span[1]!)
+    for (const span of line.matchAll(/`([^`\n]+)`/g)) {
+      const at = span.index!
+      if (line[at - 1] === "!" && (at === 1 || /\s/.test(line[at - 2]!))) continue // an injected command: run by the injection check
+      add(n, span[1]!, span[1]!)
+    }
   }
   return quotes
 }
@@ -152,7 +179,7 @@ class Asker {
   private cache = new Map<string, Promise<string | null>>()
   private running = 0
   private waiting: (() => void)[] = []
-  constructor(private env: Env) {}
+  constructor(readonly env: Env) {}
 
   which(cli: string): string | null {
     return Bun.which(cli, { PATH: this.env.PATH ?? "" })
@@ -167,6 +194,24 @@ class Asker {
       this.running--
       this.waiting.shift()?.()
     }
+  }
+
+  // One shell command as the harness would run an injected line: stdout and stderr together, the exit code, never a hang.
+  exec(command: string, env: Env = this.env): Promise<{ code: number; out: string }> {
+    return this.slot(async () => {
+      const proc = Bun.spawn(["/bin/bash", "-c", command], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: env as Record<string, string> })
+      const timer = setTimeout(() => proc.kill(), TIMEOUT_MS)
+      try {
+        const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+        return { code: await proc.exited, out: `${out}${err}` }
+      } finally {
+        clearTimeout(timer)
+      }
+    })
+  }
+
+  get path(): string {
+    return this.env.PATH ?? ""
   }
 
   // `<cli> <path…> --help`: stdout + stderr, null when the CLI is missing or says nothing. A CLI that answers an unknown path with
@@ -275,7 +320,7 @@ export async function check(q: Quote, asker: Asker): Promise<Finding[]> {
   const table = parseTable(q.cli, top, spec.extra)
   const toks = words(q.rest)
   const finding = (kind: Finding["kind"], what: string): Finding => ({ file: q.file, line: q.line, kind, cli: q.cli, what, text: q.text })
-  const asks = (path: string[]) => spec.deep && !spec.noHelp?.includes(path[0]!)
+  const asks = (path: string[]) => (spec.deep && !spec.noHelp?.includes(path[0]!)) || (path.length === 1 && !!spec.helpVerbs?.includes(path[0]!))
 
   // One word after the path so far: part of the command, an argument of it, or a verb the CLI does not have.
   const step = async (cur: string[], w: string): Promise<"ok" | "arg" | "unknown"> => {
@@ -336,6 +381,120 @@ export async function check(q: Quote, asker: Asker): Promise<Finding[]> {
   return out
 }
 
+// ── rule rows ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type RuleRow = { line: number; clis: string[]; lists: string[]; text: string }
+
+const spans = (cell: string) => [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]!)
+
+// The table of rules/clis.md: a row is `| CLIs | for | list commands | skill |`; the header and separator carry no code span.
+export function parseRuleRows(text: string): RuleRow[] {
+  const rows: RuleRow[] = []
+  text.split("\n").forEach((raw, n) => {
+    if (!raw.startsWith("|")) return
+    const cells = raw.split("|").slice(1, -1).map((c) => c.trim())
+    const clis = spans(cells[0] ?? "")
+    if (clis.length) rows.push({ line: n + 1, clis, lists: spans(cells[2] ?? ""), text: raw.slice(0, 140) })
+  })
+  return rows
+}
+
+export async function checkRuleRows(root: string, asker: Asker): Promise<{ findings: Finding[]; skipped: string[]; rows: number }> {
+  const path = join(root, RULE_FILE)
+  const findings: Finding[] = []
+  const skipped: string[] = []
+  if (!existsSync(path)) return { findings, skipped, rows: 0 }
+  const rows = parseRuleRows(readFileSync(path, "utf8"))
+  const bad = (row: RuleRow, cli: string, what: string): Finding => ({ file: RULE_FILE, line: row.line, kind: "rule-row", cli, what, text: row.text })
+  const listed = new Set<string>()
+  for (const row of rows) {
+    for (const cli of row.clis) {
+      listed.add(cli)
+      if (!Object.hasOwn(CLIS, cli)) findings.push(bad(row, cli, `${cli}: a row names a CLI with no adapter in CLIS`))
+      if (!row.lists.some((l) => l.split(/\s/, 1)[0] === cli)) findings.push(bad(row, cli, `${cli}: no list command for it in the row`))
+    }
+    for (const list of row.lists) {
+      const cli = list.split(/\s/, 1)[0]!
+      if (!row.clis.includes(cli)) {
+        findings.push(bad(row, cli, `${list}: the list command is not of a CLI in the row`))
+        continue
+      }
+      if (!asker.which(cli)) {
+        skipped.push(`${cli}: not installed, its list command was not run`)
+        continue
+      }
+      const r = await asker.exec(list)
+      if (r.code !== 0) findings.push(bad(row, cli, `${list}: the list command exits ${r.code}`))
+    }
+  }
+  for (const cli of Object.keys(CLIS)) {
+    if (!listed.has(cli)) findings.push({ file: RULE_FILE, line: 1, kind: "rule-row", cli, what: `${cli}: has an adapter and no row`, text: cli })
+  }
+  return { findings, skipped, rows: rows.length }
+}
+
+// ── injected commands ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type Injection = { file: string; line: number; command: string }
+
+// Claude Code runs a line of the form !`cmd` (after whitespace or at the line start) and a ```! block before the skill text
+// reaches the model. A fence of another language is code, not an injection.
+export function injections(file: string, text: string): Injection[] {
+  const found: Injection[] = []
+  const lines = text.split("\n")
+  for (let n = 0; n < lines.length; n++) {
+    const open = lines[n]!.match(/^\s*(`{3,}|~{3,})\s*([\w!-]*)/)
+    if (open) {
+      const body: string[] = []
+      let m = n + 1
+      while (m < lines.length && !new RegExp(`^\\s*${open[1]![0] === "`" ? "`" : "~"}{${open[1]!.length},}\\s*$`).test(lines[m]!)) body.push(lines[m++]!)
+      if (open[2] === "!" && body.join("").trim()) found.push({ file, line: n + 1, command: body.join("\n") })
+      n = m
+      continue
+    }
+    for (const m of lines[n]!.matchAll(/(?:^|\s)!`([^`\n]+)`/g)) found.push({ file, line: n + 1, command: m[1]! })
+  }
+  return found
+}
+
+// The directories that hold the CLIs a command starts, minus the system ones: removed from PATH, the CLI is gone.
+function pathWithout(command: string, path: string): string {
+  const system = new Set(["/bin", "/usr/bin", "/sbin", "/usr/sbin"])
+  const gone = new Set<string>()
+  for (const line of command.split("\n")) {
+    for (let seg of line.split(SEGMENT)) {
+      seg = seg.trim().replace(WRAPPERS, "").replace(ENV, "")
+      const bin = seg.split(/\s/, 1)[0]!
+      const at = bin && Bun.which(bin, { PATH: path })
+      if (at && !system.has(at.slice(0, at.lastIndexOf("/")))) gone.add(at.slice(0, at.lastIndexOf("/")))
+    }
+  }
+  return [...path.split(":").filter((d) => d && !gone.has(d)), "/usr/bin", "/bin"].join(":")
+}
+
+export async function checkInjected(root: string, files: string[], asker: Asker): Promise<{ findings: Finding[]; count: number }> {
+  const findings: Finding[] = []
+  const all = files
+    .filter((f) => /(^|\/)skills\//.test(relative(root, f)))
+    .flatMap((f) => injections(relative(root, f), readFileSync(f, "utf8")))
+  const bad = (i: Injection, what: string): Finding => ({ file: i.file, line: i.line, kind: "injected", cli: i.command.split(/\s/, 1)[0]!, what, text: i.command.slice(0, 140) })
+  const sizes = new Map<string, number>()
+  await Promise.all(
+    all.map(async (i) => {
+      const without = await asker.exec(i.command, { ...asker.env, PATH: pathWithout(i.command, asker.path) })
+      if (without.code !== 0) findings.push(bad(i, `exits ${without.code} when its CLI is not on PATH: end it with || echo "<cli> ${FALLBACK}"`))
+      const normal = await asker.exec(i.command)
+      if (normal.code !== 0) findings.push(bad(i, `exits ${normal.code}: a failing command aborts the whole skill`))
+      else if (normal.out.includes(FALLBACK) && asker.which(i.command.split(/\s/, 1)[0]!)) findings.push(bad(i, "printed its fallback line although the CLI is on PATH"))
+      sizes.set(i.file, (sizes.get(i.file) ?? 0) + Buffer.byteLength(normal.out))
+    }),
+  )
+  for (const [file, bytes] of sizes) {
+    if (bytes > INJECT_MAX) findings.push({ file, line: 1, kind: "injected", cli: "", what: `injects ${bytes} bytes, over ${INJECT_MAX}`, text: file })
+  }
+  return { findings, count: all.length }
+}
+
 // ── run ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export async function run(argv: string[], opts: { env?: Env; cwd?: string } = {}): Promise<Result> {
@@ -363,20 +522,26 @@ export async function run(argv: string[], opts: { env?: Env; cwd?: string } = {}
   const findings = (await Promise.all(checked.map((q) => check(q, asker)))).flat()
   findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.what.localeCompare(b.what))
 
+  const rule = await checkRuleRows(root, asker)
+  const inject = await checkInjected(root, files, asker)
+  findings.push(...rule.findings, ...inject.findings)
+  skipped.push(...rule.skipped)
+  findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.what.localeCompare(b.what))
+
   const seen = new Set<string>()
   const unique = findings.filter((f) => {
     const key = `${f.file}:${f.line}:${f.what}`
     return !seen.has(key) && seen.add(key)
   })
   if (json) {
-    const body = { findings: unique, skipped, files: files.length, commands: checked.length }
+    const body = { findings: unique, skipped, files: files.length, commands: checked.length, ruleRows: rule.rows, injected: inject.count }
     return { code: unique.length ? 1 : 0, out: `${JSON.stringify(body, null, 2)}\n`, err: "" }
   }
   const err = unique
-    .map((f) => `${f.file}:${f.line}: ${f.kind === "unknown-flag" ? "no such flag" : "no such command"}: ${f.what}  | ${f.text}`)
+    .map((f) => `${f.file}:${f.line}: ${LABEL[f.kind]}: ${f.what}  | ${f.text}`)
     .concat(skipped.map((s) => `cli-refs: ${s}`))
     .join("\n")
-  const summary = `cli-refs: ${checked.length} quoted commands in ${files.length} files, ${unique.length} stale`
+  const summary = `cli-refs: ${checked.length} quoted commands in ${files.length} files, ${unique.length} stale; ${rule.rows} rule rows, ${inject.count} injected commands`
   return { code: unique.length ? 1 : 0, out: `${summary}\n`, err: err ? `${err}\n` : "" }
 }
 
