@@ -183,8 +183,6 @@ the weatherorb session workflow.
 | `com.jkrumm.linewatch-app` | linewatch | KeepAlive (:7731, loopback) — the API, dashboard, Ookla and router poller, native since Issue 1219 (was the Colima container); door `linewatch.test`; `make -C ~/SourceRoot/linewatch app-stop` stops it |
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
 | `com.jkrumm.rb` | rb | KeepAlive (127.0.0.1:4050, health `/api/health`) — rb native since Issue 1184 (was the Colima containers), from a release dir `~/.rb/releases/<sha>` through its `scripts/launch.sh`; tier core, always reachable; doors `rb.test` and `tailscale serve` on :7730; its headless Chrome runs only during a fetch run (about 0.4 GiB, stopped after 180 s idle) |
-| `com.jkrumm.kiri` | dotfiles (plan row `kiri-trial`) | KeepAlive — the kiri container-runtime daemon of the trial beside Colima, tier manual in the registry; not part of `make setup` |
-| `com.jkrumm.kiri-sample` | 900s | the trial's sampler (`~/.local/share/kiri/kiri-trial.sh sample`), tier manual in the registry; goes with the trial |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |
 | `com.jkrumm.usage-tracker-prices` | usage-tracker | 04:20 daily — `prices-sync` under `jobrun`: refreshes the model price catalog behind `usage.compute_cost` |
 | `com.jkrumm.usage-tracker-report` | usage-tracker | Monday 07:00 — `report weekly` under `jobrun`: writes the weekly "where the window went" report that Hermes posts at 07:30 |

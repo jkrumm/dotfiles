@@ -15,7 +15,7 @@ VM's footprint stayed where the peak left it, 2 minutes and 10 minutes later, at
 works inside the guest (the guest reported 3.9 of 4.0 GiB "used" with 160 MiB really in use: the pages sit in the
 balloon) and the host does not reclaim them, which is what the earlier research run found. An always-on kiri VM
 therefore costs the largest amount its containers ever touched, up to its ceiling, exactly as Colima's does (2062 MiB
-now, at a 2 GiB ceiling, for about 1.05 GiB of containers). It starts lower and ratchets up; the 48-hour reading below says how fast on
+now, at a 2 GiB ceiling, for about 1.05 GiB of containers). It starts lower and ratchets up; the 48-hour section below could not say how fast on
 the real working set.
 
 What kiri would add on top of that for this stack:
@@ -147,11 +147,23 @@ becomes a script of `container run` lines without restart, healthcheck or orderi
 
 ## The 48-hour reading
 
-The mariadb copy has run since 2026-11-14T19:21Z with `com.jkrumm.kiri-sample` writing one line every 15 minutes to
-`~/.local/state/kiri-trial/mariadb-sample.log` (VM footprint, health, restart count, daemon RSS). Reading owed at
-2026-11-16T19:30Z, from that log and `docker logs kiri-trial-mariadb` (owed: this section is filled in then; the verdict rests on (a), not on it).
+**Not completed: the 48 hours ran 4 h 50 min.** The mariadb copy started at 2026-11-14T19:21Z; the mini was shut
+down and rebooted at 2026-11-15 01:11 local (00:11Z, `engine shutting down signal=15`, then `the VM stopped
+unexpectedly`). The copy has the default restart policy, so the daemon, which came back at 00:28Z under its
+LaunchAgent, left it stopped and the VM asleep for the rest of the window (172 of 192 samples read `asleep`, health
+stale at `unhealthy`). I did not restart it for another 48 hours: an idle database cannot move the verdict, which rests
+on table (a).
+
+What the 20 samples while it ran (`com.jkrumm.kiri-sample`, every 15 minutes, `~/.local/state/kiri-trial/mariadb-sample.log`)
+say: the VM's footprint sat at **356 to 375 MiB** (365 at the first, 366 at the last), the daemon at 10 to 19 MiB RSS,
+health `healthy`, restart count 0. That is the idle working set of one mariadb with no load, and it never fell: the
+largest value came in the first hour. The container log holds only two benign warnings (`io_uring_queue_init() failed
+with EPERM`, `/sys/fs/cgroup/…/memory.pressure not writable`). Unclean stop at the reboot: exit 255, no
+`Shutdown complete` line, as for any container whose VM disappears.
 
 ## Removal
 
-At the end of the trial: `make kiri-teardown` (agent, sampler, context, `~/.local/share/kiri`, `~/.kiri`),
-`make container-teardown`, the download directories `~/kiri-trial-dl` and `~/container-trial-dl`, `~/Kiri`.
+Done at the end of the trial (2026-11-16): `make kiri-teardown` (agent, sampler, docker context, `~/.local/share/kiri`,
+`~/.kiri` with the mariadb copy's volume), `make container-teardown` (done earlier), the download directories
+`~/kiri-trial-dl` and `~/container-trial-dl`, and the empty `~/Kiri`. Kept: the raw logs in `~/.local/state/kiri-trial/`.
+Nothing system-wide was ever installed, so nothing system-wide is removed.
