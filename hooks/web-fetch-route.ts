@@ -66,7 +66,7 @@ export function routeReason(input: HookInput, available = agwAvailable()): strin
     );
   }
   const ask = input.tool_input?.prompt?.trim();
-  return `${why}\nRun: agw web read ${quote(raw)}${ask ? ` --ask ${quote(ask)}` : ""} --format plain\n(Add --fresh for a page that changes by the hour, --max-chars to read more of a long page.)`;
+  return `${why}\nRun: agw web read ${quote(raw)}${ask ? ` --ask ${quote(ask)}` : ""} --format plain\n(Add --fresh for a page that changes by the hour, --max-chars N (up to 200000, default 60000) for a long page. Never pipe agw into head/tail: it hides the exit code; use --max-chars and --format plain.)`;
 }
 
 if (import.meta.main) {

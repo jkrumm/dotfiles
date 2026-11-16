@@ -5,11 +5,11 @@ description: Code review via agw review v4 (prepare/submit host commands, no LLM
 
 # Review
 
-Args: `[scope (default uncommitted; head, <ref>, <a>..<b>) | --pr N | --branch B] [--min light|standard|deep] [--context '<intent>'] [--thread <key>]`. `--pr`/`--branch` review a throwaway clone and never touch the main checkout; they exclude a scope. The scope always goes to `agw review prepare` as `--scope <scope>`, never positional. `--thread` takes the thread key or the thread id `status` prints. Every `agw review` call below passes `--cwd "$(git rev-parse --show-toplevel)"`. A bare `<ref>` means `merge-base(ref, HEAD)..HEAD`, not the single commit.
+Args: `[scope (default uncommitted; head, <ref>, <a>..<b>) | --pr N | --branch B] [--min light|standard|deep] [--context '<intent>'] [--thread <key>]`. `--pr`/`--branch` review a throwaway clone and never touch the main checkout; they exclude a scope. The scope always goes to `agw review prepare` as `--scope <scope>`, never positional. `--thread` takes the thread key or the thread id `status` prints. `--cwd "$(git rev-parse --show-toplevel)"` goes on `prepare`, `status`, `route` and `covered` only; `submit`, `dispose` and `cancel` take a job id and answer `unknown flag --cwd`. A bare `<ref>` means `merge-base(ref, HEAD)..HEAD`, not the single commit.
 
 ## Flow
 
-1. **Prepare:** `agw review prepare --cwd "$(git rev-parse --show-toplevel)" [--scope <scope> | --pr N | --branch B] [--min …] [--context '…'] [--thread …] --account "$(claude-account account)" --commit --format json`. Pass `--context` with the intent (the brief, plan step, PR body) whenever you have it. Without `--account` the ceiling is `unjudged`.
+1. **Prepare:** `agw review prepare --cwd "$(git rev-parse --show-toplevel)" [--scope <scope> | --pr N | --branch B] [--min …] [--context '…'] [--thread …] --account "$(claude-account account)" --commit --format json`. Always pass `--context` with the intent (the brief, plan step, PR body) and, when the session has them, the Issue's scope limits: what it owns, what it must not touch, and any duplication it states as intended. The reviewer reads them as bounds on scope and duplication findings. Without `--account` the ceiling is `unjudged`.
 2. **By `status`:**
    - `skipped`: tier none. Report the `rule`; nothing to review.
    - `held`: the ceiling or the deep cap. Report `reason`, never lower the tier, stop. The review waits; re-run later.
@@ -65,7 +65,4 @@ user-visible words before and after". It then went down 10%. If the request
 cannot be checked by a number or a named site, it will be reported as done
 regardless of what happened.
 
-**Worker caveats when consuming findings:**
-- **Line numbers are unreliable** — the worker often cites lines that don't exist (e.g. L688 in a 600-line file). The *substance* is usually accurate; the location isn't. Before reporting or acting on a finding, **grep for the symbol/code, not the cited line.**
-- A finding may reference code outside the reviewed scope: verify it is in-scope before treating it as introduced by the change (`pre-existing` findings never block).
-- Before claiming a finding is wrong, verify it in the actual code — don't dismiss it on the bad line number alone.
+**Consuming findings:** a finding may reference code outside the reviewed scope: verify it is in-scope before treating it as introduced by the change (`pre-existing` findings never block). Before claiming a finding is wrong, verify it in the actual code. Line numbers are validated at submit, so cite them as given.
