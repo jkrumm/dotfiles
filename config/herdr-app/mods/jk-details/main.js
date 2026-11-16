@@ -78,7 +78,7 @@ export default class JkDetails extends View {
     // What the bar's chip leaves out: RAM in GiB, and (the mini) the load against the factory's admission ceiling.
     const last = hist.at(-1);
     const g = shared("jk.factory.glance");
-    const load = m === "mini" && g && !g.empty ? (g.items ?? []).find((i) => i.key === "load") : null;
+    const load = m === "mini" && g && !g.empty && !g.stale ? (g.items ?? []).find((i) => i.key === "load") : null;
     const facts = [last?.total ? `RAM ${last.used.toFixed(1)} of ${last.total} GiB` : null, load?.value ? `load ${load.value} of the admission ceiling` : null].filter(Boolean);
     return v_flex().gap(12)
       .child(h_flex().gap(10).items_baseline()
