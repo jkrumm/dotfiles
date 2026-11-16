@@ -5,7 +5,8 @@
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
 # (reachability probe, human-queue dialogs, notifications, claude re-login,
-# account snapshots, a dotfiles pull with its link targets, the Herdr glance pull, usage-tracker pulls); this gate maps each verb to its one
+# account snapshots, a dotfiles pull with its link targets, the Herdr glance pull, a read-only report, a repo fast-forward,
+# usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
 # outbound credential can do what the mini needs and no more.
 #
@@ -21,7 +22,8 @@
 #
 # Test seams (tests only; sshd never sets them): IUMAC_GATE_HOME replaces $HOME
 # for every path below so a temp tree of stub scripts can stand in for the real
-# repo, and IUMAC_GATE_RSYNC replaces the rsync binary.
+# repo; IUMAC_GATE_RSYNC / IUMAC_GATE_GIT replace the rsync and git binaries; IUMAC_GATE_REPORT_TIMEOUT /
+# IUMAC_GATE_PULL_TIMEOUT replace the `report` (60 s) and `repo-pull` (300 s) limits.
 #
 # Runs on the MacBook under /bin/bash 3.2: no associative arrays, no mapfile.
 unset SSH_AUTH_SOCK
@@ -57,6 +59,41 @@ refuse() { # <verb>
   log "$v" refuse
   printf 'refused: %s\n' "$v" >&2
   exit 126
+}
+
+# run_limited <seconds> <command...> — run it with stderr merged into stdout, stdin closed, a time limit and the output
+# cut to 64 KB; sets LIMITED_RC (124 on the time limit). The watchdog has no stdio, so ssh never waits on it.
+run_limited() {
+  local secs="$1" out pid wd
+  shift
+  out="$(mktemp "${TMPDIR:-/tmp}/iumac-gate.XXXXXX")" || {
+    LIMITED_RC=1
+    return
+  }
+  "$@" >"$out" 2>&1 </dev/null &
+  pid=$!
+  (
+    sleep "$secs"
+    kill -0 "$pid" 2>/dev/null || exit 0
+    : >"$out.timeout"
+    pkill -TERM -P "$pid" 2>/dev/null
+    kill -TERM "$pid" 2>/dev/null
+    sleep 2
+    pkill -KILL -P "$pid" 2>/dev/null
+    kill -KILL "$pid" 2>/dev/null
+  ) >/dev/null 2>&1 </dev/null &
+  wd=$!
+  wait "$pid" 2>/dev/null
+  LIMITED_RC=$?
+  pkill -P "$wd" 2>/dev/null
+  kill "$wd" 2>/dev/null
+  wait "$wd" 2>/dev/null
+  if [ -e "$out.timeout" ]; then
+    LIMITED_RC=124
+    rm -f "$out.timeout"
+  fi
+  head -c 65536 "$out"
+  rm -f "$out"
 }
 
 if [ -z "$raw" ]; then
@@ -191,6 +228,45 @@ end run' | exec osascript - "$title" "$text"
     [ "$argc" -eq 1 ] || refuse "$verb"
     log "$verb" allow
     exec "$H/.local/bin/hc" --version
+    ;;
+
+  report)
+    # Run one read-only command named in config/macbook-reports.tsv and print its output (stderr merged, 60 s, 64 KB,
+    # last line `[exit N]`). Exit 0 whenever the command ran: the caller reads that as "ran", not as the command's verdict.
+    [ "$argc" -eq 2 ] || refuse "$verb"
+    [[ "${words[1]}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || refuse "$verb"
+    tsv="$H/SourceRoot/dotfiles/config/macbook-reports.tsv"
+    [ -r "$tsv" ] || refuse "$verb"
+    cmd=""
+    while IFS=$'\t' read -r name rcmd _; do
+      case "$name" in '' | '#'*) continue ;; esac
+      if [ "$name" = "${words[1]}" ]; then cmd="$rcmd" && break; fi
+    done <"$tsv"
+    [ -n "$cmd" ] || refuse "$verb"
+    log "$verb" allow
+    export PATH="$H/.local/bin:/opt/homebrew/bin:/usr/local/bin:$H/.bun/bin:$PATH"
+    run_limited "${IUMAC_GATE_REPORT_TIMEOUT:-60}" env HOME="$H" /bin/bash -c "$cmd"
+    printf '[exit %s]\n' "$LIMITED_RC"
+    exit 0
+    ;;
+
+  repo-pull)
+    # Fast-forward one other checkout under ~/SourceRoot over https with no ssh identity (dotfiles is dotfiles-sync).
+    # Exit is git's; a refusal of the name or the checkout is 126.
+    [ "$argc" -eq 2 ] || refuse "$verb"
+    repo="${words[1]}"
+    [[ "$repo" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || refuse "$verb"
+    case "$repo" in dotfiles | *..*) refuse "$verb" ;; esac
+    [ -e "$H/SourceRoot/$repo/.git" ] || refuse "$verb"
+    log "$verb" allow
+    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+    # No ssh identity, no agent, no prompt: an ssh remote of github.com is read over https instead.
+    export GIT_SSH_COMMAND=/usr/bin/false GIT_TERMINAL_PROMPT=0
+    export GIT_CONFIG_COUNT=2
+    export GIT_CONFIG_KEY_0="url.https://github.com/.insteadOf" GIT_CONFIG_VALUE_0="git@github.com:"
+    export GIT_CONFIG_KEY_1="url.https://github.com/.insteadOf" GIT_CONFIG_VALUE_1="ssh://git@github.com/"
+    run_limited "${IUMAC_GATE_PULL_TIMEOUT:-300}" "${IUMAC_GATE_GIT:-git}" -C "$H/SourceRoot/$repo" pull --ff-only
+    exit "$LIMITED_RC"
     ;;
 
   rsync)

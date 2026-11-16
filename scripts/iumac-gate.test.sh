@@ -142,6 +142,123 @@ expect_allowed "rsync 3.x bundle with -z" "rsync --server --sender -vlogDtprze.i
   "rsync|--server|--sender|-vlogDtprze.iLsfxCIvu|.|.local/share/usage-tracker/"
 expect_allowed "rsync codex sessions root" "rsync --server --sender -vlogDtpr . .codex/sessions/" "rsync|--server|--sender|-vlogDtpr|.|.codex/sessions/"
 
+echo "== report"
+mkdir -p "$H/SourceRoot/dotfiles/config"
+printf '%s\n' '# comment' '' \
+  "say-hi	echo hello" \
+  "both-streams	echo out; echo err >&2" \
+  "fails	echo bad; exit 3" \
+  "big	head -c 100000 /dev/zero | tr '\\0' x" \
+  "slow	sleep 30" \
+  "home-tilde	echo ~/x" \
+  >"$H/SourceRoot/dotfiles/config/macbook-reports.tsv"
+OUT=""
+# run_gate_out <command> [env...] — stdout+stderr of the gate in OUT, exit code in RC
+run_gate_out() {
+  local c="$1"
+  shift
+  reset
+  OUT="$(env "$@" SSH_ORIGINAL_COMMAND="$c" IUMAC_GATE_HOME="$H" PATH="$BIN:$PATH" /bin/bash "$GATE" 2>&1 </dev/null)"
+  RC=$?
+}
+run_gate_out "report say-hi";       assert_eq "report: exit 0" "0" "$RC"; assert_eq "report: output then [exit 0]" "hello
+[exit 0]" "$OUT"
+run_gate_out "report both-streams"; assert_eq "report: stderr merged into stdout" "out
+err
+[exit 0]" "$OUT"
+run_gate_out "report fails";        assert_eq "report: exit 0 whatever the command exited with" "0" "$RC"; assert_eq "report: the command's own exit is the last line" "bad
+[exit 3]" "$OUT"
+run_gate_out "report home-tilde";   assert_eq "report: ~ is the gate's home" "$H/x
+[exit 0]" "$OUT"
+run_gate_out "report big"
+assert_eq "report: output cut to 64 KB, the exit line still follows" "65544" "${#OUT}"
+SECS0=$SECONDS
+run_gate_out "report slow" IUMAC_GATE_REPORT_TIMEOUT=1
+assert_eq "report: a slow command still exits 0" "0" "$RC"
+assert_eq "report: the time limit reports 124" "[exit 124]" "$OUT"
+assert_eq "report: stopped at the limit, not after 30 s" "yes" "$([ $((SECONDS - SECS0)) -lt 10 ] && echo yes || echo no)"
+expect_refused "report unknown name" "report nope"
+expect_refused "report no name" "report"
+expect_refused "report two names" "report say-hi fails"
+expect_refused "report upper-case" "report Say-hi"
+expect_refused "report path name" "report ../x"
+expect_refused "report name with dot" "report say.hi"
+expect_refused "report leading dash" "report -x"
+expect_refused "report chained" "report say-hi; id"
+run_gate "report nope"; assert_contains "report unknown: stderr names the verb" "refused: report" "$ERR"
+mv "$H/SourceRoot/dotfiles/config/macbook-reports.tsv" "$H/SourceRoot/dotfiles/config/macbook-reports.tsv.off"
+expect_refused "report with no table" "report say-hi"
+mv "$H/SourceRoot/dotfiles/config/macbook-reports.tsv.off" "$H/SourceRoot/dotfiles/config/macbook-reports.tsv"
+# The shipped table: well-formed rows, the three the factory knows.
+REAL="$HERE/../config/macbook-reports.tsv"
+names="$(awk -F'\t' '!/^#/ && NF { print $1 }' "$REAL" | tr '\n' ' ')"
+assert_contains "shipped table: smb-mounts" "smb-mounts " "$names"
+assert_contains "shipped table: ntfy-mac-update-check" "ntfy-mac-update-check " "$names"
+assert_contains "shipped table: iumac-gate-log" "iumac-gate-log " "$names"
+bad_rows="$(awk -F'\t' '!/^#/ && NF && ($1 !~ /^[a-z0-9][a-z0-9-]*$/ || $2 == "") { print $1 }' "$REAL")"
+assert_eq "shipped table: every row is a valid name and a command" "" "$bad_rows"
+
+echo "== repo-pull"
+command -v git >/dev/null 2>&1 || { echo "  skip: git missing"; }
+GITENV=(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null)
+g() { env "${GITENV[@]}" git "$@"; }
+SRCROOT="$H/SourceRoot"
+ORIGIN="$TMP/origin.git"
+g init -q --bare -b master "$ORIGIN"
+g clone -q "$ORIGIN" "$TMP/pusher" 2>/dev/null
+( cd "$TMP/pusher" && echo one >f && g add f && g commit -q -m one && g push -q origin HEAD:master )
+g clone -q "$ORIGIN" "$SRCROOT/alpha" 2>/dev/null
+( cd "$TMP/pusher" && echo two >>f && g add f && g commit -q -m two && g push -q origin HEAD:master )
+run_gate_out "repo-pull alpha" "${GITENV[@]}"
+assert_eq "repo-pull: fast-forward exits 0" "0" "$RC"
+assert_eq "repo-pull: the checkout is level" "$(g -C "$TMP/pusher" rev-parse HEAD)" "$(g -C "$SRCROOT/alpha" rev-parse HEAD)"
+run_gate_out "repo-pull alpha" "${GITENV[@]}"
+assert_eq "repo-pull: already level exits 0" "0" "$RC"
+assert_contains "repo-pull: says so" "Already up to date" "$OUT"
+# dirty tree that the pull would touch -> git refuses, non-zero
+( cd "$TMP/pusher" && echo three >>f && g add f && g commit -q -m three && g push -q origin HEAD:master )
+echo local >>"$SRCROOT/alpha/f"
+run_gate_out "repo-pull alpha" "${GITENV[@]}"
+assert_eq "repo-pull: a dirty tree is git's non-zero" "1" "$([ "$RC" -ne 0 ] && [ "$RC" -ne 126 ] && echo 1 || echo 0)"
+assert_contains "repo-pull: git's error is in the output" "error" "$OUT"
+g -C "$SRCROOT/alpha" checkout -q -- f
+# diverged branch
+echo diverge >"$SRCROOT/alpha/g" && g -C "$SRCROOT/alpha" add g && g -C "$SRCROOT/alpha" commit -q -m diverge
+run_gate_out "repo-pull alpha" "${GITENV[@]}"
+assert_eq "repo-pull: a diverged branch is non-zero" "1" "$([ "$RC" -ne 0 ] && [ "$RC" -ne 126 ] && echo 1 || echo 0)"
+# no ssh identity, no prompt: the env the pull runs with
+mkdir -p "$TMP/fakegit"
+printf '%s\n' '#!/bin/bash' 'printf "%s|%s|%s|%s\n" "$GIT_SSH_COMMAND" "$GIT_TERMINAL_PROMPT" "${SSH_AUTH_SOCK-unset}" "$*" >"'"$REC"'/git.env"' >"$TMP/fakegit/git"
+chmod +x "$TMP/fakegit/git"
+mkdir -p "$SRCROOT/beta/.git"
+reset
+SSH_ORIGINAL_COMMAND="repo-pull beta" IUMAC_GATE_HOME="$H" SSH_AUTH_SOCK=/tmp/fake-agent.sock IUMAC_GATE_GIT="$TMP/fakegit/git" /bin/bash "$GATE" >/dev/null 2>&1
+assert_contains "repo-pull: no ssh command" "/usr/bin/false|0|unset|-C $SRCROOT/beta pull --ff-only" "$(cat "$REC/git.env" 2>/dev/null)"
+# the file-form .git of a worktree or submodule counts too
+mkdir -p "$SRCROOT/gamma" && echo "gitdir: elsewhere" >"$SRCROOT/gamma/.git"
+reset
+SSH_ORIGINAL_COMMAND="repo-pull gamma" IUMAC_GATE_HOME="$H" IUMAC_GATE_GIT="$TMP/fakegit/git" /bin/bash "$GATE" >/dev/null 2>&1; assert_eq "repo-pull: a .git file is a checkout" "0" "$?"
+# a time limit
+printf '%s\n' '#!/bin/bash' 'sleep 30' >"$TMP/fakegit/git"
+SECS0=$SECONDS
+SSH_ORIGINAL_COMMAND="repo-pull beta" IUMAC_GATE_HOME="$H" IUMAC_GATE_PULL_TIMEOUT=1 IUMAC_GATE_GIT="$TMP/fakegit/git" /bin/bash "$GATE" >/dev/null 2>&1; rc=$?
+assert_eq "repo-pull: the time limit is non-zero" "124" "$rc"
+assert_eq "repo-pull: stopped at the limit" "yes" "$([ $((SECONDS - SECS0)) -lt 10 ] && echo yes || echo no)"
+mkdir -p "$SRCROOT/nogit"
+expect_refused "repo-pull no such checkout" "repo-pull missing"
+expect_refused "repo-pull a directory without .git" "repo-pull nogit"
+expect_refused "repo-pull dotfiles" "repo-pull dotfiles"
+expect_refused "repo-pull dotted traversal" "repo-pull .."
+expect_refused "repo-pull name with .." "repo-pull a..b"
+expect_refused "repo-pull path" "repo-pull ../alpha"
+expect_refused "repo-pull slash" "repo-pull alpha/x"
+expect_refused "repo-pull upper-case" "repo-pull Alpha"
+expect_refused "repo-pull leading dot" "repo-pull .git"
+expect_refused "repo-pull leading dash" "repo-pull -x"
+expect_refused "repo-pull no name" "repo-pull"
+expect_refused "repo-pull two names" "repo-pull alpha beta"
+expect_refused "repo-pull chained" "repo-pull alpha; id"
+
 echo "== refused"
 expect_refused "empty command" ""
 expect_refused "id" "id"
