@@ -57,6 +57,7 @@ mkstub "$SC/claude-account-snapshot.sh" snapshot
 mkstub "$SC/lib/core-up.sh" core-up
 mkstub "$SC/macbook-sync.sh" macbook-sync
 mkstub "$SC/herdr-glance-sync.sh" glance-sync
+mkstub "$SC/agent-note.sh" agent-note
 mkstub "$H/.local/bin/claude-account" claude-account
 mkstub "$H/.local/bin/hc" hc
 mkstub "$H/.bun/bin/bun" bun
@@ -121,6 +122,10 @@ expect_allowed "account-snapshot-core" "account-snapshot-core" "core-up
 hc|exec|--timeout|30|bash|$SC/claude-account-snapshot.sh"
 expect_allowed "herdr-glance-sync" "herdr-glance-sync" "glance-sync"
 expect_allowed "hc-version" "hc-version" "hc|--version"
+expect_allowed "term-ls" "term-ls" "agent-note|ls-local"
+expect_allowed "term-note" "term-note" "agent-note|deliver" $'t7\nmini:t31z\nhello'
+assert_eq "term-note: stdin passthrough" $'t7\nmini:t31z\nhello' "$(cat "$REC/agent-note.stdin")"
+assert_eq "term-note: SSH_AUTH_SOCK empty inside" "unset" "$(cat "$REC/agent-note.sock")"
 expect_allowed "dotfiles-sync" "dotfiles-sync" "macbook-sync"
 assert_eq "dotfiles-sync: SSH_AUTH_SOCK empty inside" "unset" "$(cat "$REC/macbook-sync.sock")"
 
@@ -298,6 +303,13 @@ expect_refused "dotfiles-sync branch argument" "dotfiles-sync main"
 expect_refused "dotfiles-sync chained" "dotfiles-sync; id"
 expect_refused "herdr-glance-sync argument" "herdr-glance-sync now"
 expect_refused "herdr-glance-sync chained" "herdr-glance-sync; id"
+expect_refused "term-ls argument" "term-ls --all"
+expect_refused "term-ls chained" "term-ls; id"
+expect_refused "term-note target as argument" "term-note t7"
+expect_refused "term-note chained" "term-note; id"
+expect_refused "term-note substitution" 'term-note $(id)'
+expect_refused "term-read is not a verb" "term-read t7"
+expect_refused "hc send over the gate" "hc send t7 id"
 expect_refused "bash -c" "bash -c id"
 expect_refused "sh" "sh"
 expect_refused "op read" "op read x"

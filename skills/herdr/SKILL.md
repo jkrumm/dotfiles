@@ -29,6 +29,7 @@ name or `machine/tN`.
   the spawner, `--outlive-parent` when it must survive it): no tab, and the jk layout replaces the agents mod, so it shows
   nowhere in the app. Find workers in `rd agents` (a `parent` field in the JSON listing; finished ones fold into
   `hidden_finished`). Don't add labels to a background worker.
+- **Messaging another agent is `agent-note`, not `hc send`.** `agent-note <mini|macbook>:<terminal> "<text>"` works from either machine (`agent-note ls` lists the terminals that take notes): one marked, length-capped, rate-limited message, delivered when the receiver is idle, the reply by the same command. A raw `hc send` into an agent skips the marker and the limits; use it only for a terminal that is yours. `docs/remote-dev.md` §Agent notes.
 - **Lane policy wins over the manual.** The manual says to delegate through `hc run … claude`. Here only `@implementer`
   and the factory Issue start agents (`docs/agent-platform.md`). Run a non-agent program (tests, a watcher, a dev server)
   in a terminal, an agent only when the user asks for one.

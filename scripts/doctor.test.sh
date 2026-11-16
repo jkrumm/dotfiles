@@ -64,6 +64,24 @@ printf '#!/bin/bash\necho "FAIL  auth/iu   broken"\necho "---"\necho "1 FAIL, 0 
 out=$(doctor claude_accounts DOTFILES_DIR="$TMP/dot" HC_TERMINAL_ID=x); rc=$?
 assert_eq "a failure row fails the run" 1 "$rc"
 
+
+# agent notes: the command on PATH and the path to the other machine; an unreachable MacBook is a warning, never a failure
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/agent-note"; chmod +x "$TMP/bin/agent-note"
+printf '#!/bin/sh\ncase "$*" in *term-ls*) [ -n "$SSH_RC" ] && exit "$SSH_RC"; echo "$SSH_OUT" ;; esac\n' > "$TMP/bin/ssh"; chmod +x "$TMP/bin/ssh"
+printf 'cache' > "$TMP/cfg/secrets/backend"
+out=$(doctor agent_notes SSH_OUT='[{"id":"t7"}]'); rc=$?
+assert_eq "agent notes: term-ls answers" "2 passed, 0 info — clean." "$(last "$out")"
+out=$(doctor agent_notes SSH_RC=255); rc=$?
+assert_eq "agent notes: MacBook unreachable is a warning" "1 passed, 1 warnings, 0 info." "$(last "$out")"
+assert_eq "agent notes: …and does not fail the run" 0 "$rc"
+out=$(doctor agent_notes SSH_RC=126)
+assert_eq "agent notes: a gate without term-ls is a warning that names the fix" 1 "$(printf '%s\n' "$out" | grep -c 'ssh iumac dotfiles-sync')"
+out=$(doctor agent_notes SSH_OUT='oops')
+assert_eq "agent notes: a non-list answer warns" "1 passed, 1 warnings, 0 info." "$(last "$out")"
+rm -f "$TMP/bin/agent-note"
+out=$(env PATH="/usr/bin:/bin" XDG_CONFIG_HOME="$TMP/cfg" DOCTOR_SECTIONS=agent_notes bash "$HERE/doctor.sh" --local); rc=$?
+assert_eq "agent notes: a missing command fails the run" 1 "$rc"
+
 echo
 if [ "$fail" -ne 0 ]; then echo "$fail failed, $pass passed"; exit 1; fi
 echo "all $pass passed"
