@@ -22,8 +22,8 @@ The first row that fits decides.
 | A portal behind the owner's login, with no API | the owner's own signed-in Chrome, attached while he watches and presses every submit | the repo's own skill (finances `chrome-live`); never a copy of his profile |
 
 A reason for installed Chrome is a measured difference: a baseline that fails on the shell, a codec or GPU path the shell lacks,
-print or PDF output, a screenshot a person will judge. Name the failing assertion or the format; the factory's hygiene pass reads
-the comment.
+print or PDF output, a screenshot a person will judge. Name the failing assertion or the format: the comment is written for a check to
+read.
 
 ## In a suite
 

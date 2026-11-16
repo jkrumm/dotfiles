@@ -16,7 +16,7 @@ below are memory decisions first.
 | Research Chrome | installed Chrome, headed, DevTools on `127.0.0.1:9222`, profile `~/.local/share/research-chrome` | always on | 236 MiB fresh, 510 MiB after a day idle, about 120 MiB per open tab | agent-workflows (`make research-chrome`) |
 | Shared Chrome | installed Chrome, `--headless=new`, DevTools on `127.0.0.1:9223`, profile `~/.local/share/shared-chrome` | on demand: starts on `shared-chrome ensure`, stops 60 s after the last context | 201 MiB idle, about 75 MiB per context | dotfiles (`scripts/shared-chrome.ts`, `docs/global-reference.md` §Shared browser) |
 | Test browsers | whatever a suite launches, inside a test slot | for the length of the suite; orphans end at `browser-reap` | 288 MiB (headless shell) or 503 MiB (Chrome headless) per three pages | each repo |
-| The owner's Chrome | the macOS session's default browser | whenever something runs `open <url>` | 558 MiB on 2026-11-16 | the owner; nothing of ours uses it, nothing reaps it |
+| The owner's Chrome | the macOS session's default browser | whenever something runs `open <url>` | 558 MiB on 2026-11-16 | the owner; finances' `chrome-live` skill attaches to it while he watches, nothing else of ours uses it, nothing reaps it |
 
 Screen sharing shows the research Chrome and the owner's Chrome as windows. The shared Chrome is headless, and a suite's browser
 is too: `rules/browser.md` allows no headed one.
@@ -112,6 +112,9 @@ All on 2026-11-16. **To reopen a verdict, bring a measurement taken on the mini.
 
 ## Open work
 
+finances' `chrome-live` moved off its `.mcp.json` on 2026-11-16 (Issue 1619, closed): the attach to a scratch profile is proven,
+the attach to the owner's default profile behind Chrome's prompt is proven at its first supervised use.
+
 | Issue | Repo | What |
 |-|-|-|
 | 1610 | agent-workflows | browser leg: focus emulation, a 45 s limit for a page still in a challenge, browser-first for a challenged host, one tab per host, tab cap 8 |
@@ -120,4 +123,5 @@ All on 2026-11-16. **To reopen a verdict, bring a measurement taken on the mini.
 | 1613 | shutterflow | e2e projects on the headless shell where they pass |
 | 1615 | dotfiles | `chrome-devtools` CLI in place of the MCP in `agents/browser.md` and in `config/opencode/opencode.json`, if it can attach to the shared Chrome |
 | 1616 | software-factory | hygiene probe: a suite that pins installed Chrome without a reason, and a checked-in `.mcp.json` |
-| 1619 | finances | `chrome-live` (`.mcp.json`, the owner's signed-in Chrome for portals) through the same CLI |
+| 1620 | software-factory | `--strict-mcp-config` on the lead launcher, after 1622 |
+| 1622 | dotfiles | `--strict-mcp-config` on `c`/`cs`, `rd work` and the resume path, if plugin tools survive it |
