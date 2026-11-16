@@ -131,9 +131,10 @@ describe("findings", () => {
     expect(lines[1]).toContain("SKILL.md:5: no such command: factory fleet")
   })
 
-  test("the ignore marker silences its line, the line below, and a whole fence it sits above", async () => {
+  test("the ignore marker silences its own line, the line below when it stands alone, and a whole fence it sits above", async () => {
     const text = [
       "`factory fleet` <!-- cli-refs: ignore -->",
+      "`factory version --nope` is not silenced by the trailing marker above",
       "<!-- cli-refs: ignore -->",
       "`factory status`",
       "`factory status` is not silenced",
@@ -145,8 +146,9 @@ describe("findings", () => {
     ].join("\n")
     const r = await scan({ "docs/a.md": text })
     const lines = r.err.split("\n").filter((l) => l.startsWith("docs/"))
-    expect(lines).toHaveLength(1)
-    expect(lines[0]).toContain("docs/a.md:4: no such command: factory status")
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain("docs/a.md:2: no such flag: factory version --nope")
+    expect(lines[1]).toContain("docs/a.md:5: no such command: factory status")
   })
 
   test("a group's own help lists its sub-verbs: `hc file read|write` passes, `hc file chmod` and an unknown alternative fail", async () => {

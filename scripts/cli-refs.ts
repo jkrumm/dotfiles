@@ -8,7 +8,7 @@
 //   bun scripts/cli-refs.ts --json          {findings, skipped, files, commands} on stdout
 //
 // Exit 0 clean · 1 a finding · 2 usage error. A deliberate historical mention carries `<!-- cli-refs: ignore -->` on its line
-// or the line above (above a code fence: the whole block).
+// or alone on the line above (above a code fence: the whole block).
 //
 // Help is asked as `<cli> --help` and, for the CLIs marked `deep`, `<cli> <verb> --help`: only CLIs whose help never runs a verb.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
@@ -113,7 +113,8 @@ function commandsOf(text: string): { cli: string; rest: string }[] {
 export function extract(file: string, text: string): Quote[] {
   const lines = text.split("\n")
   const quotes: Quote[] = []
-  const ignored = (n: number) => lines[n]!.includes(IGNORE) || (n > 0 && lines[n - 1]!.includes(IGNORE))
+  // the marker covers its own line; a line holding nothing but the marker covers the line below it (a trailing marker does not)
+  const ignored = (n: number) => lines[n]!.includes(IGNORE) || (n > 0 && lines[n - 1]!.trim() === `<!-- ${IGNORE} -->`)
   const add = (n: number, source: string, cmdText: string) => {
     for (const c of commandsOf(cmdText)) quotes.push({ file, line: n + 1, ...c, text: source.trim().slice(0, 140) })
   }
