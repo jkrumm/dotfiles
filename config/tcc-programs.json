@@ -14,7 +14,7 @@
     "com.jkrumm.weatherorb.worker-round": { "class": "removable", "why": "uv python; reads and writes data/, products/ and var/ entries that are symlinks onto the external volume since 2026-11-14 (job unloaded, V1 frozen)" },
     "com.jkrumm.collie": { "class": "no-grant", "why": "compiled bridge under ~/.local/share/collie; touches only its own config, state and log" },
     "homebrew.mxcl.sleepwatcher": { "class": "no-grant", "why": "runs ~/.sleep and ~/.wakeup, which touch nothing protected" },
-    "com.jkrumm.ext-mirror": { "class": "removable", "why": "writes <volume>/mirror (rclone sync through hl), only behind scripts/lib/volume-gate.sh; a missing grant shows as 'skipped: volume unreadable' and the heartbeat's mirror age, never a failure" },
+    "com.jkrumm.ext-mirror": { "class": "removable", "why": "writes <volume>/mirror (rclone sync through hl), only behind scripts/lib/volume-gate.sh; a missing grant shows as 'skipped: volume unreadable' (exit 3, graded failing, retried hourly) and as the heartbeat's 36 h mirror age" },
     "com.jkrumm.devhost-health": { "class": "removable", "why": "the heartbeat reads the volume sentinel (external volume check); a missing grant shows as WARN unreadable, never a failure" },
     "sh.brew.ntfy-mac": { "class": "no-grant", "why": "notification relay; no file access outside its own state" }
   }

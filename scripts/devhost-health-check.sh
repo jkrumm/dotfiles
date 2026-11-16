@@ -1278,6 +1278,12 @@ check_external_volume() {
   bash "$(dirname "${BASH_SOURCE[0]}")/external-volume-check.sh"
 }
 
+check_ext_mirror() {
+  # Every EXT mirror share has synced clean within 36 h (docs/storage.md §EXT mirror). FAIL when not: the detail monitor goes DOWN
+  # and the factory door files it. Silent while attached=false. Its own script, so `make doctor` can show the same line.
+  bash "$(dirname "${BASH_SOURCE[0]}")/ext-mirror-check.sh"
+}
+
 check_runaways() {
   # A leaked agent-spawned process burned 1001 CPU-minutes on this machine
   # before anyone noticed. It REPORTS ONLY — nothing running unattended every
@@ -1608,7 +1614,7 @@ failure=""
 # and budget paths can be driven hermetically (scripts/devhost-heartbeat.test.sh).
 components="${DEVHOST_COMPONENTS:-check_tailscale check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
-                 check_obsidian check_research_chrome check_disk check_external_volume check_runaways \
+                 check_obsidian check_research_chrome check_disk check_external_volume check_ext_mirror check_runaways \
                  check_jobs check_registry check_spotlight check_quota}"
 # Word-splitting is the point: $components is a list of function names.
 # shellcheck disable=SC2086

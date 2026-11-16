@@ -478,6 +478,21 @@ assert_contains "attached and absent: a WARN line" "WARN: external volume absent
 assert_contains "attached and absent: the monitor stays up" "status=up" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
 assert_eq "attached and absent: exit 0" 0 "$RC"
 
+echo "ext mirror: silent while attached=false, a FAIL (the detail monitor goes down) when a share has not synced clean for 36 h"
+now=$(/bin/date +%s)
+iso() { /bin/date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ; }
+mkdir -p "$TMP/em"
+printf '{"ssd":"%s","fuji":"%s","videos":"%s"}\n' "$(iso "$now")" "$(iso "$now")" "$(iso "$now")" > "$TMP/em/last-ok.json"
+run_script DEVHOST_COMPONENTS="check_obsidian check_ext_mirror" VOLUME_GATE_CONFIG="$TMP/ev-off.json" EXT_MIRROR_STATE_DIR="$TMP/em"
+assert_eq "attached=false: the composite says nothing about the mirror" 0 "$(/usr/bin/grep 'push/detail' "$TMP/curl.log" | /usr/bin/grep -c -i 'ext mirror')"
+run_script DEVHOST_COMPONENTS="check_ext_mirror" VOLUME_GATE_CONFIG="$TMP/ev-on.json" EXT_MIRROR_STATE_DIR="$TMP/em"
+assert_contains "fresh stamps: ok" "ext mirror ok" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+printf '{"ssd":"%s","fuji":"%s","videos":"%s"}\n' "$(iso "$now")" "$(iso $((now - 40 * 3600)))" "$(iso "$now")" > "$TMP/em/last-ok.json"
+run_script DEVHOST_COMPONENTS="check_ext_mirror" VOLUME_GATE_CONFIG="$TMP/ev-on.json" EXT_MIRROR_STATE_DIR="$TMP/em"
+assert_contains "one share 40 h old: a FAIL naming it" "FAIL: ext mirror stale (limit 36 h): fuji 40 h" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+assert_contains "...and the detail monitor is the one that goes down" "status=down" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+assert_eq "...and the liveness monitor is never down for it" 0 "$(/usr/bin/grep 'push/composite' "$TMP/curl.log" | /usr/bin/grep -c 'status=down')"
+
 echo "colima probe: a name must resolve inside the default VM (seeded stale resolver)"
 mkdir -p "$TMP/home"
 printf '#!/bin/sh\ncase "$2" in *KeepAlive) echo true ;; *ProgramArguments:0) echo /x/colima-start.sh ;; esac\n' > "$TMP/plistbuddy"

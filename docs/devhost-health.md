@@ -8,7 +8,7 @@ one-line gotchas live in §Heartbeat components below and in `docs/make-targets.
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent, wrapped in `jobrun` (below), and pushes **three** Uptime Kuma
 monitors. `MacMini Dev Host - Push` is the **liveness** monitor: it says the mini is reachable and its core is alive,
-never "healthy" and never "slow" (next section). The **twenty-two** components below (sshd moved to the liveness phase) grade the host's health and ride
+never "healthy" and never "slow" (next section). The **twenty-three** components below (sshd moved to the liveness phase) grade the host's health and ride
 a second push:
 
 | Component | Checks |
@@ -32,6 +32,7 @@ a second push:
 | external volume | `scripts/external-volume-check.sh`: no output while `config/external-volume.json` says `attached: false`; once attached, WARN (never a FAIL) when the volume is absent, locked or its sentinel unreadable. `docs/external-ssd.md` |
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
+| ext mirror | `scripts/ext-mirror-check.sh`: no output while `attached: false`; once attached, **FAIL** when any of `ssd`, `fuji`, `videos` has not synced clean for 36 h (`STORAGE_MIRROR_MAX_AGE_HOURS`), read from the stamps `ext-mirror.py` keeps in `~/.local/state/ext-mirror/last-ok.json`, never from the volume, so an unreadable volume still has an age. A FAIL takes the detail monitor DOWN and the factory door files it with a lead. A share never stamped counts from the check's first sighting. `docs/storage.md` §EXT mirror |
 | jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL. A job not ok for 2 consecutive grades is filed as a **signal on its owner repo** through the factory (`jobs-grade --report`, below), not posted to ntfy; a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |
 | registry | `scripts/mini-registry.ts check` (`docs/mini-registry.md`): a loaded job of our label families the registry does not know, a job whose program is inside `/.claude/worktrees/`, or a registry that does not validate is a **FAIL** (the detail monitor goes DOWN and the factory door files an Issue); a footprint above its budget, a check that timed out or cannot run is a **WARN** |
 | spotlight | `scripts/spotlight-check.sh check` (`mdutil -sa`): Spotlight indexing is off on **every** volume — **FAIL** naming the volumes when one has it on again (a macOS update can), or when `mdutil` gives no readable state. Fix: `sudo mdutil -a -i off` (needs the owner's sudo; `docs/spotlight.md`) |
@@ -61,7 +62,7 @@ now means *the mini is unreachable or its core is dead*. The run is ordered:
    merely **timed out** is "slow, not proven dead": it stays `up` as WARN text until `DEVHOST_LIVENESS_TIMEOUT_STREAK` (6)
    timeouts in a row. Measured by the test suite: the liveness push lands about 1 s after the start while a component
    hangs for 6 s.
-3. **Side monitors**, then the **slow components** (the twenty-two), unchanged and still bounded and budgeted.
+3. **Side monitors**, then the **slow components** (the twenty-three), unchanged and still bounded and budgeted.
 4. **The detail push.** The main monitor gets a second `up` with the full summary: a component FAIL is WARN text there and
    never turns it DOWN, and a liveness DOWN is never overwritten. The component verdict goes to the optional **detail
    monitor** (`MacMini Dev Host Detail - Push`, URL file `~/.config/uptime-kuma/devhost-detail-push-url`, opt-in like collie:
@@ -592,9 +593,9 @@ entry → stale, exit 1; point `GIT_BIN` at `/usr/bin/false` → every pin check
 ## Heartbeat components (moved from the root AGENTS.md)
 
 `scripts/devhost-health-check.sh` (`jobrun --timeout 270`) pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **22 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
+`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **23 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
 core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
-services (6), claude auth, claude version, AGENTS.md flag, obsidian, research chrome (WARN-only, gated on its plist), disk, external volume (WARN-only, silent until `config/external-volume.json` says attached), runaways,
+services (6), claude auth, claude version, AGENTS.md flag, obsidian, research chrome (WARN-only, gated on its plist), disk, external volume (WARN-only, silent until `config/external-volume.json` says attached), ext mirror (FAIL when a share has not synced clean for 36 h), runaways,
 jobs (WARN-only, `jobs-grade`), registry (`mini-registry.ts check`: FAIL on an unregistered loaded job or a worktree program, WARN on a budget breach), spotlight (FAIL when Spotlight indexing is on again on any volume; `docs/spotlight.md`), quota (in every msg; WARN never pages). The composite and
 the jobs push (no ACL grant runs `tag:homelab → tag:mac`); service health is pulled
 through the Kuma door (`kuma-door/AGENTS.md`). Every watcher in one table: `docs/architecture.md` §Watchers.

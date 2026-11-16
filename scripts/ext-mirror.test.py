@@ -170,18 +170,101 @@ class ExtMirror(unittest.TestCase):
         for mode, word in (("absent", "absent"), ("locked", "locked")):
             write(self.mode, mode)
             rc, out = self.run_job()
-            self.assertEqual(rc, 0, out)
+            self.assertEqual(rc, 3, out)  # a skip is never a green run
             self.assertEqual(out.strip(), f"skipped: volume {word}")
         self.assertEqual(os.listdir(self.home), [], "nothing on the internal disk")
         self.assertFalse(os.path.exists(self.mirror))
 
-    def test_homelab_unreachable_is_skipped_exit_0(self):
+    def test_homelab_unreachable_is_skipped_and_not_green(self):
         write(self.env["FAKE_HL_DOWN"], "")
         rc, out = self.run_job()
-        self.assertEqual(rc, 0, out)
+        self.assertEqual(rc, 3, out)
         self.assertIn("skipped: HomeLab not reachable", out)
         self.assertFalse(os.path.exists(self.mirror), "nothing synced, nothing created")
         self.assertEqual(os.listdir(self.home), [])
+
+    def stamps(self):
+        with open(os.path.join(self.home, ".local", "state", "ext-mirror", "last-ok.json")) as f:
+            return json.load(f)
+
+    def set_status(self, **fields):
+        path = os.path.join(self.mirror, ".status.json")
+        s = self.status()
+        s.update(fields)
+        with open(path, "w") as f:
+            json.dump(s, f)
+
+    def hours_ago(self, h):
+        return (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def test_a_clean_run_stamps_every_source_outside_the_volume(self):
+        self.run_job()
+        got = self.stamps()
+        self.assertEqual(sorted(got), ["fuji", "ssd", "videos"])
+        self.assertEqual(got["ssd"], self.status()["finished"])
+
+    def test_a_source_that_fails_keeps_its_older_stamp(self):
+        self.run_job()
+        before = self.stamps()
+        old = self.hours_ago(50)
+        state = os.path.join(self.home, ".local", "state", "ext-mirror", "last-ok.json")
+        with open(state, "w") as f:
+            json.dump(dict(before, ssd=old), f)
+        shutil.rmtree(os.path.join(self.lab, "ssd"))
+        os.makedirs(os.path.join(self.lab, "ssd"))  # the share is not mounted at home: listed empty, refused
+        rc, out = self.run_job()
+        self.assertEqual(rc, 1, out)
+        got = self.stamps()
+        self.assertEqual(got["ssd"], old)
+        self.assertEqual(got["fuji"], self.status()["finished"])
+
+    def test_if_due_skips_a_recent_clean_run_and_stays_green(self):
+        self.run_job()
+        self.set_status(finished=self.hours_ago(2))
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("not due", out)
+        self.assertNotIn("sync ssd", out)
+
+    def test_a_run_made_before_the_stamps_existed_is_stamped_when_it_is_not_due(self):
+        self.run_job()
+        shutil.rmtree(os.path.join(self.home, ".local"))
+        fin = self.hours_ago(2)
+        self.set_status(finished=fin)
+        self.run_job("--if-due")
+        self.assertEqual(self.stamps(), {"ssd": fin, "fuji": fin, "videos": fin})
+
+    def test_if_due_runs_once_the_last_run_is_old_enough(self):
+        self.run_job()
+        self.set_status(finished=self.hours_ago(20))
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("sync ssd", out)
+
+    def test_if_due_keeps_a_red_mirror_red_until_the_retry_is_due(self):
+        self.run_job()
+        self.set_status(ok=False, finished=self.hours_ago(2))
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("not due", out)
+        self.set_status(finished=self.hours_ago(7))
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(self.status()["ok"])
+
+    def test_if_due_with_no_status_runs(self):
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("due: no finished run on record", out)
+
+    def test_a_skipped_night_is_retried_when_the_volume_reads_again(self):
+        write(self.mode, "locked")
+        rc, _ = self.run_job("--if-due")
+        self.assertEqual(rc, 3)
+        write(self.mode, "present")
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(self.status()["ok"])
 
     def test_a_run_in_progress_makes_the_next_one_skip(self):
         import fcntl

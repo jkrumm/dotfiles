@@ -42,7 +42,7 @@ services:
   - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, process_type: interactive, memory_mib: 300 }
   - { name: devhost-health, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.devhost-health, memory_mib: 50 }
   - { name: disk-sweep, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-sweep, memory_mib: 50 }
-  - { name: ext-mirror, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.ext-mirror, memory_mib: 200, note: "05:00 nightly; rclone pulls the HomeLab into <volume>/mirror behind the volume gate, a skipped night is exit 0" }
+  - { name: ext-mirror, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.ext-mirror, memory_mib: 200, note: "05:00 nightly, hourly to 22:00 while skipped or red; rclone pulls the HomeLab into <volume>/mirror behind the volume gate, a skipped run is exit 3" }
   - { name: factory-door, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.factory-door, process_type: interactive, memory_mib: 50 }
   - { name: finances, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances, memory_mib: 50 }
   - { name: finances-backup-push, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances-backup-push, memory_mib: 50 }

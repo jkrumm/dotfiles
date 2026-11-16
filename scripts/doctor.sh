@@ -485,6 +485,10 @@ section_external_volume() {
   [ -n "$out" ] || return 0
   hdr "External volume"
   if [ "$rc" -eq 0 ]; then ok "external volume" "$out"; else warn "external volume" "$out"; fi
+  # The same age check the heartbeat FAILs on (the local stamps, never the volume): doctor shows it yellow like every host condition.
+  rc=0; out=$(bash "$DOTFILES_DIR/scripts/ext-mirror-check.sh" 2>&1) || rc=$?
+  [ -n "$out" ] || return 0
+  if [ "$rc" -eq 0 ]; then ok "ext mirror" "$out"; else warn "ext mirror" "$out"; fi
 }
 
 # Storage (docs/storage.md §Status), both machines: warns on a declared automount share that is not healthy and, on the
