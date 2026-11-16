@@ -2903,7 +2903,7 @@ spotlight-test:
 
 # The dev host's steady background waste (issue 1376, docs/host-waste.md): orphaned sleeps, tailscaled CPU, Photos analysis,
 # sshd sessions. `make doctor` shows each as a WARN line; nothing fails. `photos-analysis-off` is the one standing fix and runs in `make setup`.
-.PHONY: host-waste-check host-waste-test photos-analysis-off
+.PHONY: host-waste-check host-waste-test photos-analysis-off host-cpu
 host-waste-check: ## The dev host's waste checks, one line each (orphaned sleeps, tailscaled CPU, Photos analysis, sshd sessions); a WARN never fails
 	@for c in orphan-sleeps tailscaled mediaanalysisd sshd-sessions; do bash $(DOTFILES_DIR)/scripts/host-waste-check.sh $$c || true; done
 host-waste-test:
@@ -2912,7 +2912,12 @@ host-waste-test:
 photos-analysis-off: ## Dev host: keep Photos analysis (mediaanalysisd) off; the nightly export reads the library without it
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "cache" ]; then echo "    · not the dev host (backend=$${BACKEND:-unset}) — photos analysis left alone"; exit 0; fi; \
-	out=$$(bash $(DOTFILES_DIR)/scripts/host-waste-check.sh fix-mediaanalysisd) || { echo "    ✗ $$out"; exit 1; }; echo "    ✓ $$out"
+	out=$$(bash $(DOTFILES_DIR)/scripts/host-waste-check.sh fix-mediaanalysisd) || { echo "    ✗ $$out"; exit 1; }; echo "    ✓ $$out"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.photos-analysis-stop" PLIST_DIR="$(DOTFILES_DIR)/scripts"; \
+	echo "    ↳ every 5 min → SIGSTOP on a running mediaanalysisd (the disable only applies at the next login); log: ~/Library/Logs/photos-analysis-stop.log"
+host-cpu: ## The host daemons' CPU in cores over SECS (default 300): Photos analysis, Spotlight, XProtect, syspolicyd, tailscaled, rclone, kernel_task
+	@bash $(DOTFILES_DIR)/scripts/host-waste-check.sh cpu $(SECS)
 
 # kern.maxvnodes trial (issue 1059): the vnode table sat at its ceiling (263168 of 263168) on the dev host, so every new
 # file open recycled a vnode and the kernel burned CPU in class `system`. A root LaunchDaemon sets MAXVNODES (2x the
@@ -4098,6 +4103,7 @@ help:
 	@echo "  make host-waste-check          Host waste checks, one line each (orphaned sleeps, tailscaled CPU, Photos analysis, sshd); photos-analysis-off keeps mediaanalysisd off"
 	@echo "  make host-waste-test           Hermetic suite for host-waste-check.sh (ps, launchctl, tailscale stubs)"
 	@echo "  make photos-analysis-off       Dev host: disable Photos analysis (mediaanalysisd); make setup runs it"
+	@echo "  make host-cpu SECS=300         The host daemons' CPU in cores over a window (Photos analysis, Spotlight, XProtect, tailscaled, rclone, kernel_task)"
 	@echo "  make ext-mirror-setup           Load the 05:00 mirror of the HomeLab onto the external volume (mini; -run, -status, -test, -teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
