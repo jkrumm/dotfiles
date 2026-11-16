@@ -72,7 +72,7 @@ lacks() { grep -qF -- "$3" <<<"$2" && bad "$1 — '$3' unexpectedly in: $2" || o
 
 failopen() { # <label> <expected reason fragment>
   [ "$rc" -eq 0 ] && ok "$1: the spawn still succeeds" || bad "$1: rc=$rc — $out"
-  is "$1: falls back to a bare claude" "$start" "claude"
+  is "$1: falls back to a bare claude" "$start" "claude --strict-mcp-config"
   has "$1: one stderr line says so" "$out" "rd: factory role 'implementer' unavailable ($2)"
   [ "$(grep -c "rd: factory role" <<<"$out")" -eq 1 ] && ok "$1: exactly one line" || bad "$1: not exactly one line: $out"
 }
@@ -97,7 +97,7 @@ sec_table() {
   has "work --role Explore: effort" "$start" "--effort low"
   reply 0 "$(role_json lead opus high)"
   spawn work myrepo --role=lead
-  has "work --role=lead: tier and effort ride in argv" "$start" "claude --model opus --effort high"
+  has "work --role=lead: tier and effort ride in argv" "$start" "claude --strict-mcp-config --model opus --effort high"
 
 }
 sec_nobare() {
@@ -106,7 +106,7 @@ sec_nobare() {
   spawn work myrepo
   is "work without --role never asks the factory" "$asked" ""
   lacks "work without --role starts bare (no model, no effort)" "$start" "--model"
-  is "work without --role: bare claude" "$start" "claude"
+  is "work without --role: bare claude" "$start" "claude --strict-mcp-config"
 
 }
 sec_envwins() {
@@ -120,7 +120,7 @@ sec_envwins() {
   has "the role's tier still applies when only the effort is set" "$start" "--model opus"
   RD_MODEL=sonnet RD_EFFORT=max spawn work myrepo
   RD_MODEL=sonnet RD_EFFORT=max spawn work myrepo
-  is "both env vars set, no --role: work stays bare and the factory is not asked" "$asked$start" "claude"
+  is "both env vars set, no --role: work stays bare and the factory is not asked" "$asked$start" "claude --strict-mcp-config"
   RD_MODEL=sonnet RD_EFFORT=max spawn work myrepo --role implementer
   has "both env vars set, explicit --role: still asked (an unknown role stays an error)" "$asked" "role get implementer"
 

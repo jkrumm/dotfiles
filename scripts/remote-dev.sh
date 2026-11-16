@@ -321,9 +321,11 @@ hc_name_tab() { # <tab id> <name>
 
 # claude's argv as a JSON array: ["claude", flags…, "<prompt>"] (the prompt is the last argument; nothing is typed later).
 # Model and effort come from rd_spawn_flags (SPAWN_MODEL / SPAWN_EFFORT).
+CLAUDE_MCP_ARGS=(--strict-mcp-config) # no repo .mcp.json server in any session (docs/browser.md §Strict MCP)
 claude_argv() { # <skip-permissions 1|0> [prompt]
   local -a a=(claude)
   (( $1 )) && a+=(--dangerously-skip-permissions)
+  a+=("${CLAUDE_MCP_ARGS[@]}")
   [[ -n $SPAWN_MODEL ]] && a+=(--model "$SPAWN_MODEL")
   [[ -n $SPAWN_EFFORT ]] && a+=(--effort "$SPAWN_EFFORT")
   [[ -n ${2:-} ]] && a+=("$2")

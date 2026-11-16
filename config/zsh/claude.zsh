@@ -117,6 +117,10 @@ _claude_enter_account() {
   [[ $1 == "unset CLAUDE_CONFIG_DIR" ]] || unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
 }
 
+# No MCP server from a repo's .mcp.json or a project setting: none is allowed in a coding session (docs/browser.md
+# §Strict MCP). The plugin tool (easel), tool search, hooks and /resume are untouched by it.
+_CLAUDE_MCP_ARGS=(--strict-mcp-config)
+
 # Launch claude on the right account: $1 = model default ("" for none), rest = user args.
 # The account is chosen once here and never changes for the session's life; the subshell keeps
 # the pick out of the interactive shell's environment.
@@ -149,7 +153,7 @@ _claude_launch() {
   parts=("${(@f)out}"); line=$parts[1]; id=$parts[2]; reason=$parts[3]
   (
     _claude_enter_account "$line" "$id" "$reason"
-    ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
+    ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${_CLAUDE_MCP_ARGS[@]}" "${plugin_args[@]}" "${args[@]}"
   )
 }
 

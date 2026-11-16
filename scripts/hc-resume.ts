@@ -107,12 +107,15 @@ export function hasLiveAgent(t: Terminal): boolean {
   return Boolean(t.status?.app)
 }
 
+/** No repo `.mcp.json` server in a resumed session either (docs/browser.md §Strict MCP). */
+export const MCP_FLAGS = ["--strict-mcp-config"]
+
 export function resumeLine(labels: Record<string, string>, argv?: string[]): string | null {
   const id = labels[SESSION]
   if (!id || !/^[0-9a-f-]{8,64}$/i.test(id)) return null
   const dir = labels[CONFIG]
   const env = dir ? `env CLAUDE_CONFIG_DIR=${quote(dir)}` : "env -u CLAUDE_CONFIG_DIR"
-  return [env, "claude", "--dangerously-skip-permissions", ...modelFlags(argv), "--resume", id].join(" ")
+  return [env, "claude", "--dangerously-skip-permissions", ...MCP_FLAGS, ...modelFlags(argv), "--resume", id].join(" ")
 }
 
 export const DEFAULT_MAX_INFLIGHT = 3

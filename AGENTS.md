@@ -482,7 +482,8 @@ absent, and exporting it bills API credits instead.
 `docs/global-reference.md` §Shared browser) with `playwright-cli`, plus the `chrome-devtools` CLI (pinned in the
 Makefile, `docs/browser.md` §chrome-devtools CLI) for traces, Lighthouse and CSS; a
 user-scope server costs an `npx` + `node` pair (~124 MiB) in every session, 24 of them
-held 2978 MiB idle on the mini. `make setup` removes any leftover registration, project-local ones too
+held 2978 MiB idle on the mini. `c`/`ch`/`cs`/`cf`, `rd work` and the resume path pass `--strict-mcp-config`, so a repo `.mcp.json`
+starts nothing; plugin tools, tool search, hooks and `--resume` survive it (`docs/browser.md` §Strict MCP). `make setup` removes any leftover registration, project-local ones too
 (`projects[<dir>].mcpServers` in every account's `.claude.json`, which the user-scope remove and
 `claude mcp list` from this directory never see; `scripts/claude-project-mcp.sh`, backup
 `.claude.json.bak-chrome-devtools`), and `make status` §Browser debugging prints a ✗ line for one, naming account and

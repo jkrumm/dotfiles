@@ -161,6 +161,16 @@ Chrome 157 on `127.0.0.1:9223`; CLI reference: [docs/cli.md](https://github.com/
 - **Page ids are shared** by every agent using the daemon, so an agent finds its page as the id that is new after its own `tab-new`
   and addresses only that one.
 
+## Strict MCP
+
+Proved 2026-11-16 on Claude Code 2.1.325, interactive sessions in `hc run` terminals (never `claude -p`), scratch dirs, a `.mcp.json` server that writes a marker file on start:
+
+- `--strict-mcp-config` with no `--mcp-config` blocks a repo's `.mcp.json` server: no marker, no process. Without it the marker appears and `/mcp` lists the server.
+- It leaves alone the plugin tool (`mcp__easel__chart` stays connected), tool search (`select:WebSearch` loads a deferred tool), hooks (SessionStart `session_env` logged, Stop hook ran) and `/browse` (the browser agent returned a page title).
+- It is accepted with `--resume <id>`: the session came back with its history, no marker, easel still connected.
+- `c`/`ch`/`cs`/`cf` (`_CLAUDE_MCP_ARGS` in `config/zsh/claude.zsh`), `rd work`/factory spawns (`CLAUDE_MCP_ARGS` in `scripts/remote-dev.sh`) and the post-restart resume (`MCP_FLAGS` in `scripts/hc-resume.ts`) pass it; each has a test. A bare `claude` typed by hand does not.
+- Not covered: a server named in `--mcp-config` or a `--plugin-dir` plugin that ships its own server (none of ours does); re-prove if a launcher adds either.
+
 ## Open work
 
 finances' `chrome-live` moved off its `.mcp.json` on 2026-11-16 (Issue 1619, closed): the attach to a scratch profile is proven,
@@ -174,7 +184,6 @@ the attach to the owner's default profile behind Chrome's prompt is proven at it
 | 1613 | shutterflow | e2e projects on the headless shell where they pass |
 | 1616 | software-factory | hygiene probe: a suite that pins installed Chrome without a reason, and a checked-in `.mcp.json` |
 | 1620 | software-factory | `--strict-mcp-config` on the lead launcher, after 1622 |
-| 1622 | dotfiles | `--strict-mcp-config` on `c`/`cs`, `rd work` and the resume path, if plugin tools survive it |
 
 dotfiles ships no MCP entry since Issue 1615: the `browser` agent and `config/opencode/opencode.json` both went to the CLI.
-The `--strict-mcp-config` guard is Issues 1620 and 1622 above, not this one.
+The `--strict-mcp-config` guard in dotfiles is §Strict MCP; the factory lead launcher is Issue 1620 above.

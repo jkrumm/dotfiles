@@ -61,16 +61,16 @@ test("a restarted record without a foreground fact still resumes (its replacemen
 })
 
 test("resume line: account dir quoted, iu uses env -u", () => {
-  expect(resumeLine(term().labels!)).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --resume ${ID}`)
-  expect(resumeLine({ "jk.claude.session": ID })).toBe(`env -u CLAUDE_CONFIG_DIR claude --dangerously-skip-permissions --resume ${ID}`)
+  expect(resumeLine(term().labels!)).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --strict-mcp-config --resume ${ID}`)
+  expect(resumeLine({ "jk.claude.session": ID })).toBe(`env -u CLAUDE_CONFIG_DIR claude --dangerously-skip-permissions --strict-mcp-config --resume ${ID}`)
   expect(resumeLine({ "jk.claude.session": "x; rm -rf ~" })).toBeNull()
 })
 
 test("resume line keeps --model and --effort from the terminal argv; none stays as is", () => {
   const labels = term().labels!
   const argv = ["claude", "--dangerously-skip-permissions", "--model", "claude-opus-5-5[1m]", "--effort=high"]
-  expect(resumeLine(labels, argv)).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --model 'claude-opus-5-5[1m]' --effort 'high' --resume ${ID}`)
-  expect(resumeLine(labels, ["claude", "--model", "sonnet"])).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --model 'sonnet' --resume ${ID}`)
+  expect(resumeLine(labels, argv)).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --strict-mcp-config --model 'claude-opus-5-5[1m]' --effort 'high' --resume ${ID}`)
+  expect(resumeLine(labels, ["claude", "--model", "sonnet"])).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --strict-mcp-config --model 'sonnet' --resume ${ID}`)
   expect(resumeLine(labels, shell)).toBe(resumeLine(labels))
   expect(modelFlags(["claude", "--model", "x; rm -rf ~", "--effort"])).toEqual([])
 })
@@ -89,8 +89,8 @@ test("an account change on a reused terminal uses the new labels (me -> iu)", as
   r.handle(restarted(term({ labels: { "jk.claude.session": ID2 } })))
   await r.settled()
   expect(sent.map((s) => s[1])).toEqual([
-    `env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --resume ${ID}`,
-    `env -u CLAUDE_CONFIG_DIR claude --dangerously-skip-permissions --resume ${ID2}`,
+    `env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --strict-mcp-config --resume ${ID}`,
+    `env -u CLAUDE_CONFIG_DIR claude --dangerously-skip-permissions --strict-mcp-config --resume ${ID2}`,
   ])
 })
 

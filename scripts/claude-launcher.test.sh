@@ -153,6 +153,11 @@ reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me STU
 assert_contains "bare claude exports the picker's reason" "picked=me tok= reason=pace" "$out"
 reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me STUB_PICK_REASON=home zrun interactive 'c --foo')
 assert_contains "c exports the picker's reason" "picked=me tok= reason=home" "$out"
+echo "no repo MCP server: every launcher passes --strict-mcp-config"
+for l in c ch cs cf; do
+  reset; out=$(zrun interactive "$l")
+  assert_contains "$l passes --strict-mcp-config" "--dangerously-skip-permissions --strict-mcp-config" "$out"
+done
 echo "per-model default effort (config/claude-effort.json)"
 reset; out=$(zrun interactive 'cs')
 assert_contains "cs: Sonnet runs at high" "--effort high" "$out"
