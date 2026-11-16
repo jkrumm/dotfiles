@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { extract, parseTable, run, subCommands } from "./cli-refs.ts"
+import { CLIS, extract, injections, parseRuleRows, parseTable, run, subCommands } from "./cli-refs.ts"
 
 const SCRIPT = join(import.meta.dir, "cli-refs.ts")
 
@@ -31,13 +31,14 @@ esac`,
     echo '  file read|write [--on m] <path>   a file here or there'
     echo '                              continuation prose at a deep indent' ;;
 esac`,
+  jobrun: `echo 'jobrun: broken'; exit 3`,
   "playwright-cli": `echo 'playwright-cli <command> [args] [options]'; echo
 echo '  attach [name]               attach to a running browser'
 echo '  goto <url>                  navigate'
 echo 'Global options:'; echo '  --json                      output response as JSON'`,
 }
 
-function bin(names: string[] = Object.keys(FAKES)): string {
+function bin(names: string[] = Object.keys(FAKES).filter((n) => n !== "jobrun")): string {
   const dir = mkdtempSync(join(tmpdir(), "cli-refs-bin-"))
   for (const name of names) {
     const path = join(dir, name)
@@ -234,5 +235,116 @@ describe("parsers", () => {
   test("subCommands: only the words of a Commands: section", () => {
     expect([...subCommands("x\n\nCommands:\n  read   Print\n  write  Write\n\nOptions:\n  --json  x\n")]).toEqual(["read", "write"])
     expect(subCommands("no section here\n  read  Print\n").size).toBe(0)
+  })
+})
+
+// A rules/clis.md with one row per adapter: `<cli> --help` is its list command. `omit` drops rows, `extra` adds raw rows.
+function ruleFile(omit: string[] = [], extra: string[] = []): string {
+  const rows = Object.keys(CLIS)
+    .filter((c) => !omit.includes(c))
+    .map((c) => `| \`${c}\` | something | \`${c} --help\` | none |`)
+  return ["# CLIs", "", "| CLI | For | Lists everything | Skill |", "|-|-|-|-|", ...rows, ...extra, ""].join("\n")
+}
+
+describe("rule rows", () => {
+  test("a table with a row per adapter, every installed CLI's list command exiting 0, passes", async () => {
+    const r = await scan({ "rules/clis.md": ruleFile() })
+    expect(r.err.split("\n").filter((l) => l.startsWith("rules/"))).toEqual([])
+    expect(r.code).toBe(0)
+  })
+
+  test("a row that names a CLI with no adapter fails", async () => {
+    const r = await scan({ "rules/clis.md": ruleFile([], ["| `agwx` | typo | `agwx --help` | none |"]) })
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("rules/clis.md:")
+    expect(r.err).toContain("agwx: a row names a CLI with no adapter in CLIS")
+  })
+
+  test("a list command that exits non-zero fails; a list command of another CLI than the row's fails", async () => {
+    const broken = await scan({ "rules/clis.md": ruleFile() }, bin([...Object.keys(FAKES)]))
+    expect(broken.code).toBe(1)
+    expect(broken.err).toContain("jobrun --help: the list command exits 3")
+    const other = await scan({ "rules/clis.md": ruleFile(["home"], ["| `home` | x | `hc --help` | none |"]) })
+    expect(other.err).toContain("hc --help: the list command is not of a CLI in the row")
+    expect(other.err).toContain("home: no list command for it in the row")
+  })
+
+  test("an adapter with no row fails, and a CLI that is not installed is skipped, not failed", async () => {
+    const r = await scan({ "rules/clis.md": ruleFile(["home", "epx"]) })
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("home: has an adapter and no row")
+    expect(r.err).toContain("epx: has an adapter and no row")
+    const ok = await scan({ "rules/clis.md": ruleFile() }, bin(["agw"]))
+    expect(ok.code).toBe(0)
+    expect(ok.err).toContain("cli-refs: factory: not installed, its list command was not run")
+  })
+
+  test("one row may hold two CLIs and two list commands", () => {
+    const rows = parseRuleRows("| CLI | For | L | S |\n|-|-|-|-|\n| `a`, `b` | x | `a --help`, `b --help` | s |\n")
+    expect(rows).toEqual([{ line: 3, clis: ["a", "b"], lists: ["a --help", "b --help"], text: "| `a`, `b` | x | `a --help`, `b --help` | s |" }])
+  })
+
+  test("a repo without rules/clis.md is not asked for one", async () => {
+    const r = await scan({ "docs/a.md": "`factory version`\n" })
+    expect(r.code).toBe(0)
+  })
+})
+
+describe("injected commands", () => {
+  const skill = (body: string) => ({ "skills/x/SKILL.md": `---\nname: x\n---\n\n${body}\n` })
+
+  test("injections finds a !`cmd` after whitespace or at the line start and a ```! block, not a plain fence or a bare span", () => {
+    const text = "a !`hc --help`\n!`rd --help`\n`!` and !not\nx!`no`\n```!\nhc --help\nrd --help\n```\n```sh\n!`hc --help`\n```\n"
+    expect(injections("f.md", text).map((i) => `${i.line}:${i.command}`)).toEqual(["1:hc --help", "2:rd --help", "5:hc --help\nrd --help"])
+  })
+
+  test("injected lines are not quotes: a verb the CLI lacks inside one is the run's business", () => {
+    const q = extract("f.md", '!`factory fleet 2>&1 || echo "x"`\n```!\nagw nonsense\n```\n`agw web read`\n')
+    expect(q.map((x) => x.line)).toEqual([5])
+  })
+
+  test("a command that falls back, with and without its CLI, passes and counts", async () => {
+    const r = await scan(skill('!`hc --help 2>&1 || echo "hc is not on this machine"`\n\n```!\nagw web read x 2>&1 || echo "agw is not on this machine"\n```'))
+    expect(r.err).toBe("")
+    expect(r.out).toContain("2 injected commands")
+  })
+
+  test("a command with no fallback fails when its CLI is missing from PATH", async () => {
+    const r = await scan(skill("!`hc --help`"))
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('skills/x/SKILL.md:5: injected command: exits 127 when its CLI is not on PATH: end it with || echo "<cli> is not on this machine"')
+  })
+
+  test("a command that fails on this machine fails; one that only prints its fallback although the CLI is there fails", async () => {
+    const failing = await scan(skill("!`jobrun --help`"), bin([...Object.keys(FAKES)]))
+    expect(failing.err).toContain("exits 3: a failing command aborts the whole skill")
+    const fellBack = await scan(skill('!`jobrun --help 2>&1 || echo "jobrun is not on this machine"`'), bin([...Object.keys(FAKES)]))
+    expect(fellBack.err).toContain("printed its fallback line although the CLI is on PATH")
+  })
+
+  test("output over 4,000 bytes in one skill fails", async () => {
+    const r = await scan(skill('!`yes "0123456789" | head -c 4100 2>&1 || echo "none is not on this machine"`'))
+    expect(r.err).toContain("skills/x/SKILL.md:1: injected command: injects 4100 bytes, over 4000")
+  })
+})
+
+// The skills the live block was added to (Issue 1636): it sits in the first 25 lines and ends so it cannot fail the skill.
+describe("this repo's skills", () => {
+  const SKILLS = ["herdr", "remote-dev", "otel", "home", "browse", "secrets", "img", "podcast", "excalidraw-diagram", "mini-service", "research"]
+  for (const name of SKILLS) {
+    test(`${name} injects its CLI's list in its first 25 lines`, () => {
+      const text = require("node:fs").readFileSync(join(import.meta.dir, "..", "skills", name, "SKILL.md"), "utf8") as string
+      const found = injections(`skills/${name}/SKILL.md`, text)
+      expect(found.length).toBeGreaterThan(0)
+      expect(found[0]!.line).toBeLessThanOrEqual(25)
+      expect(found.every((i) => i.command.includes("||"))).toBe(true)
+    })
+  }
+
+  test("rules/clis.md holds a row for every adapter and fits the always-on budget", () => {
+    const text = require("node:fs").readFileSync(join(import.meta.dir, "..", "rules", "clis.md"), "utf8") as string
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(2000)
+    const named = new Set(parseRuleRows(text).flatMap((r) => r.clis))
+    expect(Object.keys(CLIS).filter((c) => !named.has(c))).toEqual([])
   })
 })
