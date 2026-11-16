@@ -503,7 +503,7 @@ startup — `source ~/.zshrc` after editing.
 |-|-|-|
 | `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what the resume hook types into a terminal; `-p`, subcommands and non-interactive shells never pick |
 | `c` / `ch` | Max subscription | Opus, effort medium / high |
-| `cs` / `cf` | Max subscription (`cf` always on `iu`, never picked) | Sonnet high / Fable medium; the four fill the app's + menu |
+| `cs` / `cf` | Max subscription (`cf` never picked: on the registry's `fable` account, which every other pick holds back as the last resort — `docs/claude-accounts.md` §Fable mode) | Sonnet high / Fable medium; the four fill the app's + menu |
 | `oc` | OpenCode — the local inference gateway on the mini (door token of caller `oc`), IU direct on the MacBook; OpenAI route (`iu/…`, `iu-responses/…`) + Anthropic route (`iu-anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `iu-anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
 

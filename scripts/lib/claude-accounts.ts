@@ -44,6 +44,11 @@ export interface Account {
 }
 export interface Registry {
   accounts: Record<string, Account>
+  /**
+   * Fable mode: the account `cf` launches on. Every other pick treats it as the last resort (used only when no
+   * other account is eligible), so its weekly room stays for Fable. Absent or null = off (`cf` on the default account).
+   */
+  fable?: string | null
 }
 
 /**
@@ -112,7 +117,9 @@ export function loadRegistry(path = registryPath()): Registry {
     if (!validAccount(a)) throw new Error(`${path}: account '${id}' is malformed`)
   }
   if (!Object.values(raw.accounts).some((a) => (a as Account).dir === null)) throw new Error(`${path}: no account owns the default ~/.claude (dir: null)`)
-  return { accounts: raw.accounts }
+  const fable = raw.fable ?? null
+  if (fable !== null && !(typeof fable === "string" && Object.hasOwn(raw.accounts, fable))) throw new Error(`${path}: fable '${fable}' is not an account id`)
+  return { accounts: raw.accounts, fable }
 }
 
 /**
@@ -677,7 +684,26 @@ export function accountWeight(reg: Registry, cache: Cache, id: string, nowMs: nu
   return (spare * accountUnits(reg.accounts[id]).weekly) / hoursLeft ** URGENCY_EXP
 }
 
+/** The Fable account, held back from every pick; null when Fable mode is off or that account is disabled. */
+export function fableReserve(reg: Registry): string | null {
+  const id = reg.fable ?? null
+  return id !== null && Object.hasOwn(reg.accounts, id) && reg.accounts[id].enabled ? id : null
+}
+
+/** The account `cf` launches on: the Fable account, else the default one. */
+export const fableAccount = (reg: Registry): string => fableReserve(reg) ?? defaultAccountId(reg)
+
 function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): Omit<PickResult, "stale"> {
+  const reserve = fableReserve(reg)
+  if (reserve === null) return pickRule(reg, cache, lane, nowMs, rng)
+  // Fable mode: the rule runs without the Fable account first; only when that finds nothing does it get the work
+  const spared = pickRule({ accounts: { ...reg.accounts, [reserve]: { ...reg.accounts[reserve], enabled: false } } }, cache, lane, nowMs, rng)
+  if (spared.picked !== SPILL && spared.reason !== "interactive-fallback") return spared
+  const r = pickRule({ accounts: reg.accounts }, cache, lane, nowMs, rng)
+  return r.picked === reserve ? { ...r, reason: "fable-reserve" } : r
+}
+
+function pickRule(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): Omit<PickResult, "stale"> {
   const ids = Object.keys(reg.accounts)
   const eligibleIds = ids.filter((id) => eligible(reg, cache, id, nowMs))
   const hot = (id: string) => (sessionPct(reg, cache, id, nowMs) ?? 0) >= SESSION_SOFT_MAX

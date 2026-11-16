@@ -5,7 +5,7 @@
 #
 # Usage: c  [--account <id>] [claude-args...]   — Max subscription; account from `claude-account pick`
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
-#        cf [claude-args...]   — Max subscription `iu` (never picked), defaults to Fable model
+#        cf [claude-args...]   — Max subscription, the registry's Fable account (never picked; default account when off), defaults to Fable model
 #
 # Skills load from ~/.claude/skills/ (global) and <repo>/.claude/skills/ (per-repo)
 # automatically. Additionally, if the current git repo ships local plugins under
@@ -155,8 +155,9 @@ _claude_launch() {
 
 # The four launchers (also the Herdr app's + menu, config/herdr-app/programs.json). Effort comes
 # from config/claude-effort.json unless the args carry --effort: c Opus medium, ch Opus high,
-# cs Sonnet high, cf Fable medium. cf always runs on `iu`, so Fable work stays on that one subscription;
-# a later `--account <id>` still wins, it is parsed last.
+# cs Sonnet high, cf Fable medium. cf never picks: it runs on the registry's Fable account (`claude-account
+# fable`; the default account when Fable mode is off or the CLI fails), which every other pick holds back as
+# the last resort. A later `--account <id>` still wins, it is parsed last.
 c() {
   _claude_launch "opus" "$@"
 }
@@ -166,7 +167,7 @@ ch() {
 }
 
 cf() {
-  _claude_launch "fable" --account iu "$@"
+  _claude_launch "fable" --account "$(claude-account fable 2>/dev/null || print iu)" "$@"
 }
 
 cs() {

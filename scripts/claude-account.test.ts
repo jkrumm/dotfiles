@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { HOME_BIN, PEER_SCRIPT, boundedSpawnSync } from "./claude-account.ts"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, rank, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, markVerified, readVerified, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, rank, fableAccount, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, markVerified, readVerified, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -59,6 +59,38 @@ const reg3 = (): Registry => ({
   },
 })
 const cache3 = (iu?: Sample, me?: Sample, me2?: Sample): Cache => ({ ...emptyCache(), samples: { ...(iu ? { iu } : {}), ...(me ? { me } : {}), ...(me2 ? { me2 } : {}) } })
+
+describe("Fable mode: the fable account is the last resort", () => {
+  const fable = (): Registry => ({ ...reg3(), fable: "me2" })
+  const all = () => cache3(sample(10, 10), sample(10, 10), sample(5, 5, { wReset: NOW / 1000 + 2 * H }))
+  test("no lane picks it while another account is eligible", () => {
+    for (const lane of ["interactive", "headless", "bulk", "wave"]) expect(pick(fable(), all(), lane, NOW).picked).not.toBe("me2")
+    // without Fable mode the expiring me2 window would have won the bulk pick
+    expect(pick(reg3(), all(), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "expiring-capacity" })
+  })
+  test("it takes the work once nothing else is eligible", () => {
+    const c = cache3(sample(95, 10), sample(95, 10), sample(10, 10))
+    expect(pick(fable(), c, "bulk", NOW)).toMatchObject({ picked: "me2", reason: "fable-reserve" })
+    expect(pick(fable(), c, "interactive", NOW)).toMatchObject({ picked: "me2", reason: "fable-reserve" })
+  })
+  test("rank lists it last", () => {
+    expect(rank({ reg: fable(), cache: all(), lane: "bulk", nowMs: NOW }).map((e) => e.account).at(-1)).toBe("me2")
+  })
+  test("cf account: the fable account, else the default", () => {
+    expect(fableAccount(fable())).toBe("me2")
+    expect(fableAccount(reg3())).toBe("iu")
+    const off = fable(); off.accounts.me2.enabled = false
+    expect(fableAccount(off)).toBe("iu")
+  })
+  test("loadRegistry rejects an unknown fable id and keeps a valid one", () => {
+    const d = tmp(), f = join(d, "r.json")
+    writeFileSync(f, JSON.stringify({ ...reg3(), fable: "nope" }))
+    expect(() => loadRegistry(f)).toThrow(/fable/)
+    writeFileSync(f, JSON.stringify(fable()))
+    expect(loadRegistry(f).fable).toBe("me2")
+    rmSync(d, { recursive: true })
+  })
+})
 
 describe("pick rule v1.4: N accounts", () => {
   const D = 24 * H

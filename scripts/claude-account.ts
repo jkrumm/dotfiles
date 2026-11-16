@@ -10,6 +10,7 @@
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
+//   claude-account fable                   the account `cf` launches on: the registry's `fable` (Fable mode, held back from every other pick) when enabled, else the default
 //   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
 //   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
 //   claude-account latest [dir]            id of the newest session transcript for dir (default cwd) — what `c --continue` pins to; exit 1 if none
@@ -24,7 +25,7 @@ import { homedir, hostname } from "node:os"
 import { dirname, join } from "node:path"
 import { type HealthRow, type PendingAsk, gradeMachine, healthSignature, worst } from "./lib/claude-health.ts"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, type SpawnResult, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, type SpawnResult, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, fableAccount, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
   hasSessionLimit, mergeSample, newestAge, planTier, pick, pickLine, rank, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL, withoutSessionWindows,
 } from "./lib/claude-accounts.ts"
 
@@ -416,6 +417,9 @@ async function main(argv: string[]): Promise<number> {
       else if (Object.values(reg.accounts).filter((a) => a.enabled).length > 1) console.log(id.toUpperCase())
       return 0
     }
+    case "fable":
+      console.log(fableAccount(reg))
+      return 0
     case "env": {
       const id = rest[0]
       const a = id && Object.hasOwn(reg.accounts, id) ? reg.accounts[id] : undefined

@@ -1,5 +1,6 @@
 {
-  "_note": "Single source for the Claude account picker (docs/claude-accounts.md). dir null = the default ~/.claude with CLAUDE_CONFIG_DIR unset; never set it to ~/.claude (changes the Keychain service). loginBrowser = the macOS app (name for `open -a`) signed in to that account, where claude-relogin opens the authorize URL.",
+  "_note": "Single source for the Claude account picker (docs/claude-accounts.md). dir null = the default ~/.claude with CLAUDE_CONFIG_DIR unset; never set it to ~/.claude (changes the Keychain service). loginBrowser = the macOS app (name for `open -a`) signed in to that account, where claude-relogin opens the authorize URL. fable = Fable mode: the account `cf` launches on, held back as the last resort from every other pick (null = off, cf on the default account).",
+  "fable": "me2",
   "accounts": {
     "iu": {
       "dir": null,

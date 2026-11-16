@@ -54,7 +54,8 @@ case ${1-} in
     exit "${STUB_PICK_RC:-0}" ;;
   latest) [[ -n ${STUB_LATEST-} ]] && { echo "$STUB_LATEST"; exit 0; }; exit 1 ;;
   session) [[ -n ${STUB_SESSION-} ]] && { echo "$STUB_SESSION"; exit 0; }; exit 1 ;;
-  env) case $2 in me) echo "export CLAUDE_CONFIG_DIR='$HOME/.claude-me'" ;; iu) echo "unset CLAUDE_CONFIG_DIR" ;; *) exit 1 ;; esac ;;
+  fable) [[ -n ${STUB_FABLE_FAIL-} ]] && exit 1; echo "${STUB_FABLE:-me2}" ;;
+  env) case $2 in me) echo "export CLAUDE_CONFIG_DIR='$HOME/.claude-me'" ;; me2) echo "export CLAUDE_CONFIG_DIR='$HOME/.claude-me2'" ;; iu) echo "unset CLAUDE_CONFIG_DIR" ;; *) exit 1 ;; esac ;;
 esac
 EOF
 cat > "$TMP/bin/secrets-run" <<'EOF'
@@ -187,7 +188,11 @@ assert_contains "cs on an iu pick: marker iu" "picked=iu" "$out"
 assert_eq "cs: exactly one pick" 1 "$(picks)"
 reset; out=$(zrun interactive 'cf')
 assert_eq "cf: never picks" 0 "$(picks)"
-assert_contains "cf: always the iu account" "cfg=unset picked=iu" "$out"
+assert_contains "cf: the registry's Fable account" "cfg=$TMP/home/.claude-me2 picked=me2" "$out"
+reset; out=$(STUB_FABLE=iu zrun interactive 'cf')
+assert_contains "cf: Fable mode off -> the default account" "cfg=unset picked=iu" "$out"
+reset; out=$(STUB_FABLE_FAIL=1 zrun interactive 'cf')
+assert_contains "cf: a failing CLI falls back to iu" "cfg=unset picked=iu" "$out"
 assert_contains "cf pins the model" "--model fable" "$out"
 reset; out=$(zrun interactive 'cf --account me')
 assert_contains "cf --account me: an explicit account still wins" "cfg=$ME picked=me" "$out"

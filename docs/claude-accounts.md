@@ -246,12 +246,25 @@ to `~/.claude/logs/`. That pick log is the dataset for v2 tuning.
 account with the most slack left at its own reset, which spends capacity before
 it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 
+## Fable mode
+
+Fable resets refill only Fable usage, so one account is set aside for Fable. The registry's top-level `"fable": "<id>"`
+(today `me2`) does two things:
+
+- `cf` launches on it (`claude-account fable` prints it; Fable mode off, the account disabled or the CLI failing → the
+  default account). `cf --account <id>` still wins.
+- every pick, any lane, runs the rule without it first; it takes work only when no other account is eligible (reason
+  `fable-reserve`). `rank` therefore lists it last, so factory leads reach it last too. Its `homeLanes` stay as they are,
+  so switching the mode off restores the plain rule.
+
+Switch: set `"fable"` to another account id, or to `null` for off, and commit. Read on every call, no restart.
+
 ## Spawn integration
 
 | Spawner | Today | Change |
 |-|-|-|
 | bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what a terminal in the core runs when you type `claude`) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
-| `c` / `ch` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive` (`cf` skips it: always `iu`, Fable work stays on that subscription); `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
+| `c` / `ch` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive` (`cf` skips it: always the Fable account, `claude-account fable`, §Fable mode); `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
 | `rd work` (`remote-dev.sh` `pick_account`, `spawn_env`) | terminal exports `USAGE_LANE` only | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
 | `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `hc-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
