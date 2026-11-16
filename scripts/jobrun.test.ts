@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { type JobState, gradeAll } from "./lib/jobs-grade.ts"
-import { acquireLock, nextState, parseArgs, writeAtomic } from "./jobrun.ts"
+import { HELP, OPTIONS, acquireLock, nextState, parseArgs, wantsHelp, writeAtomic } from "./jobrun.ts"
 
 const SCRIPT = join(import.meta.dir, "jobrun.ts")
 let dir: string
@@ -27,6 +27,43 @@ async function jobrunAsync(args: string[], env: Record<string, string> = {}) {
 // Short TERM -> KILL grace and pipe drain; production defaults are 10 s and 2 s.
 const FAST = { JOBRUN_KILL_GRACE_MS: "300", JOBRUN_DRAIN_MS: "200" }
 const state = (label: string) => JSON.parse(readFileSync(join(dir, `${label}.json`), "utf8")) as JobState
+
+describe("help", () => {
+  test("every option the parser accepts is in the help text", () => {
+    // parseArgs reads its allowed set from OPTIONS; a flag it accepts that is not in OPTIONS throws "unknown option"
+    for (const o of OPTIONS) {
+      expect(HELP, o.flag).toContain(o.flag)
+      expect(() => parseArgs(["l", "--owner", "d", ...(o.flag === "--owner" ? [] : [o.flag, "1"]), "--", "true"])).not.toThrow()
+    }
+    expect(() => parseArgs(["l", "--owner", "d", "--bogus", "1", "--", "true"])).toThrow(/unknown option/)
+  })
+  test("--help before the first -- asks for help; one after it belongs to the command", () => {
+    expect(wantsHelp([])).toBe(true)
+    expect(wantsHelp(["--help"])).toBe(true)
+    expect(wantsHelp(["-h"])).toBe(true)
+    expect(wantsHelp(["help"])).toBe(true)
+    expect(wantsHelp(["l", "--help"])).toBe(true)
+    expect(wantsHelp(["l", "--owner", "d", "--timeout", "5", "--help"])).toBe(true)
+    expect(wantsHelp(["l", "--owner", "d", "--", "cmd", "--help"])).toBe(false)
+    expect(wantsHelp(["l", "--owner", "d", "--", "true"])).toBe(false)
+  })
+  test("`jobrun <label> --help` prints the help on stdout, exits 0 and runs no job", () => {
+    const marker = join(dir, "help-ran")
+    for (const args of [["--help"], ["-h"], ["help"], [], ["helpjob", "--help"], ["helpjob", "--owner", "dotfiles", "--timeout", "5", "--help", "--", "touch", marker]]) {
+      const r = jobrun(args)
+      expect(r.rc, args.join(" ")).toBe(0)
+      expect(r.out, args.join(" ")).toBe(HELP)
+    }
+    expect(existsSync(marker)).toBe(false)
+    expect(existsSync(join(dir, "helpjob.json"))).toBe(false)
+  })
+  test("a --help after -- still reaches the command", () => {
+    const r = jobrun(["passthru", "--owner", "dotfiles", "--", "echo", "--help"])
+    expect(r.rc).toBe(0)
+    expect(r.out).toContain("--help")
+    expect(r.out).not.toContain("Usage: jobrun")
+  })
+})
 
 describe("parseArgs", () => {
   test("full form", () => {

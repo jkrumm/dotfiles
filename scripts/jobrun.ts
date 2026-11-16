@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // jobrun — run a command as a recorded background job (ops-signals.md §3 T0, background-jobs.md §Pattern).
 //
-//   jobrun <label> --owner <repo> [--every s] [--timeout s] [--lock name] [--kuma op-ref] -- <cmd...>
+// `jobrun --help` is the reference for the command line (HELP below).
 //
 // Prefixes every output line with a timestamp, enforces the deadline (TERM, then KILL), takes an
 // optional cross-label lock, writes ~/.local/state/jobs/<label>.json atomically, and pushes Kuma
@@ -22,6 +22,32 @@ const KILL_GRACE_MS = Number(process.env.JOBRUN_KILL_GRACE_MS) || 10_000
 const MAX_FAIL_TIMES = 100
 const DRAIN_MS = Number(process.env.JOBRUN_DRAIN_MS) || 2_000
 
+/** The options the parser accepts: the parser reads its allowed set from here, so help and parser cannot drift. */
+export const OPTIONS: { flag: string; arg: string; summary: string }[] = [
+  { flag: "--owner", arg: "<repo>", summary: "required: the repo that owns the job (its HEAD sha is recorded in the state file)" },
+  { flag: "--every", arg: "<seconds>", summary: "the schedule interval, recorded for jobs-grade (overdue after 3x it, at least 30 min; daily and slower: interval + 2 h)" },
+  { flag: "--timeout", arg: "<seconds>", summary: "deadline: TERM, then KILL after 10 s; recorded as rc 124" },
+  { flag: "--lock", arg: "<name>", summary: "cross-label lock: while another job holds it this run is skipped (logged, exit 0)" },
+  { flag: "--kuma", arg: "<op-ref>", summary: "on rc 0, push the Uptime Kuma URL resolved through `secrets-run read <op-ref>`; an undelivered push exits 75" },
+]
+
+export const HELP = `jobrun — run a command as a recorded background job (docs/background-jobs.md §Pattern)
+
+Usage: jobrun <label> --owner <repo> [options] -- <cmd...>
+       jobrun --help | -h | help | (no arguments)    this text, stdout, exit 0
+
+  <label>   [A-Za-z0-9._-]+ ; names the state file ~/.local/state/jobs/<label>.json
+  <cmd...>  everything after the first \`--\`, run as is (a \`--help\` there is the command's, not jobrun's)
+
+Options:
+${OPTIONS.map((o) => `  ${o.flag} ${o.arg}\n      ${o.summary}`).join("\n")}
+
+Prefixes every output line with a timestamp and writes the state file atomically (last run, rc, output tail,
+run history); scripts/lib/jobs-grade.ts is the only grading logic. \`jobrun <label> --help\` runs no job and writes nothing.
+Exit: the command's rc · 64 usage error · 70 lock error · 75 ran fine but its own push was undelivered · 124 deadline · 127 cannot start.
+Environment (tests and tools): JOBRUN_STATE_DIR, JOBRUN_SOURCEROOT, JOBRUN_SECRETS_RUN.
+`
+
 export interface Args {
   label: string
   owner: string
@@ -40,7 +66,7 @@ export function parseArgs(argv: string[]): Args {
   const label = head[0]
   if (!label || label.startsWith("--")) throw new Error("missing <label>")
   if (!/^[A-Za-z0-9._-]+$/.test(label)) throw new Error(`bad label '${label}'`)
-  const known = new Set(["--owner", "--every", "--timeout", "--lock", "--kuma"])
+  const known = new Set(OPTIONS.map((o) => o.flag))
   for (const t of head.slice(1)) if (t.startsWith("--") && !known.has(t)) throw new Error(`unknown option '${t}'`)
   const opt = (name: string): string | null => {
     const i = head.indexOf(name, 1)
@@ -302,7 +328,19 @@ async function pushKuma(ref: string, label: string): Promise<void> {
   if (!res.ok) throw new Error(`kuma push HTTP ${res.status}`)
 }
 
+/** Help is asked for in the words before the first `--`; the command after it keeps its own `--help`. */
+export function wantsHelp(argv: string[]): boolean {
+  if (argv.length === 0) return true
+  const dd = argv.indexOf("--")
+  const head = dd < 0 ? argv : argv.slice(0, dd)
+  return head.some((t) => t === "--help" || t === "-h") || (head.length === 1 && head[0] === "help")
+}
+
 export async function main(argv: string[]): Promise<number> {
+  if (wantsHelp(argv)) {
+    process.stdout.write(HELP)
+    return 0
+  }
   let a: Args
   try {
     a = parseArgs(argv)
