@@ -1,6 +1,7 @@
 ---
 name: excalidraw-diagram
-description: Create Excalidraw diagram files that make visual arguments. Use when the user wants to visualize workflows, architectures, or concepts. Delegates JSON generation + hydration to `agw diagram`. Mini-only: needs agw.
+allowed-tools: Bash(agw schema --index *)
+description: Create Excalidraw diagram files that make visual arguments — workflows, architectures, concepts, protocols; create a new diagram or extend an existing one. Delegates JSON generation + hydration to `agw diagram`. Mini-only: needs agw.
 ---
 
 # Excalidraw Diagram Creator
@@ -12,6 +13,10 @@ evidence. The mechanical work — JSON shape, element bindings, hydration into a
 portable `.excalidraw` v2 file — lives in `agw diagram` (agent-workflows, on the
 mini's PATH). You author the brief; the command returns the document and **you
 write the file** (the host never touches a caller path).
+
+Verbs, live from the CLI (if you see the command and not its output, run it):
+
+!`agw schema --index diagram 2>&1 || echo "agw is not on this machine"`
 
 ## Output portability (the guarantee)
 
@@ -41,8 +46,7 @@ You don't pick the target — the file is universal.
 ## When to use which mode
 
 - `--mode create` (default) — generate a fresh diagram.
-- `--mode extend --existing "$(cat <path>)"` — pass the current file as the
-  baseline and append/modify. Use when the user says "add X to this diagram" or
+- `--mode extend` with the current file as `--existing` — append/modify. Use when the user says "add X to this diagram" or
   "make Y change to the chart from yesterday." The result is a **new document**;
   say in the brief whether the existing elements stay (an extend that does not
   keep them replaces the diagram).
@@ -185,8 +189,7 @@ The worker handles colors, sizes, fonts, bindings, and JSON shape.
 
 ### Step 5: Run it
 The result is the run envelope; the file is its `.output.document` string.
-(`--format plain` prints just the document: `agw schema diagram` sets
-`plainField: document`. The default JSON envelope below also carries
+(`--format plain` prints just the document. The default JSON envelope below also carries
 `.output.viewport` and `.output.rationale`; use plain only when the document
 alone is wanted.)
 

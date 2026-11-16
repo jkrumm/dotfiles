@@ -1,9 +1,16 @@
 ---
 name: img
-description: Personal image stack: generate or edit images with agw image, remove a background ("make this transparent", "cut out"), make favicon, PWA, apple-touch-icon or macOS/iOS app icon sets, upload to the public CDN with transform URLs, share privately via presigned links. Use whenever an image needs a URL (article, blog post, vault note, README, OpenGraph tag) or the user says "upload this image", "CDN link", "private image", "generate an image", "host this screenshot", "resize this", or asks where an image lives.
+allowed-tools: Bash(agw schema --index *)
+description: Personal image stack: generate or edit images with agw image, look at one with agw image-read, remove a background ("make this transparent", "cut out"), make favicon, PWA, apple-touch-icon or macOS/iOS app icon sets, upload to the public CDN with transform URLs, share privately via presigned links. Use whenever an image needs a URL (article, blog post, vault note, README, OpenGraph tag) or the user says "upload this image", "CDN link", "private image", "generate an image", "host this screenshot", "resize this", or asks where an image lives.
 ---
 
 # Image stack
+
+Verbs of agw for images, live from the CLI (if you see the command and not its output, run it). `imgcli --help` lists the
+publishing verbs and their flags (5 KB: run it, do not guess). To look at an image rather than make one, `image-read` takes
+the file and a question:
+
+!`agw schema --index image image-enhance image-icon image-read 2>&1 || echo "agw is not on this machine"`
 
 ```
 prompt ──gen──▶ local file ──upload──▶ img/      public CDN (imgproxy, unsigned URLs)
@@ -17,7 +24,7 @@ prompt ──gen──▶ local file ──upload──▶ img/      public CDN 
 
 Consumers take URLs, never raw files. **gen** = prompt → local, then optionally `--public` (CDN) or `--private` (presigned). **upload** = local → CDN. **private** = local → `private/` + presigned URL.
 
-The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Everything resolves through `secrets-run` (never bare `op`), refs in `dotfiles-private/headless.refs` (`make secrets-seed` after a rotation), never hardcoded — this repo is public. Infra: `vps/apps/imgproxy/` (CDN), `agent-workflows` (`agw image` generation, `agw image-icon` icon build).
+The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Everything resolves through secrets-run (never bare `op`), refs in `dotfiles-private/headless.refs` (`make secrets-seed` after a rotation), never hardcoded — this repo is public. Infra: `vps/apps/imgproxy/` (CDN), `agent-workflows` (`agw image` generation, `agw image-icon` icon build).
 
 | Key (1Password, scopes only) | Scope | Used by |
 |-|-|-|
@@ -41,17 +48,6 @@ The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Every
 | What is in the private prefix | `imgcli private-ls` | reads `private/` |
 | Bulk upload of a curated folder | `imgcli sync` | CDN, structure preserved |
 | Remove an object from the CDN | `imgcli rm` | MacBook only (`--yes` skips the prompt) |
-
-```bash
-imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto]
-               [--background transparent|opaque|auto] [--edit <file>] [--enhance] [--public [--prefix gen/]] [--private [--expires <dur>]] [--copy] [--open] [--json]
-imgcli cutout  <file> [--model recraft|bria] [--out <file.png>] [--json]
-imgcli icon    "<prompt>" | --from <file> [--quality medium] [--bg #rrggbb] [--cutout auto|always|never] [--out <dir>] [--json]
-imgcli upload  <file> [prefix/] [--name N] [--copy] [--open] [--json]      # publish = alias
-imgcli private <file> [--expires <dur>] [--copy] [--json]
-imgcli private-url <key> [--expires <dur>] [--copy] [--json]  ·  private-ls [prefix/] [--json]
-imgcli ls [prefix/] · info <key> · url <key> [transform ...] · transforms · rm <key> [--yes] · sync <dir> <prefix/>
-```
 
 `imgcli transforms` is the verified processing-option list — read it before hand-writing a URL.
 

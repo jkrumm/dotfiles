@@ -1,9 +1,14 @@
 ---
 name: podcast
+allowed-tools: Bash(agw schema --index *)
 description: Turn notes (a brain note, a file, pasted text) into a long-form two-host podcast episode — German by default, Gemini multi-speaker TTS, chapters + cover — and publish it into Audiobookshelf via `agw podcast`. Use when the user says "podcast", "als Podcast", "Audio-Briefing", "zum Anhören", "Hörfassung", or wants a plan/article/research turned into something to listen to on a drive.
 ---
 
 # Podcast — `agw podcast`
+
+Verbs, live from the CLI (if you see the command and not its output, run it):
+
+!`agw schema --index podcast podcast-publish 2>&1 || echo "agw is not on this machine"`
 
 `agw podcast` (agent-workflows, audio process on the mini) owns the whole
 pipeline: research (brain search + past episodes + the research workflow) → an
@@ -11,7 +16,7 @@ editorial pass that decides format, roles, tone, humor and length *for this
 episode* → writers' room (outline, parallel segment writers, three reviewers,
 revision, metadata) → two-host script → multi-speaker TTS → ffmpeg mastering
 (−16 LUFS, ID3, chapters, cover) → Audiobookshelf upload → transcript note in
-the brain under `Areas/Podcasts/` → Slack notice. Mini-only (needs `agw`).
+the brain under `Areas/Podcasts/` → Slack notice. Mini-only (needs agw).
 Models live in the route table, not here: agent-workflows
 `packages/audio/src/workflows/podcast/README.md` (§Models and wires).
 
@@ -23,14 +28,10 @@ not an error.
 AGW_PURPOSE=prod agw podcast \
   --source-paths '["Areas/Travel/Northern Spain 2026/Northern Spain 2026.md"]' \
   --brief "…" --minutes 20 --publish --series "Brain Sonderausgabe"
-agw run wait <runId>                    # on exit 10; repeat until it returns
-agw run status <runId>                  # one-shot state
-agw podcast-publish <runId> --commit    # re-run only the upload + brain note
 ```
 
-Other flags: `--title`, `--language de|en`, `--no-cover`, `--no-research`,
-`--pin-minutes`, `--no-brain-note`. Source text that is not in the vault (a
-URL's content, an article) goes on stdin (`agw podcast … < file.md`).
+On exit 10 resume with `agw run wait <runId>` and repeat until it returns. Source text that is not in the vault (a URL's
+content, an article) goes on stdin (`agw podcast … < file.md`). Flags beyond these: `agw podcast --help`.
 
 ## Flow
 

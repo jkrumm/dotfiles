@@ -1,9 +1,17 @@
 ---
 name: research
-description: Deep technical research via the agw CLI (agent-workflows) — one agent with web search and page fetch, returns a cited markdown report with per-claim confidence
+allowed-tools: Bash(agw schema --index *)
+description: Deep technical research via the agw CLI (agent-workflows) — one agent with web search and page fetch, returns a cited markdown report with per-claim confidence.
 ---
 
-# Research — via `agw`
+# Research — via agw
+
+Verbs, live from the CLI (if you see the command and not its output, run it):
+
+!`agw schema --index web research 2>&1 || echo "agw is not on this machine"`
+
+Reach for `agw research` for a question that needs several sources; for one page or one fact the agw web verbs are cheaper.
+
 
 1. Run `agw research "<question>" --depth quick|standard|deep --format json` via Bash (`standard` is the default). Add `--context "<background>"` for what the caller already knows: it is treated as established, never re-searched, never cited. `quick` = one fact, `standard` = a few sources, `deep` = a survey.
 2. Set the wait budget to fit the depth: `AGW_WAIT_BUDGET_S=300 agw research …` for `standard`, up to 540 for `deep` (default 110 s; stay under the Bash tool's 600 s foreground limit). Exit 10 = still running: resume once with `agw run wait <runId> --format json`, never in a loop; if it is still pending, run the wait in the background and end the turn. Never pipe agw into `head`/`tail` (the pipe hides the exit code and cuts the error envelope).
@@ -24,4 +32,4 @@ description: Deep technical research via the agw CLI (agent-workflows) — one a
 
 Exit codes: `agw schema --exit-codes`.
 
-A cut-off session recovers with `agw run wait <runId>`, never by resubmitting.
+A cut-off session recovers by waiting on its run, never by resubmitting.

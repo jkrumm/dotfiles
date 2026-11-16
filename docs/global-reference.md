@@ -8,7 +8,7 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 
 | Tier | Mechanism | Use when |
 |-|-|-|
-| 1 | Parallel `/check` calls (`agw`) in **one turn** | Independent verifiable *reads and checks* (`check`); `/review` runs in-session (host commands plus a foreground reviewer agent), not as a parallel call. Independent *changes* are factory Issues |
+| 1 | Parallel `/check` calls (agw) in **one turn** | Independent verifiable *reads and checks* (`check`); `/review` runs in-session (host commands plus a foreground reviewer agent), not as a parallel call. Independent *changes* are factory Issues |
 | 2 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`); keep it thin |
 | 3–4 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |
 
@@ -17,8 +17,8 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 
 ## Async-job contract
 
-- `/check`, `/research` and `/otel` are not jobs you poll (`/review` is host commands plus an in-session agent, no run to wait on): `agw check` /
-  `agw research` / `agw otel` block up to `AGW_WAIT_BUDGET_S` (default 110 s), then exit 10
+- `/check`, `/research` and `/otel` are not jobs you poll (`/review` is host commands plus an in-session agent, no run to wait on): the agw verbs
+  behind them block up to `AGW_WAIT_BUDGET_S` (default 110 s), then exit 10
   naming the run; resume with `agw run wait <runId>` until the exit is not 10.
 
 ## Reading files and the prompt cache
@@ -33,11 +33,11 @@ workers hold their own caches — the argument for delegating. When it is gone:
 
 ## Skills by mode
 
-Everything routed through `agw` exists only on the mini.
+Everything routed through agw exists only on the mini.
 
 | Mode | Skills |
 |-|-|
-| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`agw review prepare|submit|dispose|covered`, reviewer agent in-session) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
+| agw CLI (sync, exit-10 resume `agw run wait <runId>`; every command: `agw schema --index`) | `/research` · `/otel` · `/check` · `/review` (reviewer agent in-session) · `/prose` (rewrite in-session) · `/podcast` · `/img` · `/excalidraw-diagram` · `/brain` lookups |
 | CLI + MCP · subagent | `/browse` (`browser` agent, haiku: playwright-cli on the shared Chrome, chrome-devtools CLI for traces, Lighthouse and CSS; see *Shared browser*) · `/analyze` (fallow in a native subagent) |
 | Workflow fan-out | `/lenses` (40 to 90 expert angles on one undertaking: question-first catalogue, one Opus agent per lens, source audit, gap rounds, synthesis handover; tens of millions of tokens, only on an explicit ask) |
 | inline — git | `/commit` (`--split`/`--amend`) |
@@ -156,11 +156,11 @@ per agent (about 135 MiB for the server, wrapper and watchdog, 0.35 to 0.45 GiB 
 
 | | |
 |-|-|
-| Command | `shared-chrome ensure` (starts it, prints `http://127.0.0.1:9223`) · `devtools` (the daemon for traces, Lighthouse, CSS) · `status` · `stop`; `make shared-chrome-status` |
+| Command | `shared-chrome --help` lists the verbs (`ensure` prints `http://127.0.0.1:9223`); `make shared-chrome-status` |
 | Process | Chrome headless, profile `~/.local/share/shared-chrome` (never signed in anywhere), DevTools on `127.0.0.1:9223` only. The port drives the browser for anything on the machine that can reach it |
-| Supervisor | `scripts/shared-chrome.ts run` under `com.jkrumm.shared-chrome` (loaded, not running; `ensure` kickstarts it; with no job loaded `ensure` runs it detached). Registry: `shared-chrome`, on-demand |
+| Supervisor | `scripts/shared-chrome.ts run` under `com.jkrumm.shared-chrome` (loaded, not running; `ensure` kickstarts it; with no job loaded `ensure` runs it detached). Registry: shared-chrome, on-demand |
 | Idle | a context whose pages did not open, close, navigate or retitle for 15 min is closed (the same 15 min is `playwright-cli attach --idle-timeout`, which detaches and closes the session's context); 60 s without a context, Chrome stops and the supervisor exits. A crashed Chrome ends the supervisor and the next `ensure` restarts both |
-| Drive | `playwright-cli` 0.1.24 (`make setup`, npm global): `attach --cdp=<url>`, `tab-new --isolated-context=<name>`, `resize 1600 1100`, `detach`. A new context is 1280x720; `resize` sets the viewport and the screenshot size is the check |
-| Performance | `chrome-devtools` 1.13.0 (`make setup`, npm global, CLI only) for traces with insights, Lighthouse and `get_css_styles`: one background daemon per user, attached to `127.0.0.1:9223`, started by `shared-chrome devtools` and stopped by the supervisor with Chrome; an agent never runs its `start` or `stop`, and a daemon attached elsewhere (`--autoConnect`) is never touched. It works on the tab playwright-cli opened. `shared-chrome status` shows it; detail and measurements: `docs/browser.md` §chrome-devtools CLI |
+| Drive | playwright-cli 0.1.24 (`make setup`, npm global; `playwright-cli --help` lists the verbs). Attach over CDP, one isolated context per agent. A new context is 1280x720; `resize` sets the viewport and the screenshot size is the check |
+| Performance | chrome-devtools 1.13.0 (`make setup`, npm global, CLI only) for traces with insights, Lighthouse and `get_css_styles`: one background daemon per user, attached to `127.0.0.1:9223`, started by `shared-chrome devtools` and stopped by the supervisor with Chrome; an agent never runs its `start` or `stop`, and a daemon attached elsewhere (`--autoConnect`) is never touched. It works on the tab playwright-cli opened. `shared-chrome status` shows it; detail and measurements: `docs/browser.md` §chrome-devtools CLI |
 | Not covered | basalt-ui's own harness (starts its own Chrome in test slots) and the research Chrome on `:9222` (`agw web`). Every browser on the mini, what each costs and which one a job gets: `docs/browser.md`, `rules/browser.md` |
 | Log | `~/Library/Logs/shared-chrome.log` |

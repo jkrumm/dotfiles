@@ -1,6 +1,7 @@
 ---
 name: remote-dev
-description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and reaping Claude Code agents (`rd work`) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
+allowed-tools: Bash(rd --help *)
+description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and reaping Claude Code agents (rd work) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
 ---
 
 # Remote dev — the mini as dev host
@@ -12,45 +13,36 @@ can't reach the keychain) lives in `dotfiles/docs/remote-dev.md` and
 `dotfiles/AGENTS.md` §Machines & remote dev — this file is the command
 reference and the troubleshooting table, not the rationale.
 
+Verbs of rd, live from the CLI (if you see the command and not its output, run it). hc has its own list in the `herdr` skill:
+
+!`rd --help 2>&1 || echo "rd is not on this machine"`
+
 ## Put work on the mini (no terminal)
 
-Most days this is the only thing you need. Commands take a repo **name**, never
-a path:
+Most days this is the only thing you need. Commands take a repo **name**, never a path.
 
-```bash
-repos [filter]                    # what's on the dev host, with branch + dirty count
-work <repo>                       # a tab with claude in the repo's space (idempotent)
-factory issue new --repo <repo> --title … --facts @file.json   # file an Issue with the factory
-factory issue list                # list the factory's Issues
-agents                            # every agent on the host
-rd read <agent>                   # read its output without attaching
-rd say <agent> "…"                # hc send: refuses a blocked agent, queues for a working one
-```
-
-Agents `rd` starts run on the Max subscriptions only. `--kind opencode` is rejected, and with no account room `rd` pauses
+Agents rd starts run on the Max subscriptions only. `--kind opencode` is rejected, and with no account room rd pauses
 instead of spilling to IU.
 
-Lanes start agent work: a factory Issue (`factory issue new`, `factory issue list` lists; which repo, plans,
-edges and factory friction are the `factory` skill) and `@implementer`. `rd work` is the owner's own session. `agent-dispatch` and
+Lanes start agent work: a factory Issue (which repo, plans, edges and factory friction are the factory skill) and `@implementer`.
+`rd work` is the owner's own session. `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane. <!-- cli-refs: ignore -->
 
 ### Looking at an agent
 
-The factory starts and babysits its agents; an orchestrator does not poll: it ends its turn after `factory issue defer <id> --attempt <n> --after issue_<m>` (or `--until`), and the factory wakes it when the Issues it waits for have closed. To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
-for helpers; `hc wait --help`). A wake can mean `blocked` (an approval/question UI): read it before answering.
+The factory starts and babysits its agents; an orchestrator does not poll: it ends its turn after `factory issue defer <id> --attempt <n> --after issue_<m>` (or `--until`; the factory skill has the rest), and the factory wakes it when the Issues it waits for have closed. To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working). A wake can mean `blocked` (an approval/question UI): read it before answering.
 
 ### Scripting hc directly (stack rules on top of the `herdr` skill)
 
-The global `herdr` skill is the reference: `hc` run/read/send/wait/labels/machines, placing a terminal in a space and tab, the
-API. Read `hc --skill` before a flag. What it does not know about this stack:
+The global `herdr` skill is the reference: hc run/read/send/wait/labels/machines, placing a terminal in a space and tab, the
+API. Read that skill's manual before a flag. What it does not know about this stack:
 
 - **The account is chosen on the command** (`env CLAUDE_CONFIG_DIR=… claude`, none = `iu`), never inherited: a core's env is
-  every terminal's. `rd` and the factory do it for you.
+  every terminal's. rd and the factory do it for you.
 - **launchd owns the core** (on the mini the `com.jkrumm.herdr-core` starter detaches into upstream's launchd job; the MacBook's
-  app starts its own). Updates are `make herdr-core-update` (the official `hc update`, quiet window); never
-  `hc server restart|stop` or `hc machine update` outside it, and never start a core from ssh (a stray: no keychain).
-- **Never `ssh mini 'claude …'`** (below). Reach a terminal through `rd` or the app.
-- **Placement is labels** (`herdr.space`, `herdr.tab`), set by `rd`/the factory; the app adopts them. A worker is an unlabelled child.
+  app starts its own). Updates are `make herdr-core-update` only (Rules, below); never start a core from ssh (a stray: no keychain).
+- **Never `ssh mini 'claude …'`** (below). Reach a terminal through rd or the app.
+- **Placement is labels** (`herdr.space`, `herdr.tab`), set by rd/the factory; the app adopts them. A worker is an unlabelled child.
 - Address agents by name or terminal id, never by what the owner has focused. A non-empty input line in a terminal is the owner's
   unsent draft: never press Enter on it or re-send it through `hc send`; name it in the report, or relay the authorized next step in
   your own words. Pass the owner's brief verbatim when steering.
@@ -61,7 +53,7 @@ API. Read `hc --skill` before a flag. What it does not know about this stack:
 ## Go look at the mini
 
 Open the Herdr app on the MacBook: it links the mini's core as machine `mini`, so its spaces and terminals show next to yours
-(`hc machine ls` says whether the link is up). Terminal only: `ssh -t mini hc` (pick a terminal, Ctrl+\ detaches).
+(the machine list says whether the link is up). Terminal only: `ssh -t mini hc` (pick a terminal, Ctrl+\ detaches).
 
 A roam or lid-close ends the link only — reopen, nothing is lost.
 
@@ -96,7 +88,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | Moving | Route |
 |-|-|
 | A one-off file, human-driven | `~/Shuttle` SMB mount (`smb://mini/jkrumm`) |
-| Code / a repo | `rd`, or git |
+| Code / a repo | rd, or git |
 | Vault pages | brain-sync through GitHub |
 | Anything a mini-side agent/LaunchAgent reads | put it **on the mini** — the SMB mount is client-side and dies with the MacBook |
 | A file/state pull the other direction | `rsync … iumac:<path>` from the mini (`usage-tracker` stats dirs); `ssh iumac` runs fixed verbs only — anything else MacBook-side (`op`, git, installers) goes through `ask-human ask … --cmd …` (dialog, then Touch ID) |
@@ -120,7 +112,7 @@ a native dialog that only executes on a click), or, with `--no-push` /
 it with `make human-queue` (typed `yes` on a real TTY). Still no path that skips
 a present human. `--wait` polls and exits 0/1/2/3 for done/denied/failed/timeout;
 it is ignored when the push resolves synchronously.
-A pushed `--cmd` runs in an `hc` terminal on the MacBook (TTY, `sudo`, SSH agent, Full Disk Access); still running at the wait (a `Password:` prompt) it is **pending**, exit 76, with the terminal id on stderr, never failed 124. Don't wrap it in `hc run` yourself.
+A pushed `--cmd` runs in an hc terminal on the MacBook (TTY, `sudo`, SSH agent, Full Disk Access); still running at the wait (a `Password:` prompt) it is **pending**, exit 76, with the terminal id on stderr, never failed 124. Don't wrap it in `hc run` yourself.
 Full model: `dotfiles/docs/remote-dev.md` → *human-queue*.
 
 ## Monitoring and the maintenance round
@@ -152,15 +144,15 @@ When something is red, in order:
 |-|-|
 | `launchctl print … sshd` says `state = not running` | Socket-activation idle, not a fault. Check `netstat -an \| grep '\.22 .*LISTEN'` |
 | `ssh localhost` fails on the mini | By design — the mini has no key for itself. Verify inbound auth from the MacBook |
-| A direct `op read`/`op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run` |
+| A direct `op read`/`op run` hangs on the mini | No biometric prompt to answer. Use secrets-run |
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
 | Agent died when the lid closed | It did not — the lid ends the link only. A *lost* program (not a core kickstart) is replaced by a shell; `hc-resume` brings Claude back, not shells or the in-flight turn |
 | An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through the core (`rd work`) — never `ssh mini 'claude …'` |
-| `rd` says "herdr-core is not running" | `bash scripts/lib/core-up.sh` prints why and the fix (usually `launchctl kickstart gui/$(id -u)/com.jkrumm.herdr-core` on the mini), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core. The `launchctl kickstart` is the owner's: `herdr-core-guard.ts` denies it to an agent |
+| rd says "herdr-core is not running" | `bash scripts/lib/core-up.sh` prints why and the fix (usually `launchctl kickstart gui/$(id -u)/com.jkrumm.herdr-core` on the mini), or `make doctor`. Never an hc call to "wake" it: that starts a stray core. The `launchctl kickstart` is the owner's: `herdr-core-guard.ts` denies it to an agent |
 | A `claude` in a core terminal has no transcript / `--resume` finds nothing | The core was started from inside a Claude session and passed `CLAUDECODE` to every terminal; launchd's clean env is the fix, so restart through launchd |
 | A program in a terminal hangs at 0 % CPU on `~/Documents`, `~/Desktop`, `~/Downloads` | TCC dialog nobody sees: `Herdr Core.app` has no Full Disk Access (or the terminal's holder predates the bundle). `make tcc-probe`, `docs/tcc.md` |
-| A Claude terminal came back as a bare shell | Its program was lost and `hc-resume` has not typed yet (or the terminal had no `jk.claude.session` label). `hc read <t>`, `make hc-resume-status`. After a reboot, `make recovery-check` counts resumable vs running vs waiting vs skipped (read-only; `docs/devhost-health.md` §Recovery after a boot); the order to read it in and the owner's quiet-window drill: `docs/recovery-drill.md` |
-| The app shows no tab for an `rd` spawn | Placement is by label and adopted when the app next sees the core: `hc get <t>` for `herdr.space`/`herdr.tab`; a worker has none by design (listed under its parent) |
+| A Claude terminal came back as a bare shell | Its program was lost and `hc-resume` has not typed yet (or the terminal had no `jk.claude.session` label). read the terminal, then `make hc-resume-status`. After a reboot, `make recovery-check` counts resumable vs running vs waiting vs skipped (read-only; `docs/devhost-health.md` §Recovery after a boot); the order to read it in and the owner's quiet-window drill: `docs/recovery-drill.md` |
+| The app shows no tab for an rd spawn | Placement is by label and adopted when the app next sees the core: the terminal's labels show `herdr.space`/`herdr.tab`; a worker has none by design (listed under its parent) |
 | `claude: command not found` over non-interactive ssh | `make setup`'s `_setup-zshenv` puts Homebrew + `~/.local/bin` on the non-interactive PATH — re-run `make setup` if missing |
 | `ssh mini` fails `signing failed … agent refused` → `Permission denied (publickey)` | 1Password is locked. Unlock it |
 | A mini service accepts the connection then never answers, though its own log says it's listening | Application Firewall keys on the binary — `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add <binary> && … --unblockapp <binary>` |

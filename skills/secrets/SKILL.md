@@ -1,9 +1,14 @@
 ---
 name: secrets
-description: 1Password secrets management — vault structure, op:// references, .env.tpl patterns, adding/rotating secrets, cron setup, troubleshooting
+allowed-tools: Bash(secrets-run --help *)
+description: 1Password secrets management — vault structure, op:// references, .env.tpl patterns, adding/rotating secrets, cron setup, troubleshooting; on the headless mini, reading and injecting secrets through the secrets-run shim (read, run, export)
 ---
 
 # Secrets Management — 1Password
+
+Verbs of secrets-run (the `op` shim on the mini), live from the CLI (if you see the command and not its output, run it):
+
+!`secrets-run --help 2>&1 || echo "secrets-run is not on this machine"`
 
 ## Account Selection
 
@@ -25,11 +30,11 @@ op_run run --env-file=.env.tpl -- bun test
 
 If invoking `op` directly, always pass `--account` explicitly — without it, `op` may pick the wrong account or prompt interactively.
 
-## Headless secrets — the `secrets-run` cache backend (Mac mini)
+## Headless secrets — the secrets-run cache backend (Mac mini)
 
 The always-on **Mac mini is headless**: `op` is **not** interactively signed in, so a direct
 `op read` / `op run` there **hangs** on the biometric prompt. Secrets resolve instead from an
-age-encrypted, `op://`-keyed **cache** through **`secrets-run`** — a drop-in `op` shim
+age-encrypted, `op://`-keyed **cache** through **secrets-run** — a drop-in `op` shim
 (`dotfiles/scripts/secrets-run`). Per-machine backend marker `~/.config/secrets/backend`:
 
 | Backend | Machine | Behavior |
@@ -38,13 +43,7 @@ age-encrypted, `op://`-keyed **cache** through **`secrets-run`** — a drop-in `
 | `op` | MacBook (human present) | passes through to live biometric `op` |
 
 Same app code + same `op://` refs on both; only the marker differs. A SessionStart hook injects
-the active backend into context each session. **On the mini, never call `op` directly — use the shim:**
-
-```bash
-secrets-run read op://vault/item/field                 # ~ op read (one value)
-secrets-run run [--env-file=<tpl>]... -- <cmd>          # ~ op run (--env-file repeats; last file wins)
-secrets-run export [--env-file=<tpl>]...                # emit `export K=V` lines (defaults to baseline.env.tpl)
-```
+the active backend into context each session. **On the mini, never call `op` directly — use the shim** (`secrets-run read` ~ `op read`, `secrets-run run --env-file=<tpl> -- <cmd>` ~ `op run`; `--env-file` repeats and the last file wins).
 
 **The allowlist + seed.** Which refs the mini may hold offline is the explicit list
 `dotfiles-private/headless.refs` (grouped by consumer with `# --- <app> ---` headers). It **is**
@@ -70,7 +69,7 @@ the tiering boundary: only **T0/T1** refs belong there; the seed **refuses `op:/
 - **`make secrets-test`** (mini-only) / **`make secrets-lint`** (anywhere) validate the shim.
 - **`make secrets-freshness-check`** pushes the Uptime Kuma staleness heartbeat `up` — run after a reseed.
 
-**Guardrail — any edit to `secrets-run`:** `make secrets-test` + `shellcheck` + update
+**Guardrail — any edit to secrets-run:** `make secrets-test` + `shellcheck` + update
 `dotfiles-private/docs/{design.md,security-review.md}` in the same change + an adversarial `/review`.
 It is the **sole secret path** on the mini; treat it accordingly. Full model:
 `dotfiles-private/{PRD.md,docs/design.md,docs/runbook.md}`.
