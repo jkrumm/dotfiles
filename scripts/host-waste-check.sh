@@ -11,7 +11,7 @@
 #
 # Exit 0 = fine, 2 = WARN (the line says what and how to fix). Nothing here fails: `make doctor` shows a WARN and stays green.
 #
-# Overrides (tests): PS_BIN LAUNCHCTL_BIN TAILSCALE_BIN HOST_WASTE_SLEEP_BIN TAILSCALED_WINDOW ORPHAN_SLEEP_MAX TAILSCALED_CPU_MAX SSHD_SESSIONS_MAX.
+# Overrides (tests): PS_BIN LAUNCHCTL_BIN TAILSCALE_BIN TOP_BIN KILL_BIN HOST_WASTE_SLEEP_BIN TAILSCALED_WINDOW ORPHAN_SLEEP_MAX TAILSCALED_CPU_MAX SSHD_SESSIONS_MAX.
 # bash 3.2 (macOS /bin/bash).
 set -uo pipefail
 
