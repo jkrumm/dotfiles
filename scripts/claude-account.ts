@@ -1,21 +1,7 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane> [--why]      (any lane: a due account refreshes detached in the background; a non-interactive lane waits only for an account with no usable sample) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
-//   claude-account usage [--json]          both accounts, from the quota cache (a pure file read: no Keychain, no network)
-//   claude-account expiry [--json] [--ids a,b]   per enabled account (--ids: the named accounts, disabled ones too: a first login): when its login (refresh token) ends, from its own Keychain item (read-only; only the two timestamps and the plan tier are read out; rows carry `tier` and `plan_detected`). Rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (owns ~/.claude) and `severity` (the grade, but a non-default account never exceeds WARN) — what verify and the heartbeat act on
-//   claude-account refresh [--ids a,b] [--all]   first imports the peer machine's samples (`usage --json` over ssh, once per run), then the OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
-//   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
-//   claude-account rank --lane <lane> [--json]   rule-v1.6 order of every eligible account (iterated `pick --dry`), a pure read: no refresh, no picks.jsonl line; --json: {lane, order:[{account,reason,weight}], at}
-//   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
-//                                          statusline feed (native rate_limits)
-//   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
-//   claude-account fable                   the account `cf` launches on: the registry's `fable` (Fable mode, held back from every other pick) when enabled, else the default
-//   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
-//   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
-//   claude-account latest [dir]            id of the newest session transcript for dir (default cwd) — what `c --continue` pins to; exit 1 if none
-//   claude-account health [--json] [--wake]   login / quota / waiting-ask health of this machine and its peer (MacBook <-> mini; the peer is read through its herdr-core, plain ssh only when no core answers, with a NOTE line); exit 1 on any fail. --wake: notify (MacBook, only when the picture changed) and re-push the peer's pending ask dialogs younger than 24 h — what sleepwatcher's wakeup.sh runs
-//   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
+// Every verb and flag is in VERBS below; `claude-account --help` prints them, `claude-account <verb> --help` one in full.
 //
 // Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
 // (never copied, logged or written back; on HTTP 401 `claude auth status` renews it first, one retry); `claude -p /usage` no longer refreshes cachedUsageUtilization (2.1.310).
@@ -329,8 +315,118 @@ function notifyIfChanged(rows: HealthRow[], nowMs: number) {
   }
 }
 
+// ---- help (the CLI is the reference; docs/claude-accounts.md links here instead of copying flags) ------------------------
+
+type Verb = { name: string; usage: string; summary: string; detail: string[]; caller?: string }
+
+/** Every verb `main` dispatches, in help order. `caller` set = a verb meant for a job or a hook, listed apart as "not for agents". */
+export const VERBS: Verb[] = [
+  {
+    name: "pick", usage: "pick --lane <lane> [--why] [--dry]", summary: "which account to launch on: prints a shell line for the lane",
+    detail: [
+      "--lane <lane>   the lane asking (interactive, headless, bulk, ...); required",
+      "--why           also print `# picked=<id> reason=<r> stale=<bool>`",
+      "--dry           answer without refreshing and without a picks.jsonl line (verify suite, previews); deterministic",
+      "stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill`",
+      "exit 0 = an account; 3 = spill (no account has headroom); 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)",
+      "A due account refreshes detached in the background; a non-interactive lane waits only for an account with no usable sample.",
+    ],
+  },
+  {
+    name: "rank", usage: "rank --lane <lane> [--json]", summary: "every eligible account in rule order (a pure read: no refresh, no picks.jsonl line)",
+    detail: ["--lane <lane>   required", "--json           {lane, order:[{account,reason,weight}], at}"],
+  },
+  { name: "usage", usage: "usage [--json]", summary: "every account's quota, from the cache (a file read: no Keychain, no network)", detail: ["--json   machine-readable rows"] },
+  {
+    name: "expiry", usage: "expiry [--json] [--ids a,b]", summary: "when each account's login (refresh token) ends, from its own Keychain item",
+    detail: [
+      "--json        rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (owns ~/.claude),",
+      "              `severity` (the grade, a non-default account never above WARN), `tier`, `plan_detected`",
+      "--ids a,b     only these accounts, disabled ones too (a first login)",
+      "Read-only: only the two timestamps and the plan tier leave the Keychain item.",
+    ],
+  },
+  {
+    name: "refresh", usage: "refresh [--ids a,b] [--all]", summary: "sample enabled, due accounts: peer samples first, then the OAuth usage endpoint, else `claude auth status`",
+    detail: [
+      "--ids a,b   only these accounts; also retries an auth-failed account before its 30 min cooldown",
+      "--all       the login keepalive: ignores the 10 min freshness and the auth cooldown (the 5 min claim still applies);",
+      "            exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with a stored sample older than 6 h",
+      "--claimed a,b   internal: the detached refresh `pick` spawns for accounts it already claimed",
+      "Imports the peer machine's samples once per run (`usage --json` over ssh); the usage GET has a 10 s timeout.",
+    ],
+  },
+  {
+    name: "health", usage: "health [--json] [--wake]", summary: "login, quota and waiting-ask health of this machine and its peer; exit 1 on any fail",
+    detail: [
+      "--json   {state, rows}",
+      "--wake   notify (MacBook, only when the picture changed) and re-push the peer's pending ask dialogs younger than 24 h",
+      "The peer is read through its herdr-core, plain ssh only when no core answers (with a NOTE line).",
+    ],
+  },
+  { name: "account", usage: "account [--badge]", summary: "registry id of this session (CLAUDE_CONFIG_DIR unset = the default account)", detail: ["--badge   upper-case id, printed only with more than one enabled account"] },
+  { name: "fable", usage: "fable", summary: "the account `cf` launches on: the registry's `fable` when enabled, else the default", detail: [] },
+  { name: "env", usage: "env <id>", summary: "shell line forcing an enabled account (what `c --account <id>` evals)", detail: ["exit 2 when <id> is unknown or disabled"] },
+  { name: "session", usage: "session <sessionId>", summary: "registry id the session ran on, from the hook log (`c --resume` pins to it)", detail: ["exit 1 when unknown or disabled"] },
+  { name: "latest", usage: "latest [dir]", summary: "id of the newest session transcript for dir, default cwd (`c --continue` pins to it)", detail: ["exit 1 when there is none"] },
+  {
+    name: "record", usage: "record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]", summary: "write one quota sample into the cache",
+    detail: ["--account <id>   the account the sample belongs to", "--s / --w         session / weekly percent used", "--s-reset / --w-reset   epoch seconds when the window resets"],
+    caller: "scripts/statusline.sh (native rate_limits feed)",
+  },
+  {
+    name: "exhausted", usage: "exhausted --account <id> --until <epoch>", summary: "mark an account limit-hit, honoured by pick until then",
+    detail: ["--account <id>   the account that hit its limit", "--until <epoch>   epoch seconds; required"],
+    caller: "none yet (reserved for a limit-event hook; docs/claude-accounts.md)",
+  },
+]
+
+export function helpText(): string {
+  const agents = VERBS.filter((v) => !v.caller)
+  const jobs = VERBS.filter((v) => v.caller)
+  const line = (v: Verb) => `  claude-account ${v.usage}\n      ${v.summary}`
+  return [
+    "claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md)",
+    "",
+    "Usage: claude-account <verb> [flags]      claude-account <verb> --help   one verb in full",
+    "",
+    "Verbs:",
+    ...agents.map(line),
+    "",
+    "Not for agents (a job or a hook calls these):",
+    ...jobs.map((v) => `${line(v)}\n      caller: ${v.caller}`),
+    "",
+    "Exit: 0 ok · 1 negative answer (session, latest, health, refresh --all) · 2 usage error · 3 pick spill · 4 pick: registry unreadable",
+    "Help never runs a verb: --help, -h and `help` print this text on stdout and exit 0.",
+    "",
+  ].join("\n")
+}
+
+export function verbHelp(name: string): string | null {
+  const v = VERBS.find((x) => x.name === name)
+  if (!v) return null
+  return [`claude-account ${v.usage}`, "", v.summary, ...(v.detail.length ? ["", ...v.detail.map((d) => `  ${d}`)] : []), ...(v.caller ? ["", `Not for agents. Caller: ${v.caller}`] : []), ""].join("\n")
+}
+
+const HELP_FLAGS = new Set(["--help", "-h"])
+
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv
+  // Help runs before the registry loads and before any verb: it never reads state and never has a side effect.
+  if (cmd === undefined || cmd === "help" || HELP_FLAGS.has(cmd)) {
+    const topic = cmd === "help" ? rest[0] : undefined
+    process.stdout.write((topic ? verbHelp(topic) : null) ?? helpText())
+    return 0
+  }
+  const forVerb = verbHelp(cmd)
+  if (forVerb === null) {
+    console.error(`claude-account: unknown verb '${cmd}' (${VERBS.map((v) => v.name).join("|")}); claude-account --help lists them`)
+    return 2
+  }
+  if (rest.some((a) => HELP_FLAGS.has(a))) {
+    process.stdout.write(forVerb)
+    return 0
+  }
   let reg: Registry
   try {
     reg = loadRegistry()
@@ -447,8 +543,7 @@ async function main(argv: string[]): Promise<number> {
       return 0
     }
     default:
-      console.error("usage: claude-account pick|usage|expiry|refresh|record|account|env|session|latest|exhausted ...")
-      return 2
+      throw new Error(`verb '${cmd}' is in VERBS but not dispatched`)
   }
 }
 
