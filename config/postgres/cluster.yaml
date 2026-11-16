@@ -66,9 +66,12 @@ server:
 
 roles:
   agent_workflows:
-    # 8 live today (lease, journal, host and request pools); an idle backend costs
-    # about 7 MB, so the cap guards a pool that leaks, not a saving (issue 1684).
-    connection_limit: 16
+    # The host alone holds up to ~23 (journal pool 10, research ledger 4, read 2, review ledger 2, runaway 2,
+    # middleware 2, lease 1; 10 idle at rest) and every `make check` in agent-workflows opens more on this same
+    # role (bun test --parallel=4, AGW_TEST_PG_URL): at 16 the host answered 500 "too many connections for role"
+    # during a check (issue 1709). 48 + the other roles' ~32 live fits under max_connections less its 3 reserved;
+    # an idle backend costs about 7 MB, so the cap guards a pool that leaks, not a saving (issue 1684).
+    connection_limit: 48
     password: op://mini/vps-dev/AGENT_WORKFLOWS_DB_PASSWORD
   argo:
     connection_limit: 20
