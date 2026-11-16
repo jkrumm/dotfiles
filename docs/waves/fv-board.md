@@ -13,7 +13,7 @@ colour cleanup).
 - [x] `ask-human.sh resolve <id> --as done|denied|superseded [--note]`: the owner's answer without the MacBook (the factory's FV Wave 3
   calls it, never writes the queue). Never runs the command; `denied`/`superseded` are status `denied` (a waiting caller exits 1),
   `resolvedAs`/`resolvedNote` show in `status <id>`.
-- [x] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec **with the token** (`secrets-run run --env-file=<the factory's .env.tpl> -- factory fleet`): `/fleet` is token-only, because the socket is every pane's and IuRoot text must not reach an agent's model; the
+- [x] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec **with the token** (`secrets-run run --env-file=<the factory's .env.tpl> -- factory fleet`): `/fleet` is token-only, because the socket is every pane's and IuRoot text must not reach an agent's model; the <!-- cli-refs: ignore -->
   `PLAN.md` grep and its parser go. Layout A, repos with plan and sessions, asks on top.
 
 Landed `753af8b` (PR #60), reloaded and checked on screen 2026-11-02: asks on top, plans and the session tree from `/fleet`. The path-instead-of-name ask label was fixed in `27e3fa9`.

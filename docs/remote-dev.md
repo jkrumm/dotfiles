@@ -171,7 +171,7 @@ the Claude session id (hc: the `jk.claude.session` label; the daemon:
 `sessionId`) — otherwise one Claude in a terminal reads as two agents racing a tree.
 
 Lanes start agent work (`docs/agent-platform.md`): a factory Issue (`factory issue new`, `factory issue list` lists) and `@implementer`. `agent-dispatch` and
-`rd bg` were removed 2026-10-04.
+`rd bg` were removed 2026-10-04. <!-- cli-refs: ignore -->
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
 **login keychain**, unreachable from an ssh session, so that spelling comes up

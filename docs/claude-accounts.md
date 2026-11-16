@@ -187,7 +187,7 @@ pick(lane):
   5. share(eligible)   # spill to the accounts with the most room
   6. interactive → iu (Claude Code shows the limit itself)
      bulk        → "spill": the caller spills to its IU path
-                   (`rd` pauses — Herdr work never spills to IU; agw steps keep their IU path)
+                   (`rd` pauses — Herdr work never spills to IU, agw steps keep their IU path)
 ```
 
 Why v1.4: with two accounts "the other" was one account, so the first match was the only match. With `me2` the

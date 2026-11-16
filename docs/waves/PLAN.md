@@ -181,14 +181,14 @@ contract to keep.
   renamed or aliased (`herdr_status` → a runner-neutral name) with a migration and contract bump. The hook's
   `HERDR_PANE_ID`/`HERDR_TAB_ID` become `HC_TERMINAL_ID` plus labels.
 - [x] A fake hc for the tests replaces `fake-herdr.ts`. Delete `HerdrRunner` once `HcRunner` is green: no
-  dual-runner flag remains. Roll out only when `factory status` shows no live session on the classic runner
+  dual-runner flag remains. Roll out only when `factory status` shows no live session on the classic runner <!-- cli-refs: ignore -->
   (they lose their witness otherwise); else write `stopped: <sessions>` and stop.
 - [x] Roll it out with software-factory's own release procedure (`~/.software-factory/releases/<sha>`, the
   LaunchAgent). Then prove it: one throwaway spawn lands as a named tab in the right space on the mini core and
   shows up in the app on the MacBook.
 **Left behind:**
 - stopped: rollout and proof not done. The code is on software-factory `master` (`437a4ea`, `make check` green 693/0 three
-  times, `HC_E2E=1` e2e green against a scratch core, two `agw review` rounds triaged), **not deployed**. `factory status`
+  times, `HC_E2E=1` e2e green against a scratch core, two `agw review` rounds triaged), **not deployed**. `factory status` <!-- cli-refs: ignore -->
   at close-out still shows live sessions on classic panes (`dotfiles-p1-hc-updates-fda` working; `dotfiles-w1`,
   `shutterflow-w1`, `agent-workflows-w1`, `iris-w1`, `iris-w19-i3-telemetry-ui-` idle), and a deploy would drop their witness
   and their notes. Next: when none is live, `make deploy` in software-factory (its release procedure), then the throwaway
@@ -210,7 +210,7 @@ contract to keep.
 - dotfiles gate: docs only (`docs/herdr-core.md`, this file); AGENTS.md untouched (42.1k).
 - **Rollout done by the owner's session (2026-10-31 16:25):** the classic factory sessions were closed first (P1-P4,
   Wave 1/2, iris w19, software-factory W4/F1, argo-w7), then `make deploy` in software-factory: `437a4ea` healthy, rollback
-  release `dd9b001`. Proof: `factory spawn create hc-proof-1` (role mechanical) landed as `mini/t1m` with labels
+  release `dd9b001`. Proof: `factory spawn create hc-proof-1` (role mechanical) landed as `mini/t1m` with labels <!-- cli-refs: ignore -->
   `herdr.space=sp1a1c873f…` (the dotfiles space) + `herdr.tab=tb-7ebc48849fd7`; `herdr-app ls` on the MacBook shows the tab
   **named `hc-proof-1`** in that space (adoption and naming work, the guessed doc shape holds); Claude ran on Max `iu`,
   status `done`, and its transcript persisted (a normal session, `--resume`-able). Proof terminal killed and removed.
@@ -237,7 +237,7 @@ Role `lead`. dotfiles.
   one attempt per terminal, only into a login shell). Tests cover an account change on a reused terminal and
   overlapping triggers. Wire the hook in
   `config/settings.template.json`, write tests, and prove it with a scratch-core kill/restart.
-- [x] `skills/wave` (factory spawns keep `factory session wait --on workers`, since a held spawn has no hc
+- [x] `skills/wave` (factory spawns keep `factory session wait --on workers`, since a held spawn has no hc <!-- cli-refs: ignore -->
   terminal yet; hc-direct waits on the notes hc types into the parent plus `hc wait --children`), `skills/implement`,
   `docs/agent-platform.md`, `docs/remote-dev.md` §rd: hc semantics.
 - [x] Spawn Wave 4 through the new the wave spawner. That is the end-to-end proof that an orchestrator tab lands in the

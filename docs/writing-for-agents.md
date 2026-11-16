@@ -98,7 +98,7 @@ The three marked "our choice" are defaults to test, not findings.
 
 | Issue | Repo | What |
 |-|-|-|
-| 1635 | agent-workflows | `agw schema --index [group…]`: one `command<TAB>summary` line per command |
+| 1635 | agent-workflows | `agw schema --index [group…]`: one `command<TAB>summary` line per command | <!-- cli-refs: ignore -->
 | 1636 | dotfiles | the always-on CLI index, the live verb list in eleven skills, the injection and `/context` proofs |
 | 1642 | dotfiles | `context-load`: prints what every session loads, fails `make check` over budget |
 | 1643 | iris | the 128 KB root file split into a 12 KB root, nested files and docs; the first marker proof |

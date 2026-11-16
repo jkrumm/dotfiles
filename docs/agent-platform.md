@@ -70,7 +70,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 | Issue (`factory issue new`) | work for a repo that should ship on its own | the software factory: its lead builds, reviews, deploys and verifies (`factory issue list` follows it); no factory, no Issue |
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
 
-Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
+Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`, <!-- cli-refs: ignore -->
 Hermes kanban/delegation, Hermes hand-merging PRs.
 
 ## Repo contract — how agents learn a repo
