@@ -1,5 +1,5 @@
 ---
-description: Apple developer setup for every app of ours — what lives where (portal, 1Password, the mini), which credential does what, the order of a new app's one-time portal steps, the traps that cost hours on Iris (App Group, Push, headless signing, tunnel, lock), and the Mac release outside the store on the mini or a hosted GitHub runner (Developer ID, notarization, Sparkle, formula versus cask). Read before touching an Apple signing, provisioning, APNs, TestFlight, notarization or Sparkle problem, or before starting a new iOS/macOS app.
+description: Apple developer setup for every app of ours — what lives where (portal, 1Password, the mini), which credential does what, the order of a new app's one-time portal steps, the traps that cost hours on Iris (App Group, Push, headless signing, tunnel, lock), and the Mac release outside the store on the mini or a hosted GitHub runner (Developer ID, notarization, Sparkle, formula versus cask), and a Tauri app's release (bundled CLI, notarization outside `tauri build`, update key and feed). Read before touching an Apple signing, provisioning, APNs, TestFlight, notarization or Sparkle problem, or before starting a new iOS/macOS app.
 ---
 
 # Apple signing — one team, many apps
@@ -20,6 +20,7 @@ All in the 1Password item `op://mini/apple-developer`, read on the mini with `se
 | `asc-key-p8`, `asc-key-id`, `asc-issuer-id` | App Store Connect **Team** API key (Users and Access > Integrations; an individual key cannot do provisioning or notarytool) | `xcodebuild -allowProvisioningUpdates -authenticationKeyPath/-ID/-IssuerID` (creates App IDs, profiles, devices), TestFlight upload, `notarytool` |
 | `apns-key-p8`, `apns-key-id` | APNs **auth key** (token auth) | the server's APNs notifier (`APNS_KEY_P8` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_TOPIC` = bundle id). The key is not per environment (sandbox vs production is the token's host; unverified for production until the first TestFlight build). |
 | Sparkle EdDSA key | Mac update signing, **one key pair per app** | Iris: private key in the mini's login keychain, backup file `~/.local/state/apple-developer/sparkle-ed25519.key`. ntfy-mac: its own pair, file `sparkle-ntfy-mac-ed25519.key` in the same directory, and the repo secret `SPARKLE_ED_PRIVATE_KEY` for CI. 0600, outside every repo; the 1Password copy is the owner's |
+| Tauri update key (minisign) | the Tauri updater's signing key, **one pair per app**; the app accepts only an archive this key signed | shutterflow: private half the file `~/.local/state/apple-developer/shutterflow-updater.key` (0600, no password, outside every repo), public half compiled into the app as `plugins.updater.pubkey`; the 1Password Document in vault `mini` is the owner's copy, the one that outlives the mini. Losing it strands every installed copy: *A Tauri app*, below |
 
 Not credentials, but needed: an Apple Development identity in the mini's login keychain (cloud-managed by `-allowProvisioningUpdates`), a Developer ID Application certificate for the Mac (Account Holder creates it).
 
@@ -113,7 +114,7 @@ Iris archives an Xcode project. A Mac app built as a SwiftPM package plus an xco
 
 ## Release on a hosted GitHub runner (ntfy-mac, proven 2026-11-13)
 
-**Public repos only for now:** the VPS runner our private repos use cannot build a Mac app, so the first private Mac app needs its own decision. For a public repo, a release does not have to run on the mini. ntfy-mac's `.github/workflows/release.yml` (`workflow_dispatch`, runner `macos-26`) builds, signs, notarizes, uploads and updates the tap with no Apple slot and no signing identity installed beforehand; the first run succeeded end to end.
+**Public repos only:** the VPS runner our private repos use cannot build a Mac app, and a hosted macOS minute costs about ten times a Linux minute (shutterflow `docs/decisions/0060-distribution-and-updates.md` "Why", *The mini, not a hosted runner*). A private Mac app releases on the mini, as Iris does; the decision for a Tauri app is *A Tauri app (shutterflow shape)*, below. For a public repo, a release does not have to run on the mini. ntfy-mac's `.github/workflows/release.yml` (`workflow_dispatch`, runner `macos-26`) builds, signs, notarizes, uploads and updates the tap with no Apple slot and no signing identity installed beforehand; the first run succeeded end to end.
 
 **Repository secrets** (set each with `printf '%s' "$value" | gh secret set <NAME>`: `secrets-run read` ends with a newline and a trailing newline stays in the secret):
 
@@ -141,6 +142,91 @@ Iris archives an Xcode project. A Mac app built as a SwiftPM package plus an xco
 **Recovery:** if the tag exists but the GitHub release or an asset upload failed, a re-run does not publish. Delete the tag and the draft release, then re-run (ntfy-mac `AGENTS.md` "Release process").
 
 The CI keychain differs from the mini's: a throwaway keychain with the `apple:` partition, against a dedicated keychain with the `codesign:` partition opened from a password file. Both are proven; keep them apart.
+
+## A Tauri app (shutterflow shape)
+
+Shutterflow is a Tauri 2 desktop app in a private repository, released from the mini with Tauri's own updater instead of Sparkle. What follows is what ran there, not what its plan said. Proof, from `~/SourceRoot/shutterflow`:
+
+- `make mac-release` for `0.1.1064`: the app and the dmg `Accepted`, stapled, `spctl` says `Notarized Developer ID`.
+- `PUBLISH=draft`, then `make release-promote` for `0.1.1129` against the real feed on 2026-11-16.
+- `make update-proof REAL_FEED=1`: 11 of 11 checks, `0.1.1128` updated itself to `0.1.1129`.
+- The owner's MacBook installed `0.1.1129` from the download URL and updated in the app to `0.1.1134`.
+
+Source files below are shutterflow's. `0060` is `docs/decisions/0060-distribution-and-updates.md` (its sections *Proven*, *Published* and *On the owner's MacBook* hold the runs), `tauri.md` is `docs/engineering/tauri.md` §9.
+
+**Pipeline** (`scripts/mac-release.sh`, run whole inside the Apple slot, `scripts/apple-slot.sh`, slot name `shutterflow-apple`: `0060` §2). Credentials and the keychain come from `scripts/apple-credentials.sh`, the ntfy-mac helper (`pem_normalize` included), unchanged in shape. The steps differ from the Xcode shapes above:
+
+1. **Version.** `0.<workspace minor>.$(git rev-list --count HEAD)`, never committed. It reaches the bundle through `tauri build --config '{"version":…}'` and every binary through one env var read with `option_env!` (`mac-release.sh`; `0060` *Proven (row mac-release-signed)*, "One version mechanism"). The script runs the bundled CLI and requires `--version` to equal `CFBundleShortVersionString`.
+2. **Credential preflight.** One read-only `notarytool history` call before the build. A run with a wrong `asc-key-id` stopped at it with `HTTP status code: 401`, nothing built (`0060` *Proven (row mac-release-signed)*).
+3. **Build ad hoc.** `tauri build --ci --bundles app` with `signingIdentity: "-"` in `tauri.release.conf.json`. The bundler signs nothing real and builds no dmg.
+4. **Sign afterwards, inside out.** The CLI at `Contents/MacOS/shutterflow`, then the app: `codesign --force --options runtime --timestamp`, no entitlements file, never `--deep` (`mac-release.sh` `sign_one`). The notary accepted the bundle with no entitlements file.
+5. **Check before notary time.** `scripts/verify-signature.sh` walks every Mach-O in the bundle (`find`, not a fixed list, so an executable a bundler adds later is held to the same facts) and demands the team, a Developer ID authority, `runtime`, a timestamp, no `get-task-allow`, and at least two executables. `--release` adds `stapler validate` and `spctl`. It is ntfy-mac's script with a bundle walk.
+6. **Notarize, staple, then the dmg.** The app first, stapled; then the dmg is built by us from the stapled app (`hdiutil create`, an `/Applications` link, `codesign --timestamp`), notarized, stapled, assessed with `spctl --type open --context context:primary-signature`. `--wait` exits 0 on `Invalid`: read `.status`. A timeout prints the id; `RESUME_STAGE=app|dmg RESUME_NOTARY_ID=<id>` continues on the artifacts already built, no rebuild, no re-sign. Staple is retried five times, ten seconds apart (`mac-release.sh`).
+7. **Update archive from the stapled app.** `COPYFILE_DISABLE=1 tar -czf Shutterflow.app.tar.gz`, signed with `tauri signer sign --app-version <v>`, then unpacked into a scratch directory where seal, `stapler validate`, `spctl` and the version must hold. Both builds of the update proof passed it: the staple survives the archive (`0060` *Proven (row updater)*).
+8. **Publish** (`PUBLISH=draft|release`): *The feed*, below.
+
+### Why notarization runs outside `tauri build`
+
+The bundler can notarize. Three reasons the script does not (`mac-release.sh` header, `0060` *Why*):
+
+- It logs "skipping app notarization" and finishes green when a credential is wrong. The line still prints during our build and is harmless there (`0060` *Proven (row mac-release-signed)*).
+- It makes the dmg from an unstapled app and never notarizes the dmg, so the dmg has no ticket.
+- It cannot resume a submission that queues for hours.
+
+The same reasoning rules out `bundle.createUpdaterArtifacts`: it would archive the unstapled app (`tauri.md`, "Update archive and the updater").
+
+### A bundled CLI (`externalBin`)
+
+- `tauri.release.conf.json` lists `bundle.externalBin: ["../../../target/bundle-bin/shutterflow"]`. The release config only: the dev config has no sidecar. The bundler wants the file named `shutterflow-<host triple>`, so the script copies `target/release/shutterflow` to `target/bundle-bin/shutterflow-$(rustc -vV | sed -n 's/^host: //p')`; the bundler places it at `Contents/MacOS/shutterflow` (`mac-release.sh`; `tauri.md` "Release").
+- It is a plain CLI, not a Tauri sidecar: the app's API server runs in-process (`tauri.md` §7 and "Release").
+- Sign it before the app. The seal covers it only if it is signed first (step 4), and `codesign --verify --deep --strict` passes on the app and on the app inside the dmg.
+- Prove it from the signed bundle: the script runs `Contents/MacOS/shutterflow --version` with `SHUTTERFLOW_FLEET=1`, `SHUTTERFLOW_KEYCHAIN=off` and a home under `~/ShutterflowLab`. That starts the binary under Hardened Runtime without touching a keychain item (`mac-release.sh` `check_version`).
+
+### The update key
+
+One minisign pair per app, as with Sparkle's. Facts, each from shutterflow:
+
+- Made once with the **pinned** `tauri-cli` (`cargo-tauri tauri signer generate --ci --password '' --write-keys <file>`; `scripts/dev-host/doctor.sh`). `mac-release.sh` refuses a key file that is missing or not mode 0600, and passes it to `tauri signer sign` as `TAURI_SIGNING_PRIVATE_KEY` with an empty password. Tauri's docs say not to keep it in `.env` (`tauri.md`).
+- The public half is the **contents** of the `.pub` file, not a path, in `plugins.updater.pubkey` of `tauri.release.conf.json`. It ships inside every build.
+- **Losing it strands every installed copy:** an installed app accepts only an archive this key signed (`0060` §3). A forged manifest whose archive carries another key's signature made the install fail with `update_download_failed` and the app stayed on N (`0060` *Proven (row updater)*). A replaced key therefore needs a manual reinstall of every copy: an installed app moves forward only through the updater, and a reinstall by hand is the only other way (`docs/owner-install.md` "Going back").
+- The backup comes before the first release: the file on the mini is one copy, the owner's 1Password Document in vault `mini` is the second (`0060` §3). `0060` *Unproven* still lists that Document as an open check on 2026-11-16: confirm it exists before a first release of a new app.
+
+### The feed for a private source repository
+
+Release assets of a private GitHub repository cannot be the update feed: the app would need a token, and a token in the binary can be read out of it (`0060` *Rejected*; tauri-apps/tauri#7329 cited there). A public releases-only repository worked as a first design and the owner rejected it, so shutterflow serves its own files:
+
+- Plain files on the VPS, written by the mini over `ssh vps` (keyless Tailscale SSH), mounted read-only into the share container behind `shutterflow.app`. The URL compiled into the app is one host we own: `https://shutterflow.app/desktop/latest.json` (`0060` §4).
+- Layout: `v<version>/{Shutterflow_<version>_<arch>.dmg, Shutterflow.app.tar.gz, Shutterflow.app.tar.gz.sig, latest.json}`, plus a top-level `latest.json`. That file is written last by one atomic rename and **is** the publication; the same rename with an older manifest is the rollback (`scripts/publish-release.sh` header; `make release-promote VERSION=<v>`). A draft is the first four files: nothing links to them.
+- Nothing is trusted because it was uploaded. The draft is read back through the public URL and compared byte for byte, the archive's signature is verified against the public key, and the manifest must name the same version, signature and URL (`scripts/release/verify-release.ts`, run before and after the upload). On 2026-11-16 a draft read back equal, left `/desktop/latest.json` a 404, and promotion made it name `0.1.1129` (`0060` *Published*).
+- Preconditions run before the build: `release` needs a clean tree, HEAD on `origin/master`, and a version newer than the published one; a draft needs HEAD on a remote branch (`mac-release.sh` header).
+- The last five versions stay on disk, never the published one. The previous dmg is the way back.
+
+### The team pin
+
+The plugin checks only the minisign signature, like Sparkle only the EdDSA one. The pin is ours, in two places, as for ntfy-mac:
+
+1. **The release gate:** `verify-signature.sh` (step 5).
+2. **The app:** `apps/desktop/src-tauri/src/updater.rs` registers the plugin only for the release identifier (`app.shutterflow.desktop`; `.dev`, `.e2e` and ad-hoc builds never update) with a Developer ID signature whose team equals the one stored by the first signed run (`<config dir>/updater-team`, ntfy-mac's `TeamPin` pattern), outside `AppTranslocation` and `/Volumes`, in a folder the user can write to. Every other build answers "unavailable" with a reason (`dev_build`, `not_signed`, `wrong_team`, `not_installed`, `not_writable`). Before the swap it unpacks the archive and requires seal, `spctl` notarized, the pinned team and the announced version. Each refusal has a unit test in `updater::tests`. It uses `spctl`, not `stapler`: `stapler` ships with Xcode's tools, which the owner's Mac need not have, and `spctl` answers from the ticket offline (`0060` §5, *Proven (row updater)*).
+
+### Traps that cost time
+
+| Trap | What happened and the fix | Where |
+|-|-|-|
+| The dmg step hangs | Without `CI=true` the bundler's `bundle_dmg.sh` drives Finder over AppleScript and times out (-1712) in a session with no Finder rights. `CI=true` skips it and costs the positioned icons. Moot for `make mac-release` (the dmg is ours), needed for `make app-release` | `tauri.md` "Release" |
+| A `._*` file breaks the seal | `tar` of a macOS tree writes AppleDouble entries that unpack into the bundle. `COPYFILE_DISABLE=1` | `mac-release.sh` `make_update_archive` |
+| Dev build updates itself, or a release does not | The updater is gated on identifier plus Developer ID plus team. `make update-proof` builds two real signed releases under a config overlay (loopback `http://` feed, `dangerousInsecureTransportProtocol`; no dmg, never published) | `0060` §5, `tauri.md` "Update archive and the updater" |
+| Updater cannot replace a translocated bundle | The plugin derives its target from the running executable. The shell refuses a bundle under `AppTranslocation` or a mounted image as `not_installed` and the About row says to move the app to Applications. Measured from a mounted read-only image: updater off, no feed reached. A Gatekeeper-translocated launch of a quarantined copy was never run | `0060` *Proven (row updater)* |
+| The in-app update needs write access to `/Applications` | The owner works as a standard user and elevates on demand. The first update attempt failed with "couldn't write"; as an administrator it worked. The plugin would ask for an administrator password, and an open plugin issue reports the window freezing behind that prompt (`0060` §5), so the shell offers no install without write access (`not_writable`). Plan row `update-without-admin` | `0060` *On the owner's MacBook* |
+| A terminal `mv` out of `/Applications` is refused | macOS App Management blocks it unless the terminal is allowed. Tell the owner to move and rename the old build in Finder | `docs/owner-install.md` step 2 |
+| First launch on the owner's Mac asks for the keychain | Ad hoc to Developer ID under the same identifier: one prompt for one of three items on the first launch, none on the second, none during the update. Keychain items belong to the signature, so going back to an ad-hoc build prompts again once per item | `0060` *On the owner's MacBook*, `docs/owner-install.md` "Going back" |
+| `requireSignedVersion` works with a version stamped by `--config` | N accepted N+1 under `requireSignedVersion: true`; the signature's trusted comment carries `version:<n>`. `signer sign --app-version` needs `tauri-cli` 2.12 or newer (pinned 2.12.4); `tauri-plugin-updater` is 2.14.1 | `0060` *Proven (row updater)*, `tauri.md`, `Makefile` |
+
+### Not proven, do not build on it
+
+- That the plugin's `SignedVersionMismatch` refuses a lying manifest (`0060` *Unproven*).
+- A Gatekeeper-translocated launch of a quarantined copy (`0060` *Unproven*).
+- Whether the two storage secrets prompt for the keychain at the first sync (`0060` *On the owner's MacBook*).
+- Windows and Linux: unsigned bundles build, the AppImage starts under Xvfb, the installer was never started (`0060` §6, the spike of 2026-11-15).
 
 ## Packaging a Mac app for Homebrew: formula or cask
 
@@ -181,4 +267,4 @@ then an app event that reads `containerURL(forSecurityApplicationGroupIdentifier
 
 ## Where the details live
 
-Per-repo recipes stay in the repo (Iris: `AGENTS.md` "Device" and "Mac releases", skills `device`, `apple-dev`, `scripts/mac-release.sh` as the reference implementation, `docs/research/2026-11-04-apple-paid-team.md` for the design; ntfy-mac: `AGENTS.md` "Release process", `scripts/sign.sh`, `scripts/verify-signature.sh`, `scripts/apple-credentials.sh`, `scripts/appcast.sh`, `.github/workflows/release.yml`, `docs/waves/PLAN.md` Waves 1 and 7). This file is what holds for every app, so a new Mac app follows it without reading Iris. The global skill `apple-signing` points here.
+Per-repo recipes stay in the repo (Iris: `AGENTS.md` "Device" and "Mac releases", skills `device`, `apple-dev`, `scripts/mac-release.sh` as the reference implementation, `docs/research/2026-11-04-apple-paid-team.md` for the design; ntfy-mac: `AGENTS.md` "Release process", `scripts/sign.sh`, `scripts/verify-signature.sh`, `scripts/apple-credentials.sh`, `scripts/appcast.sh`, `.github/workflows/release.yml`, `docs/waves/PLAN.md` Waves 1 and 7; shutterflow: `scripts/mac-release.sh`, `scripts/verify-signature.sh`, `scripts/publish-release.sh`, `docs/decisions/0060-distribution-and-updates.md`, `docs/owner-install.md`). This file is what holds for every app, so a new Mac app follows it without reading Iris. The global skill `apple-signing` points here.
