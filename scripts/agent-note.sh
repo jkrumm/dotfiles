@@ -72,6 +72,7 @@ state_ready() { case "$1" in idle | done) return 0 ;; *) return 1 ;; esac; }
 rate_ok() { # <addr>
   mkdir -p "$STATE" || return 0
   local f="$STATE/sent" now cutoff total per
+  [ -f "$f" ] || : >"$f" 2>/dev/null || return 0 # a first note has no file yet; the redirect error would print before any 2>/dev/null
   now=$(date +%s)
   cutoff=$((now - RATE_WINDOW))
   [ -f "$f" ] && awk -v c="$cutoff" '$1 >= c' "$f" >"$f.tmp" 2>/dev/null && mv "$f.tmp" "$f"
