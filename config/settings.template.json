@@ -6,7 +6,6 @@
   },
   "permissions": {
     "allow": [
-      "mcp__chrome-devtools__*",
       "Bash(bun run *)",
       "Bash(bun add *)",
       "Bash(bun remove *)",

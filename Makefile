@@ -82,6 +82,12 @@ FALLOW_VERSION := 3.38.1
 # like fallow and pinned the same way; it attaches to a running Chrome and downloads no browser.
 PLAYWRIGHT_CLI_VERSION := 0.1.24
 
+# chrome-devtools — the command-line client of chrome-devtools-mcp, for what playwright-cli cannot do: performance
+# traces with insights, Lighthouse, computed CSS (agents/browser.md). It attaches to the shared Chrome through its own
+# background daemon, one per user, owned by `shared-chrome devtools`; no MCP server is registered anywhere. npm-global, pinned like playwright-cli.
+# The package also ships `chrome-devtools-mcp`; only the CLI is linked. Checked on the mini: docs/browser.md §chrome-devtools CLI.
+CHROME_DEVTOOLS_VERSION := 1.13.0
+
 # pymobiledevice3 — physical-iPhone screenshots/syslog without Xcode's GUI (`developer
 # core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
 # xcodes (Xcode manager) ships from scripts/install-xcodes.sh (pinned, sha256 + signature).
@@ -325,6 +331,18 @@ _setup-tools:
 	@PW_BIN="$$(npm prefix -g 2>/dev/null)/bin/playwright-cli"; \
 	if [ -x "$$PW_BIN" ]; then \
 		$(MAKE) --no-print-directory _link SRC="$$PW_BIN" DST="$(HOME)/.local/bin/playwright-cli"; \
+	fi
+	@# chrome-devtools — npm global, pinned, only the CLI linked (the package's MCP binary stays unlinked).
+	@if [ "$$(chrome-devtools --version 2>/dev/null | head -1 | tr -d '[:space:]')" = "$(CHROME_DEVTOOLS_VERSION)" ]; then \
+		echo "    · chrome-devtools $(CHROME_DEVTOOLS_VERSION) (ok)"; \
+	else \
+		npm install -g "chrome-devtools-mcp@$(CHROME_DEVTOOLS_VERSION)" >/dev/null 2>&1 \
+			&& echo "    ✓ chrome-devtools $(CHROME_DEVTOOLS_VERSION) installed" \
+			|| echo "    ✗ chrome-devtools install failed — npm install -g chrome-devtools-mcp@$(CHROME_DEVTOOLS_VERSION)"; \
+	fi
+	@CDT_BIN="$$(npm prefix -g 2>/dev/null)/bin/chrome-devtools"; \
+	if [ -x "$$CDT_BIN" ]; then \
+		$(MAKE) --no-print-directory _link SRC="$$CDT_BIN" DST="$(HOME)/.local/bin/chrome-devtools"; \
 	fi
 	@# Apple toolchain (iris): xcodegen comes from the Brewfile; xcodes + pymobiledevice3 below.
 	@bash $(DOTFILES_DIR)/scripts/install-xcodes.sh || echo "    ✗ xcodes install failed — bash scripts/install-xcodes.sh"
@@ -1933,7 +1951,7 @@ status:
 	@echo "  Browser debugging"
 	@$(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default account}"; if claude mcp list 2>/dev/null | grep -q "chrome-devtools"; then echo "    ✗ chrome-devtools MCP still registered for $$a [starts in every session — run make setup]"; else echo "    ✓ chrome-devtools MCP not session-registered ($$a)"; fi; $(CLAUDE_EACH_END)
 	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_CHECK_PROJECT_MCP) $(CLAUDE_EACH_END)
-	@grep -q '^mcpServers:' "$(DOTFILES_DIR)/agents/browser.md" && echo "    ✓ browser agent declares chrome-devtools" || echo "    ✗ agents/browser.md lost its mcpServers"
+	@! grep -q '^mcpServers:' "$(DOTFILES_DIR)/agents/browser.md" && echo "    ✓ browser agent declares no MCP server" || echo "    ✗ agents/browser.md declares an MCP server again — use the chrome-devtools CLI (docs/browser.md)"
 	@echo "  Colima (Docker runtime)"
 	@for tool in colima docker lazydocker; do \
 		command -v $$tool >/dev/null 2>&1 \
