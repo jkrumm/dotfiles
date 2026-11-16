@@ -91,7 +91,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | Code / a repo | rd, or git |
 | Vault pages | brain-sync through GitHub |
 | Anything a mini-side agent/LaunchAgent reads | put it **on the mini** — the SMB mount is client-side and dies with the MacBook |
-| A file/state pull the other direction | `rsync … iumac:<path>` from the mini (`usage-tracker` stats dirs); `ssh iumac` runs fixed verbs only — anything else MacBook-side (`op`, git, installers) goes through `ask-human ask … --cmd …` (dialog, then Touch ID) |
+| A file/state pull the other direction | `rsync … iumac:<path>` from the mini (`usage-tracker` stats dirs); `ssh iumac` runs fixed verbs only — anything else MacBook-side (`op`, installers) goes through `ask-human ask … --cmd …`; a read-only fact is `ssh iumac report <name>`, a pull of another checkout `ssh iumac repo-pull <name>` (dialog, then Touch ID) |
 
 If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
 `dotfiles/docs/remote-dev.md` §File shuttle for the deterministic check.
@@ -99,7 +99,7 @@ If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
 ## human-queue — the present-human channel
 
 ```bash
-ask-human ask "<text>" [--cmd <command>] [--wait <seconds>] [--no-push]  # on the mini; pushes by default
+ask-human ask "<text>" [--cmd <command> | --need secret|hands|place] [--wait <seconds>] [--no-push]  # on the mini; pushes by default
 ask-human push <id>       # trigger the dialog for an already-enqueued request
 make human-queue          # walk pending requests (run/deny/skip each), on the MacBook
 make human-queue-count    # just the count, on the MacBook

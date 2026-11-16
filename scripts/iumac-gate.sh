@@ -93,6 +93,9 @@ run_limited() {
     rm -f "$out.timeout"
   fi
   head -c 65536 "$out"
+  # A cut or newline-less output must not swallow the caller's own last line.
+  LIMITED_NEEDNL=0
+  if [ -s "$out" ] && [ "$(head -c 65536 "$out" | tail -c 1 | wc -l | tr -d ' ')" -eq 0 ]; then LIMITED_NEEDNL=1; fi
   rm -f "$out"
 }
 
@@ -246,6 +249,7 @@ end run' | exec osascript - "$title" "$text"
     log "$verb" allow
     export PATH="$H/.local/bin:/opt/homebrew/bin:/usr/local/bin:$H/.bun/bin:$PATH"
     run_limited "${IUMAC_GATE_REPORT_TIMEOUT:-60}" env HOME="$H" /bin/bash -c "$cmd"
+    [ "$LIMITED_NEEDNL" -eq 1 ] && printf '\n'
     printf '[exit %s]\n' "$LIMITED_RC"
     exit 0
     ;;

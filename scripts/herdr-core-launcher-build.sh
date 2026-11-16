@@ -50,7 +50,7 @@ fi
 
 # New code requirement (first build, or the cdhash-bound ad-hoc launcher being migrated): a re-grant is due.
 msg="herdr-core launcher was rebuilt/re-signed and needs a one-time Full Disk Access grant on THIS machine: System Settings > Privacy & Security > Full Disk Access > add $BIN. Afterwards, in a fresh terminal: make tcc-probe (docs/tcc.md)."
-if ! "$ASK" ask "$msg" >/dev/null 2>&1 && ! "$ASK" ask "$msg" --no-push >/dev/null 2>&1; then
+if ! "$ASK" ask "$msg" --need hands >/dev/null 2>&1 && ! "$ASK" ask "$msg" --need hands --no-push >/dev/null 2>&1; then
   echo "    ✗ launcher needs a new Full Disk Access grant and the re-grant could not be queued ($ASK ask failed): not swapped in. Fix ask-human, re-run"
   exit 1
 fi
