@@ -1,10 +1,7 @@
 #!/usr/bin/env bun
 // shared-chrome — the one headless Chrome the browse path drives (`/browse`, agents/browser.md).
 //
-//   shared-chrome ensure   start it if it is not answering, print its DevTools URL (stdout), exit 0
-//   shared-chrome status   up/down, supervisor pid, one line per context
-//   shared-chrome stop     stop the supervisor and with it Chrome
-//   shared-chrome run      the supervisor itself (com.jkrumm.shared-chrome; `ensure` starts it)
+// Verbs and flags: `shared-chrome --help` (HELP below). `ensure` is the only verb an agent needs.
 //
 // One Chrome, its own profile (~/.local/share/shared-chrome), DevTools on 127.0.0.1 only. Every agent works in
 // its own isolated browser context (playwright-cli `tab-new --isolated-context=<name>`), so cookies and storage
@@ -22,6 +19,31 @@ import { join } from "node:path"
 
 const env = process.env
 const HOME = env.HOME ?? ""
+
+/** Every verb the dispatch accepts, in help order; `caller` set = meant for a job, not for agents. */
+export const VERB_HELP: { name: string; summary: string; caller?: string }[] = [
+  { name: "ensure", summary: "start Chrome if it is not answering, print its DevTools URL on stdout, exit 0 (1 when it did not come up in 25 s)" },
+  { name: "status", summary: "chrome up/down, supervisor pid, one line per browser context; exit 0 when up, 1 when down" },
+  { name: "stop", summary: "stop the supervisor and with it Chrome; prints `stopped` (exit 0) or `still answering` (exit 1)" },
+  { name: "run", summary: "the supervisor itself: owns the idle rules and exits when no context is left", caller: "launchd com.jkrumm.shared-chrome (`ensure` starts it); never by hand" },
+]
+
+export const HELP = `shared-chrome — the one headless Chrome the browse path drives (\`/browse\`, agents/browser.md)
+
+Usage: shared-chrome <verb>        shared-chrome <verb> --help   same text; no verb is run by help
+
+Verbs:
+${VERB_HELP.filter((v) => !v.caller).map((v) => `  shared-chrome ${v.name}\n      ${v.summary}`).join("\n")}
+
+Not for agents:
+${VERB_HELP.filter((v) => v.caller).map((v) => `  shared-chrome ${v.name}\n      ${v.summary}\n      caller: ${v.caller}`).join("\n")}
+
+No verb takes a flag. Chrome listens on 127.0.0.1 only; every agent works in its own isolated context
+(playwright-cli \`tab-new --isolated-context=<name>\`). A context idle for 15 min is closed; Chrome stops 60 s after the last one.
+Environment (defaults in CONFIG): SHARED_CHROME_PORT (9223), SHARED_CHROME_BIN, SHARED_CHROME_PROFILE, SHARED_CHROME_STATE,
+SHARED_CHROME_LABEL, SHARED_CHROME_LOG, SHARED_CHROME_IDLE_MS, SHARED_CHROME_GRACE_MS, SHARED_CHROME_POLL_MS.
+Exit: 0 ok · 1 verb failed or Chrome down (status) · 2 unknown verb.
+`
 
 export const CONFIG = {
   port: Number(env.SHARED_CHROME_PORT ?? 9223),
@@ -382,12 +404,20 @@ async function stop(): Promise<number> {
   return down ? 0 : 1
 }
 
+const verbs: Record<string, () => Promise<number>> = { ensure, status, stop, run }
+/** The verbs the dispatch accepts (the drift test compares them with VERB_HELP). */
+export const DISPATCHED = Object.keys(verbs)
+
 if (import.meta.main) {
-  const verb = process.argv[2]
-  const verbs: Record<string, () => Promise<number>> = { ensure, status, stop, run }
-  const fn = verbs[verb ?? ""]
+  const [verb, ...rest] = process.argv.slice(2)
+  // Help never reaches a verb: it is answered before the dispatch, so no lease is written and no Chrome is started.
+  if (verb === undefined || verb === "help" || verb === "--help" || verb === "-h" || rest.some((a) => a === "--help" || a === "-h")) {
+    process.stdout.write(HELP)
+    process.exit(0)
+  }
+  const fn = Object.hasOwn(verbs, verb) ? verbs[verb] : undefined
   if (!fn) {
-    console.error("usage: shared-chrome ensure|status|stop|run")
+    console.error(`shared-chrome: unknown verb '${verb}' (${DISPATCHED.join("|")}); shared-chrome --help lists them`)
     process.exit(2)
   }
   process.exit(await fn())

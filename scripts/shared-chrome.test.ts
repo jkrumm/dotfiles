@@ -1,10 +1,10 @@
 // shared-chrome: the idle decision as pure cases, then the supervisor end to end against a fake DevTools
 // endpoint (scripts/lib/shared-chrome-fake.ts) standing in for Chrome.
 import { afterAll, describe, expect, test } from "bun:test"
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
+import { DISPATCHED, HELP, VERB_HELP, plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
 
 const cfg = { idleMs: 1000, graceMs: 500 }
 const page = (id: string, ctx: string, url = "https://a.test/", title = ""): TargetInfo => ({
@@ -66,6 +66,36 @@ describe("plan", () => {
     const p = plan(s, [d], 1000, cfg)
     expect(p.closeTargets).toEqual(["p9"])
     expect(p.disposeContexts).toEqual([])
+  })
+})
+
+describe("help", () => {
+  test("every verb the dispatch accepts is in the help text, and the help lists no other", () => {
+    for (const v of DISPATCHED) expect(HELP, `verb '${v}' missing from HELP`).toContain(`shared-chrome ${v}`)
+    expect(VERB_HELP.map((v) => v.name).sort()).toEqual([...DISPATCHED].sort())
+  })
+  test("the supervisor verb sits under 'not for agents' with its caller", () => {
+    const [agents, jobs] = HELP.split("Not for agents:")
+    expect(agents).not.toContain("shared-chrome run")
+    expect(jobs).toContain("shared-chrome run")
+    expect(jobs).toContain("com.jkrumm.shared-chrome")
+  })
+  test("`<verb> --help`, --help, -h, help and a bare call print it, exit 0, and start nothing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "shared-chrome-help-"))
+    const port = 20000 + Math.floor(Math.random() * 20000)
+    const env = { ...process.env, SHARED_CHROME_PORT: String(port), SHARED_CHROME_BIN: join(dir, "no-chrome"), SHARED_CHROME_PROFILE: join(dir, "profile"), SHARED_CHROME_STATE: join(dir, "state"), SHARED_CHROME_LOG: join(dir, "log"), SHARED_CHROME_LABEL: `com.jkrumm.shared-chrome-help-${process.pid}` }
+    const run = (...args: string[]) => Bun.spawnSync([process.execPath, join(import.meta.dir, "shared-chrome.ts"), ...args], { env })
+    for (const args of [["ensure", "--help"], ["stop", "-h"], ["status", "--help"], ["run", "--help"], ["--help"], ["-h"], ["help"], []]) {
+      const r = run(...args)
+      expect(r.exitCode, args.join(" ")).toBe(0)
+      expect(r.stdout.toString(), args.join(" ")).toBe(HELP)
+    }
+    // `ensure` writes its lease first and would spawn the supervisor and the log: none of it may exist
+    expect(existsSync(join(dir, "state"))).toBe(false)
+    expect(existsSync(join(dir, "log"))).toBe(false)
+    expect(await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)).toBe(false)
+    expect(run("frobnicate").exitCode).toBe(2)
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 
