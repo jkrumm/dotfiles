@@ -8,6 +8,7 @@
     ".claude/rules/*.md",
     "~/.claude/rules/agent-limits.md",
     "~/.claude/rules/attribution.md",
+    "~/.claude/rules/clis.md",
     "~/.claude/rules/code-style.md",
     "~/.claude/rules/commit-conventions.md",
     "~/.claude/rules/dependency-hygiene.md",

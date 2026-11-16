@@ -62,7 +62,8 @@ never to the root file by default: that is how one root file reached 128 KB in t
 An agent opens help only for a capability it knows exists. Three layers, each with one source:
 
 1. **That it exists and what it is for,** in capability words, always loaded: the description of its skill, and its row in
-   the always-on CLI index. Written by hand.
+   the always-on CLI index, `rules/clis.md`. Written by hand; `scripts/cli-refs.ts` fails `make check` on a row whose CLI or
+   list command does not exist, on a CLI without a row, and on an injected command that fails.
 2. **Which verbs it has,** when the skill loads, live from the CLI: a line that starts with `!` and holds the list command in
    backticks, which Claude Code replaces with the command's output. End it with `|| echo "<cli> is not on this machine"`,
    because a failing command aborts the whole skill. Never a copied list.
