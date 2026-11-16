@@ -8,7 +8,7 @@ one-line gotchas live in `AGENTS.md`.
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent, wrapped in `jobrun` (below), and pushes **three** Uptime Kuma
 monitors. `MacMini Dev Host - Push` is the **liveness** monitor: it says the mini is reachable and its core is alive,
-never "healthy" and never "slow" (next section). The **twenty-one** components below (sshd moved to the liveness phase) grade the host's health and ride
+never "healthy" and never "slow" (next section). The **twenty-two** components below (sshd moved to the liveness phase) grade the host's health and ride
 a second push:
 
 | Component | Checks |
@@ -23,11 +23,12 @@ a second push:
 | kernel panics | newest `panic-*.panic` / `panic-*.ips` (`panic-full-…` and the watchdog form `panic-base+socd-…`) / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL. The message carries the panic headline (the `panicString` before its first newline, without the `panic(cpu N caller 0x…):` prefix), e.g. `kernel panic 0d ago: watchdog timeout: no checkins from watchdogd in 94 seconds (…) (autorestart recovered, report panic-full-….panic)`. The reboot push below is the alert |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
-| services | hermes gateway, colima (docker socket, supervised boot path, and a name resolving inside the default VM: `colima/vm-dns.sh check`), caddy, dnsmasq, postgres, the Kuma door (`:8795/healthz`) — each gated on its plist. agent-workflows (host + audio), brain-web and walkingpad are **not** probed here: Kuma pulls them through the door (`kuma-door/registry.json`), so a second probe would be a duplicate signal. The audio-vs-host version-mismatch comparison went with the probe on purpose: the door proves liveness only, and agent-workflows' own `make verify` covers release parity |
+| services | hermes gateway, colima (docker socket, supervised boot path, and a name resolving inside the default VM: `colima/vm-dns.sh check`), caddy, dnsmasq, postgres, the Kuma door (`:8795/healthz`) — each gated on its plist. agent-workflows (host, audio and the inference gateway), brain-web and walkingpad are **not** probed here: Kuma pulls them through the door (`kuma-door/registry.json`), so a second probe would be a duplicate signal. The audio-vs-host version-mismatch comparison went with the probe on purpose: the door proves liveness only, and agent-workflows' own `make verify` covers release parity |
 | claude auth | keychain credential, then the token fallback |
 | claude version | `claude --version` matches the last version `make claude-accounts-verify` verified — **WARN** when unverified |
 | AGENTS.md flag | the cached GrowthBook flag `tengu_agents_md_mod` in `~/.claude.json` is true (else Claude Code may not load AGENTS.md) — **WARN** |
 | obsidian | CLI answers (i.e. the app is running) |
+| research chrome | `GET 127.0.0.1:9222/json/version` (`curl -fs`, 2 s) answers — the headed Chrome (`com.jkrumm.research-chrome`, agent-workflows' `make research-chrome`) that `agw web fetch` falls back to for pages a plain client cannot read. **WARN**, never FAIL: without it the fetch chain loses its browser leg and degrades to the direct and Tavily legs, work goes on. Gated on its plist (a machine that never ran `make research-chrome` skips). Not on the Kuma door on purpose: a door monitor goes DOWN and pages. Probe it by `launchctl bootout gui/$UID/com.jkrumm.research-chrome` (WARN on the next run) and `make research-chrome` in agent-workflows (back to up) |
 | external volume | `scripts/external-volume-check.sh`: no output while `config/external-volume.json` says `attached: false`; once attached, WARN (never a FAIL) when the volume is absent, locked or its sentinel unreadable. `docs/external-ssd.md` |
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
@@ -60,7 +61,7 @@ now means *the mini is unreachable or its core is dead*. The run is ordered:
    merely **timed out** is "slow, not proven dead": it stays `up` as WARN text until `DEVHOST_LIVENESS_TIMEOUT_STREAK` (6)
    timeouts in a row. Measured by the test suite: the liveness push lands about 1 s after the start while a component
    hangs for 6 s.
-3. **Side monitors**, then the **slow components** (the twenty-one), unchanged and still bounded and budgeted.
+3. **Side monitors**, then the **slow components** (the twenty-two), unchanged and still bounded and budgeted.
 4. **The detail push.** The main monitor gets a second `up` with the full summary: a component FAIL is WARN text there and
    never turns it DOWN, and a liveness DOWN is never overwritten. The component verdict goes to the optional **detail
    monitor** (`MacMini Dev Host Detail - Push`, URL file `~/.config/uptime-kuma/devhost-detail-push-url`, opt-in like collie:
@@ -211,7 +212,10 @@ dotfiles-private). The door is GET-only and relays only the loopback URLs listed
 in `kuma-door/registry.json` as `GET /h/<name>` — status code through, body capped
 at 4 KiB, no part of the request forwarded — so the grant exposes health answers,
 not the services. Kuma's monitors are generated from the same registry
-(`make kuma-door-gen`), so a service is added in one place. The door's own
+(`make kuma-door-gen`), so a service is added in one place. The agent-workflows
+inference gateway (`agw-gateway`, `:7794/health`) is one of them: it holds every provider key, so
+when it is down every `agw` model call, OpenCode and Hermes fail; the door passes its status code
+through, so a `503` (no credit pool eligible) reads in Kuma as a drained gateway. The door's own
 liveness (`/healthz`) is graded by the `services` component, so a dead door pages
 from the push side even though Kuma sees it as every service down at once.
 
