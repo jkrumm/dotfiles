@@ -411,7 +411,8 @@ export const DISPATCHED = Object.keys(verbs)
 if (import.meta.main) {
   const [verb, ...rest] = process.argv.slice(2)
   // Help never reaches a verb: it is answered before the dispatch, so no lease is written and no Chrome is started.
-  if (verb === undefined || verb === "help" || verb === "--help" || verb === "-h" || rest.some((a) => a === "--help" || a === "-h")) {
+  const known = verb !== undefined && Object.hasOwn(verbs, verb)
+  if (verb === undefined || verb === "help" || verb === "--help" || verb === "-h" || (known && rest.some((a) => a === "--help" || a === "-h"))) {
     process.stdout.write(HELP)
     process.exit(0)
   }
