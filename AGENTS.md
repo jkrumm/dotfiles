@@ -345,9 +345,9 @@ never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/ho
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
 `scripts/devhost-health-check.sh` (`jobrun --timeout 270`) pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **21 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
+`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **22 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
 core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
-services (6), claude auth, claude version, AGENTS.md flag, obsidian, disk, external volume (WARN-only, silent until `config/external-volume.json` says attached), runaways,
+services (6), claude auth, claude version, AGENTS.md flag, obsidian, research chrome (WARN-only, gated on its plist), disk, external volume (WARN-only, silent until `config/external-volume.json` says attached), runaways,
 jobs (WARN-only, `jobs-grade`), registry (`mini-registry.ts check`: FAIL on an unregistered loaded job or a worktree program, WARN on a budget breach), spotlight (FAIL when Spotlight indexing is on again on any volume; `docs/spotlight.md`), quota (in every msg; WARN never pages). The composite and
 the jobs push (no ACL grant runs `tag:homelab → tag:mac`); service health is pulled
 through the Kuma door (below). Every watcher in one table: `docs/architecture.md` §Watchers.

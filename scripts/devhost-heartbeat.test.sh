@@ -36,6 +36,8 @@ case "\$*" in *api/push/*) ;; *7793*)
   # STUB_FACTORY_ROUTES: extra heartbeat fields, e.g. ',"routeP95Ms":3000,"routeSamples":25'.
   echo "{\"heartbeat\":{\"ok\":true,\"tickAt\":\"t\",\"queueMovedAt\":\"q\"\${STUB_FACTORY_ROUTES:-}}}"; exit 0 ;; esac
 case "\$*" in *--unix-socket*_ping*) echo OK; exit 0 ;; esac
+# STUB_CHROME_DOWN=1: the research Chrome's DevTools port refuses (curl -f / connection refused).
+[ "\${STUB_CHROME_DOWN:-0}" = 1 ] && case "\$*" in *:9222/*) exit 7 ;; esac
 [ "\${STUB_CURL_FAIL:-0}" = 1 ] && exit 22
 # STUB_CURL_TIMEOUT=once: the first push call times out (rc 28), later ones answer; =always: every push call does.
 case "\$*" in *api/push/*)
@@ -504,6 +506,21 @@ detail=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "a seeded stale resolver fails the probe" "no name resolves inside the 'default' VM" "$detail"
 assert_contains "the failure names the resolver in the file" "names '192.168.5.1'" "$detail"
 assert_contains "the failure names the gateway" "default gateway is '192.168.5.2'" "$detail"
+
+echo "check_research_chrome: skipped without its plist, up when DevTools answers, WARN (never DOWN) when it does not"
+: > "$TMP/research-chrome.plist"
+run_script DEVHOST_COMPONENTS="check_research_chrome" RESEARCH_CHROME_PLIST="$TMP/none-chrome.plist" STUB_CHROME_DOWN=1
+detail=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
+assert_contains "no plist: skipped, up" "status=up" "$detail"
+assert_contains "no plist: says so" "research chrome not installed" "$detail"
+run_script DEVHOST_COMPONENTS="check_research_chrome" RESEARCH_CHROME_PLIST="$TMP/research-chrome.plist"
+detail=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
+assert_contains "DevTools answers: up" "status=up" "$detail"
+assert_contains "DevTools answers: named up" "research chrome up" "$detail"
+run_script DEVHOST_COMPONENTS="check_research_chrome" RESEARCH_CHROME_PLIST="$TMP/research-chrome.plist" STUB_CHROME_DOWN=1
+detail=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
+assert_contains "DevTools refuses: still up, not DOWN" "status=up" "$detail"
+assert_contains "DevTools refuses: WARN names the browser leg" "WARN: research chrome not answering" "$detail"
 
 echo "the default component list only names functions the script or its libs define"
 list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')

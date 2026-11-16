@@ -147,6 +147,8 @@ CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 KUMA_DOOR_URL="${KUMA_DOOR_URL:-http://127.0.0.1:8795}"
+RESEARCH_CHROME_URL="${RESEARCH_CHROME_URL:-http://127.0.0.1:9222}"
+RESEARCH_CHROME_PLIST="${RESEARCH_CHROME_PLIST:-$HOME/Library/LaunchAgents/com.jkrumm.research-chrome.plist}"
 
 # Thresholds, every one overridable so a check can be driven to its failing
 # side on a healthy machine — otherwise the only way to test the alarm is to
@@ -973,7 +975,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/launchd-restarts.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/swapout-rate.sh"
 
 # name|gate path whose absence means "not installed here"|probe function
-# agent-workflows (host + audio), brain-web and walkingpad are NOT here: Kuma pulls their health
+# agent-workflows (host + audio + gateway), brain-web and walkingpad are NOT here: Kuma pulls their health
 # through the Kuma door (kuma-door/registry.json), so probing them again would be a second,
 # louder copy of the same signal. Only door liveness (probe_kuma_door) and what the door does
 # not cover are probed.
@@ -1223,6 +1225,19 @@ check_obsidian() {
   version=$("$OBSIDIAN_BIN" version 2>/dev/null) || \
     { echo "obsidian cli failing — app not running, or the $OBSIDIAN_BIN symlink is stale; /brain and Hermes cannot reach the vault (fix: open -a Obsidian, then make obsidian-autostart)"; return 1; }
   echo "obsidian cli ok (${version%% *})"
+}
+
+check_research_chrome() {
+  # The headed Chrome `agw web fetch` falls back to for pages a plain client cannot read
+  # (com.jkrumm.research-chrome, agent-workflows' `make research-chrome`; DevTools on loopback :9222).
+  # WARN, never FAIL: without it the fetch chain loses its browser leg and degrades to the other legs
+  # (direct, Tavily Extract); work goes on. Kept off the Kuma door on purpose — a door monitor goes DOWN
+  # and pages, and a missing browser leg is not worth a page. Gated on the plist, so a machine that
+  # never ran `make research-chrome` says nothing.
+  [[ -f "$RESEARCH_CHROME_PLIST" ]] || { echo "research chrome not installed (skipped)"; return 0; }
+  "$CURL_BIN" -fs --max-time 2 -o /dev/null "$RESEARCH_CHROME_URL/json/version" 2>/dev/null \
+    || { echo "research chrome not answering on $RESEARCH_CHROME_URL — agw web fetch lost its browser leg (fix: make research-chrome in agent-workflows)"; return 2; }
+  echo "research chrome up"
 }
 
 check_disk() {
@@ -1593,7 +1608,7 @@ failure=""
 # and budget paths can be driven hermetically (scripts/devhost-heartbeat.test.sh).
 components="${DEVHOST_COMPONENTS:-check_tailscale check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
-                 check_obsidian check_disk check_external_volume check_runaways \
+                 check_obsidian check_research_chrome check_disk check_external_volume check_runaways \
                  check_jobs check_registry check_spotlight check_quota}"
 # Word-splitting is the point: $components is a list of function names.
 # shellcheck disable=SC2086
