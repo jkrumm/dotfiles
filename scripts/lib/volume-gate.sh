@@ -10,8 +10,11 @@
 # it is never written into a tracked file. This file reads only; it formats, erases or converts nothing.
 #
 # CLI (what a LaunchAgent job calls):
-#   volume-gate.sh run -- <cmd...>   run <cmd> with $VOLUME_ROOT set, or skip as above. A command that fails
-#                                    because the volume left mid-run is also a skip (exit 0), any other rc passes through
+#   volume-gate.sh run [--skip-rc N] -- <cmd...>
+#                                    run <cmd> with $VOLUME_ROOT set, or skip as above. A command that fails
+#                                    because the volume left mid-run is also a skip (exit 0), any other rc passes through.
+#                                    --skip-rc N: a skip exits N instead of 0, for a job that is retried and must not grade
+#                                    green when nothing ran (docs/storage.md §EXT mirror)
 #   volume-gate.sh state             print the state word (unattached|absent|locked|unreadable|present), exit 0
 #   volume-gate.sh root              print the mount point and exit 0 when present; exit 1, print nothing otherwise
 # Sourced: volume_gate_state sets VG_STATE (and VG_ROOT when mounted); volume_gate_skip_line prints the skip line.
@@ -21,8 +24,12 @@
 VG_DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 VG_CONFIG="${VOLUME_GATE_CONFIG:-$VG_DOTFILES_DIR/config/external-volume.json}"
 VG_DISKUTIL="${VOLUME_GATE_DISKUTIL:-/usr/sbin/diskutil}"
-# A sentinel read blocks (it does not fail) while a TCC Removable Volumes prompt waits on a screen nobody watches.
+# A sentinel read blocks (it does not fail) while a TCC Removable Volumes prompt waits on a screen nobody watches, and it
+# stalls on a host under heavy load or swap (2026-11-16: 38 samples in a row at load 5 to 29). A read that times out is
+# tried VG_READ_ATTEMPTS times in all, so one slow read is not "unreadable"; a read that fails at once is not retried.
 VG_READ_TIMEOUT="${VOLUME_GATE_READ_TIMEOUT:-5}"
+VG_READ_ATTEMPTS="${VOLUME_GATE_READ_ATTEMPTS:-3}"
+VG_DETAIL=""   # why the state is unreadable, for the one WARN line (load, the stalled reader's state)
 
 VG_STATE=""
 VG_ROOT=""
@@ -63,37 +70,67 @@ volume_gate_state() {
   [ "$VG_STATE" = mounted ] || return 0
   local sentinel; sentinel=$(vg_cfg sentinel)
   [ -n "$sentinel" ] || { VG_STATE=unreadable; return 0; }
-  local file="$VG_ROOT/$sentinel" pid waited=0 max=$((VG_READ_TIMEOUT * 10))
+  local file="$VG_ROOT/$sentinel" attempt=1
+  VG_DETAIL=""
+  while :; do
+    vg_read_once "$file"
+    case "$?" in
+      0) VG_STATE=present; return 0 ;;
+      1)  # the read failed: a volume that left between the probe and the read is absent; a mounted one without the file is not ours
+        if [ -d "$VG_ROOT" ]; then VG_STATE=unreadable; else VG_STATE=absent; fi
+        return 0 ;;
+    esac
+    # Frozen (rc 2): a pending Removable Volumes prompt, a hung USB device, or a host too busy to answer in time.
+    if [ "$attempt" -ge "$VG_READ_ATTEMPTS" ]; then
+      VG_STATE=unreadable
+      VG_DETAIL="the read stalled ${attempt} x ${VG_READ_TIMEOUT}s${VG_STALL_INFO:+ ($VG_STALL_INFO)}"
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+}
+
+# vg_read_once <file>: 0 read, 1 the read failed, 2 no answer within VG_READ_TIMEOUT. Sets VG_STALL_INFO on a stall:
+# the 1-minute load and the reader's process state (U = uninterruptible I/O wait), the two facts that tell a busy host from a
+# prompt nobody answers. The stalled reader is killed and not waited for: in uninterruptible I/O wait it ignores the kill, and
+# a `wait` on it would hang this gate with it.
+vg_read_once() {
+  local file="$1" pid waited=0 max=$((VG_READ_TIMEOUT * 10))
+  VG_STALL_INFO=""
   ( exec cat "$file" >/dev/null 2>&1 ) &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$max" ]; then
-      kill -KILL "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
-      VG_STATE=unreadable; return 0   # frozen: a pending Removable Volumes prompt, or a hung USB device
+      VG_STALL_INFO="load $(/usr/sbin/sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}'), reader state $(ps -o state= -p "$pid" 2>/dev/null | tr -d ' ')"
+      kill -KILL "$pid" 2>/dev/null
+      return 2
     fi
     sleep 0.1; waited=$((waited + 1))
   done
-  if wait "$pid"; then VG_STATE=present; return 0; fi
-  # The read failed: a volume that left between the probe and the read is absent; a mounted one without the file is not ours.
-  if [ -d "$VG_ROOT" ]; then VG_STATE=unreadable; else VG_STATE=absent; fi
+  wait "$pid" && return 0
+  return 1
 }
 
 volume_gate_skip_line() {
   case "$VG_STATE" in
     unattached) echo "skipped: volume not attached" ;;
-    *) echo "skipped: volume $VG_STATE" ;;
+    *) echo "skipped: volume $VG_STATE${VG_DETAIL:+ ($VG_DETAIL)}" ;;
   esac
 }
 
 volume_gate_run() {
+  local skip_rc=0
+  if [ "${1:-}" = "--skip-rc" ]; then skip_rc="${2:-}"; shift 2; fi
+  case "$skip_rc" in ''|*[!0-9]*) echo "usage: volume-gate.sh run [--skip-rc N] -- <cmd...>" >&2; return 2 ;; esac
   volume_gate_state
-  if [ "$VG_STATE" != present ]; then volume_gate_skip_line; return 0; fi
+  if [ "$VG_STATE" != present ]; then volume_gate_skip_line; return "$skip_rc"; fi
   local root="$VG_ROOT" rc=0
   VOLUME_ROOT="$root" "$@" || rc=$?
   [ "$rc" -ne 0 ] || return 0
   # The command failed. If the volume is gone now, the volume failed it, not the job.
   volume_gate_state
-  if [ "$VG_STATE" != present ]; then echo "skipped: volume vanished during run"; return 0; fi
+  if [ "$VG_STATE" != present ]; then echo "skipped: volume vanished during run"; return "$skip_rc"; fi
   return "$rc"
 }
 
@@ -101,9 +138,11 @@ volume_gate_main() {
   case "${1:-}" in
     run)
       shift
+      local skip=()
+      if [ "${1:-}" = "--skip-rc" ]; then skip=("$1" "${2:-}"); shift; [ "$#" -eq 0 ] || shift; fi
       [ "${1:-}" != "--" ] || shift
-      [ "$#" -gt 0 ] || { echo "usage: volume-gate.sh run -- <cmd...>" >&2; return 2; }
-      volume_gate_run "$@" ;;
+      [ "$#" -gt 0 ] || { echo "usage: volume-gate.sh run [--skip-rc N] -- <cmd...>" >&2; return 2; }
+      volume_gate_run ${skip[@]+"${skip[@]}"} "$@" ;;
     state) volume_gate_state; echo "$VG_STATE" ;;
     root) volume_gate_state; [ "$VG_STATE" = present ] || return 1; echo "$VG_ROOT" ;;
     *) echo "usage: volume-gate.sh run -- <cmd...> | state | root" >&2; return 2 ;;

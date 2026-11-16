@@ -73,7 +73,7 @@ or not attached: silent exit. Locked: `secrets-run read <passphraseRef>` piped i
 ## Check
 
 `scripts/external-volume-check.sh`, shown by `make doctor` and `make external-volume-check` (the mini only: the drive is its own) and carried by the heartbeat as a component:
-**no output** while `attached: false`; present = OK; absent, locked or unreadable = **WARN, never a failure and never a page**. It is not
+**no output** while `attached: false`; present = OK; absent, locked or unreadable = **WARN, never a failure and never a page**. The sentinel read is tried 3 times (5 s each, one second apart) before the volume counts as unreadable, and the WARN names the load and the stalled reader's state. It is not
 in the liveness push. `make doctor` shows it as a yellow dot.
 
 ## TCC
