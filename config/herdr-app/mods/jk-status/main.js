@@ -65,9 +65,11 @@ const STALE_S = 3 * 3600;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// Room each item takes at the bar's 11.8 px text, gap included, rounded up: a drop costs nothing, an overlap does.
-const ROOM = { local: 180, usage: 210, kuma: 90, logins: 130, remote: 140, branch: 120, palette: 100 };
-const BAR_PAD = 16;
+// Room each item takes at the bar's 11.8 px text, gap included, rounded up from the app as it draws them (measured
+// 2026-11-16 on the MacBook: MacBook chip 144, mini chip 135, quota with three accounts 236, branch 56, Kuma 60):
+// a drop costs nothing, an overlap does.
+const ROOM = { local: 170, usage: 270, kuma: 80, logins: 140, remote: 160, branch: 100, palette: 110 };
+const BAR_PAD = 24;
 
 // The items that fit `width`, in the order they matter (a missing width, before the first measurement, is everything).
 // `want` is the set of items that exist now; `remotes` how many machines are connected.
