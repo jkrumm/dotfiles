@@ -1,25 +1,100 @@
 ---
-description: How to write documents an agent reads — AGENTS.md, global CLAUDE.md, skills, rules, docs reached by a pointer. Pointer wording, disclosure, completion criteria, leading words, pruning.
-paths: ["**/AGENTS.md", "**/SKILL.md", "**/.claude/rules/**", "**/.claude/skills/**", "**/rules/*.md", "**/global.CLAUDE.md"]
+description: How to write what an agent reads — AGENTS.md, global CLAUDE.md, rules, skills, agent files, Issue facts. Where a fact goes, byte budgets, what a line must do, how a CLI is wired, format, pointer wording, how to prove a document.
+paths: ["**/AGENTS.md", "**/SKILL.md", "**/.claude/rules/**", "**/.claude/skills/**", "**/rules/*.md", "**/agents/*.md", "**/global.CLAUDE.md"]
 ---
 
 # Writing for Agents
 
-Applies to any document an agent consumes. Prose for humans is `brain/voice.md`; this is the agent-facing counterpart. Defaults, not laws: a document is judged by running it, not by debate.
+An agent acts on every line it loads, so a line costs twice: its tokens on every turn of every session and subagent, and the
+steps it causes. In the one controlled study, instruction files raised a task's cost by 20 % without raising success; in
+another, the share of answers that kept every rule fell from 9 in 10 at 10 rules to 1 in 4 at 40. The target is the smallest set of facts
+the agent cannot find out itself, loaded only by the work that needs them. Measurements and sources: `docs/writing-for-agents.md`
+in dotfiles. Prose for humans is `brain/voice.md`. A document is judged by running it, not by debate.
 
-- **A pointer's wording decides when the material is reached.** A skill description and an AGENTS.md line naming a doc are the same object. Sharpen the wording before inlining the target. List the distinct branches that should trigger it, one trigger per branch (synonyms are one branch written twice), the leading word first, no identity the body already carries.
-- **Two loads.** Context load: always-loaded tokens, paid every turn. Cognitive load: what Johannes must remember exists. Reach-by-pointer escapes the first; a hand-fired skill with no pointer rides on the second. Spend each where it earns.
-- **Hierarchy: step, reference, disclosed reference.** Inline what every branch needs; push behind a pointer what only some branches reach. Keep a concept's definition, rules and caveats under one heading. A document too long is a failure even when every line is live: split by branch or sequence.
-- **Every step ends on a checkable, exhaustive criterion.** "Every modified model accounted for" beats "produce a change list". A vague bound invites premature completion: sharpen the bound first; hide later steps only across a real context boundary (hand-off, subagent), never inline.
-- **Leading words.** Reuse a word the model already holds (lesson, tracer bullet, red) and repeat it as a token, never as a sentence. A coined word recruits no priors and costs its definition. A triad spelled out at three sites is a word waiting to be named.
-- **State the positive target.** A ban names the thing it forbids. Write the behaviour wanted ("one-line comments"); keep a bare prohibition only for a hard guardrail, paired with its positive. Test it by running the document.
-- **Prune.** One source of truth per meaning. The environment (`package.json`, Makefile, `--help`, directory layout) is a source too: a document that restates it is a cache, worth its load only for what lookup cannot reveal (the convention, the reason, the gotcha). Delete a whole sentence that fails the no-op test (does it change behaviour against the default?). A weak word is a no-op: use a stronger one. Stale layers settle as sediment; removing is the discipline.
-- **Project psychosis.** State what this project obsesses over that a general model would not assume: stakes, who the users are and what they never see, the scar behind each rule. Define the parties ("you" the agent, "we" the humans, "users") and name recurring failures once, then use the name. Borrowed files do not transfer; the priorities are the content.
-- **Calibrate ambition.** Agents plan on pre-agent timelines. When the work is bold, one line says so.
+## Where a fact goes
+
+The first row that fits decides.
+
+| The fact | Goes to |
+|-|-|
+| Readable from the code, the Makefile, `--help` or the directory tree | nowhere |
+| A check a script can make | the script, lint rule or test; one line names it |
+| Every task in the repo needs it: validate, ship, verify, a requirement a general model would not assume, a time or cost warning | root `AGENTS.md` |
+| Only work in one directory needs it | that directory's `AGENTS.md` |
+| Only one kind of file needs it, in any repo | a rule with `paths:` |
+| A procedure with steps, or the judgment around a CLI | a skill |
+| Why something was decided, a feature's design, history | `docs/`, behind a pointer in the nearest loaded file |
+
+## Budgets
+
+Bytes from `wc -c`; four bytes are about one token.
+
+| Text | Budget | Loaded |
+|-|-|-|
+| Root `AGENTS.md`, global `CLAUDE.md` | 12,000 each | every turn, every subagent |
+| Always-on rule | 2,000 | every turn |
+| Skill description | 600 characters, the main use first | every turn |
+| Nested `AGENTS.md`, rule with `paths:`, skill body | 8,000, then split by branch | on reach |
+| Command output a skill injects | 4,000 | on skill load |
+
+A file at its budget takes a new line only by losing one. A lesson learned while working goes where the table above puts it,
+never to the root file by default: that is how one root file reached 128 KB in three weeks.
+
+## What a line must do
+
+- **Change behaviour against the default.** A sentence the agent would follow unprompted goes. So does an overview, a directory
+  listing and generic good practice: measured, they do not help.
+- **Name the behaviour wanted, with its reason in a clause.** "Run the layout suite in a test slot: it holds 500 MiB a worker."
+  The reason lets the agent decide the case you did not write. Plain words: `IMPORTANT`, `NEVER` and capitals make current
+  models apply a line where it does not belong. Keep a bare prohibition for a hard guardrail, paired with its positive.
+- **Be checkable.** The exact command and path. A step ends on an exhaustive criterion: "every modified model accounted for",
+  not "produce a change list".
+- **Keep time and cost warnings.** "The full suite takes 20 minutes" is the kind of line that measurably changed what agents did.
+- **Hold one meaning in one place.** A second copy goes stale; point at the first. Dates and Issue numbers belong to the
+  record in `docs/` or git, the rule stays without them.
+- **Order by weight.** What must hold comes first; rules early in a file are kept more often.
+- **Say what this project cares about** that a general model would not assume: the stakes, who the users are, the scar behind
+  a rule. Name a recurring failure once, then use the name.
+
+## A CLI
+
+An agent opens help only for a capability it knows exists. Three layers, each with one source:
+
+1. **That it exists and what it is for,** in capability words, always loaded: the description of its skill, and its row in
+   the always-on CLI index. Written by hand.
+2. **Which verbs it has,** when the skill loads, live from the CLI: a line that starts with `!` and holds the list command in
+   backticks, which Claude Code replaces with the command's output. End it with `|| echo "<cli> is not on this machine"`,
+   because a failing command aborts the whole skill. Never a copied list.
+3. **The flags of one verb,** from `--help` or the schema at the moment of use. Never copied.
+
+The skill's own text is what a listing cannot say: when to reach for a verb, the order of steps, a trap, an exit code to act on.
+
+## Format
+
+- **Full sentences.** Dropping articles and abbreviating raised cost where it was measured, and a clipped line is read two ways.
+- **A table for a lookup with two or more attributes per row,** a list otherwise. A table costs about 1.4 times the tokens of
+  the same text in lines.
+- **Reference rows as `name<TAB>summary` lines.** JSON and YAML cost two to three times as much for flat data.
+- **Three to five examples** when the shape of an output matters, in place of a paragraph describing it.
+- No emphasis for decoration: bold marks the term a row or bullet is about.
+
+## Pointers
+
+A pointer's wording decides whether the material is ever reached: a skill description and an `AGENTS.md` line naming a doc are
+the same object. Write one trigger per branch that should reach it, the leading word first, no praise and no identity the body
+carries. Sharpen the wording before inlining the target. Reuse a word the model already holds and repeat it as one token; a
+coined word costs its definition.
 
 ## Skills
 
-- **Model-invoked** skills carry a description that stays loaded: permanent context load for autonomous reach and reach from other skills. **User-invoked** (`disable-model-invocation: true`) cost no context and spend cognitive load: a one-line human summary replaces the trigger list.
-- A skill that only ever fires by hand is user-invoked. Johannes never types skill names himself, so here almost none qualifies: `disable-model-invocation` on a skill the agents need makes it unreachable. Split off a model-invoked skill only for a trigger word actually used in prompts, or because another skill must reach it.
-- Reference two skills share lives in a plain file both point at, not in either skill.
-- A pile of user-invoked skills too large to remember gets one router skill that names them and when to reach for each. It can hint, never fire.
+- A model-invoked skill pays its description on every turn; a user-invoked one (`disable-model-invocation: true`) pays nothing
+  and is unreachable for agents. Johannes never types skill names, so here almost every skill is model-invoked.
+- Reference two skills share lives in a plain file both point at.
+- A skill body over its budget splits into reference files one level down, each named in the body with when to read it.
+
+## Prove it
+
+1. `wc -c` before and after, in the commit message or ship note.
+2. Run the document on one real task of its kind and put back what the shorter text no longer carried.
+3. For text moved behind a pointer or into a nested file: show it is still reached. Put a unique marker in the moved text, start
+   a session, do work that should reach it, ask which markers are in context (`docs/agents-md.md` has the method).

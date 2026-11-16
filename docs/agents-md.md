@@ -21,6 +21,9 @@ AGENTS.md reading (root and nested alike). That includes `CLAUDE.local.md` —
 **never commit one**, and keep personal notes out of repo roots (`sc-note.md` is
 gitignored for that reason).
 
+What belongs in the root file, what goes to a nested one, and the byte budgets: `rules/writing-for-agents.md`; the
+measurements behind them: `docs/writing-for-agents.md`.
+
 Global: `~/.claude/CLAUDE.md` stays as is — Claude and OpenCode both load it.
 OpenCode gets the rules through `instructions` globs in its global config.
 
