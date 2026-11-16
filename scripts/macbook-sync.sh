@@ -39,8 +39,6 @@ if [ "${1:-}" = "--run" ]; then
   [[ "$old" =~ ^[0-9a-f]{40}$ && "$new" =~ ^[0-9a-f]{40}$ && $# -eq 3 ]] || die "bad range"
   [ -f "$TABLE" ] || die "no $TABLE"
 
-  # The glance copy needs `ssh mini` through the 1Password agent: a biometric prompt with nobody to answer it.
-  export HERDR_NO_MINI_GLANCE=1
   export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.bun/bin:$PATH"
 
   changed="$(git -C "$DOT" diff --name-only "$old" "$new")"
@@ -77,7 +75,6 @@ if [ "${1:-}" = "--run" ]; then
   done <"$TABLE"
 
   [ "$seen" != " " ] || printf '  no target for this range\n'
-  case "$seen" in *" herdr-app-setup "*) printf '  note: jk-glance is not refreshed here (needs ssh mini)\n' ;; esac
   exit "$rc"
 fi
 

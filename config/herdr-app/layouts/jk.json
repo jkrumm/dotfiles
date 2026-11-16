@@ -59,7 +59,7 @@
           "id": "glance",
           "type": "block",
           "size": {
-            "px": 56
+            "px": 388
           },
           "background": "chrome",
           "content": {

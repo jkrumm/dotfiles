@@ -41,7 +41,7 @@ cp "$REAL_SCRIPT" "$SEED/scripts/macbook-sync.sh"
 cp "$REAL_TABLE" "$SEED/config/macbook-sync.tsv"
 cat >"$SEED/Makefile" <<'MK'
 herdr-app-setup:
-	@echo "herdr-app-setup glance=$$HERDR_NO_MINI_GLANCE" >>"$$SYNC_TEST_RAN"
+	@echo "herdr-app-setup" >>"$$SYNC_TEST_RAN"
 other-target:
 	@echo "other-target" >>"$$SYNC_TEST_RAN"
 broken-target:
@@ -84,16 +84,15 @@ rm -f "$RAN"
 sync_run
 assert_eq "fast-forward: rc" "0" "$RC"
 assert_eq "fast-forward: HEAD is origin's" "$(git -C "$SEED" rev-parse HEAD)" "$(head_of)"
-assert_eq "target ran once, glance copy off" "herdr-app-setup glance=1" "$(ran)"
+assert_eq "target ran once" "herdr-app-setup" "$(ran)"
 assert_contains "output names the range and the target" "✓ herdr-app-setup" "$OUT"
-assert_contains "output says the glance copy is not refreshed" "jk-glance is not refreshed" "$OUT"
 
 echo "== two prefixes of one target run it once"
 origin_commit config/herdr-app/c
 origin_commit scripts/herdr-app-keys.sh
 rm -f "$RAN"
 sync_run
-assert_eq "one run for two matching prefixes" "herdr-app-setup glance=1" "$(ran)"
+assert_eq "one run for two matching prefixes" "herdr-app-setup" "$(ran)"
 
 echo "== a range that touches no target"
 origin_commit docs/b
