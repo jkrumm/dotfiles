@@ -561,9 +561,19 @@ CLI resolves the owner's. `HUMAN_QUEUE_ERRANDS=0` = queue file only (tests set i
 `jq` is required for the factory path. The live list for the owner is the factory
 Console (Needs you, "Back at desk"); `make human-queue` drains only the fallback.
 
+**`--need secret|hands|place`** says why a person is needed and goes to the factory as
+`--need`. A request with no `--cmd` must carry it (`ask` refuses without it while the
+factory path is on): the factory reads the shape of a `--cmd` itself, but refuses a
+text-only request whose words name no secret and no physical step. `secret` = a 1Password
+or biometric step, `hands` = a device, portal or click, `place` = a command on the
+MacBook. When the factory refuses a request with "Nothing was raised" (it runs wholly on
+the mini or over keyless ssh, a bot check on a page, an ask the owner turned back in the
+last 3 days), `ask` prints the factory's reason, exits 1 and queues nothing; a queued
+request the factory refuses on replay is written off as denied.
+
 | Side | Command | Runs on |
 |-|-|-|
-| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--key <key>] [--expires <dur\|never>] [--check <sh>] [--wait <seconds>] [--no-push]` | mini |
+| Enqueue | `ask-human.sh ask "<text>" [--cmd <command> \| --need secret\|hands\|place] [--key <key>] [--expires <dur\|never>] [--check <sh>] [--wait <seconds>] [--no-push]` | mini |
 | A producer's success path: resolve everything pending under its key | `ask-human.sh clear <key> [--as done\|superseded] [--note <text>]` | mini |
 | Write off expired requests and delete answered ones older than 14 days (`HUMAN_QUEUE_PRUNE_DAYS`); also run quietly by ask/list/status | `ask-human.sh reap` | mini |
 | Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |
