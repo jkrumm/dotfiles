@@ -149,6 +149,8 @@ printf '%s\n' '# comment' '' \
   "both-streams	echo out; echo err >&2" \
   "fails	echo bad; exit 3" \
   "big	head -c 100000 /dev/zero | tr '\\0' x" \
+  "no-newline	printf x" \
+  "silent	true" \
   "slow	sleep 30" \
   "home-tilde	echo ~/x" \
   >"$H/SourceRoot/dotfiles/config/macbook-reports.tsv"
@@ -168,10 +170,13 @@ err
 [exit 0]" "$OUT"
 run_gate_out "report fails";        assert_eq "report: exit 0 whatever the command exited with" "0" "$RC"; assert_eq "report: the command's own exit is the last line" "bad
 [exit 3]" "$OUT"
+run_gate_out "report no-newline";  assert_eq "report: [exit N] starts its own line" "x
+[exit 0]" "$OUT"
+run_gate_out "report silent";      assert_eq "report: no output, just the exit line" "[exit 0]" "$OUT"
 run_gate_out "report home-tilde";   assert_eq "report: ~ is the gate's home" "$H/x
 [exit 0]" "$OUT"
 run_gate_out "report big"
-assert_eq "report: output cut to 64 KB, the exit line still follows" "65544" "${#OUT}"
+assert_eq "report: output cut to 64 KB, the exit line still follows" "65545" "${#OUT}"
 SECS0=$SECONDS
 run_gate_out "report slow" IUMAC_GATE_REPORT_TIMEOUT=1
 assert_eq "report: a slow command still exits 0" "0" "$RC"

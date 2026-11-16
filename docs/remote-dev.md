@@ -939,7 +939,7 @@ pointed at a read-only token, and only the dry-run saw it.
 - **`ssh iumac` carries no SSH identity, by design.** The MacBook-side shell
   does not export the 1Password agent for incoming ssh sessions, and the key
   runs fixed verbs only, so nothing there reads `git@github.com:` remotes. Git
-  pulls on the MacBook go through `ask-human.sh ask '…' --cmd 'git -C … pull'`
+  pulls of a checkout under `~/SourceRoot` run over https as `ssh iumac repo-pull <name>` (dotfiles: `dotfiles-sync`); any other git command goes through `ask-human.sh ask '…' --cmd '…'`
   (the human approves, the command runs in their own session with their agent).
   `ssh-agent.zsh` (loaded from `~/.zshenv`) is gated on the `op` backend, not on
   the socket's existence, because the same socket path exists on the mini, where
@@ -975,7 +975,7 @@ Facts to hold:
   (`~/.local/share/herdr-core/active/`, official installer); on the mini `com.jkrumm.herdr-core` is only a one-shot
   starter, the MacBook's Herdr app starts its own. No wrapper at `~/.local/bin`, no Homebrew core: `docs/herdr-core.md`
   §How the core runs now.
-- **`ssh iumac` runs fixed verbs only** (forced-command gate `scripts/iumac-gate.sh`; list in `docs/remote-dev.md` §mini → iumac) and carries no SSH identity. A dotfiles pull and its link targets: `ssh iumac dotfiles-sync` (ff-only, `config/macbook-sync.tsv`). File pulls: `rsync … iumac:<path>`; anything else MacBook-side: `ask-human.sh ask … --cmd`. Installers that write to the MacBook run from its own terminal.
+- **`ssh iumac` runs fixed verbs only** (forced-command gate `scripts/iumac-gate.sh`; list in `docs/remote-dev.md` §mini → iumac) and carries no SSH identity. A dotfiles pull and its link targets: `ssh iumac dotfiles-sync` (ff-only, `config/macbook-sync.tsv`). Another checkout: `ssh iumac repo-pull <name>`; a read-only fact: `ssh iumac report <name>` (`config/macbook-reports.tsv`). File pulls: `rsync … iumac:<path>`; anything else MacBook-side: `ask-human.sh ask … --cmd`. Installers that write to the MacBook run from its own terminal.
 - **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
   keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
   billing, and still looks healthy in `claude agents`. `rd work` spawns *through* the launchd core (a GUI-session
@@ -991,7 +991,7 @@ Facts to hold:
 ### human-queue
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a *present human* (biometric `op`, the ACL
-push, a person-only call) is enqueued on the mini with `ask-human ask "…" [--cmd …]` (pushes to the MacBook by default;
+push, a person-only call) is enqueued on the mini with `ask-human ask "…" [--cmd … | --need secret|hands|place]` (pushes to the MacBook by default;
 `--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only); `make human-queue` **walks** each one on the MacBook
 (r/already-done/deny/skip; `-run`, `-resolve`, `-deny ID=` one-shot; no TTY → a list). The mini only *proposes* a string;
 `run` needs a typed `yes` on a real TTY, and a push shows the exact string in a native dialog that executes only on a click.
