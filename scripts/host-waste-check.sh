@@ -6,6 +6,8 @@
 #   host-waste-check.sh mediaanalysisd  Photos analysis stays disabled and stopped (docs/host-waste.md §mediaanalysisd)
 #   host-waste-check.sh sshd-sessions   sshd-session processes (two per login); a pile means peers that never closed
 #   host-waste-check.sh fix-mediaanalysisd   disable the agent (no sudo; `make photos-analysis-off`)
+#   host-waste-check.sh stop-mediaanalysisd   SIGSTOP the running daemon (the `com.jkrumm.photos-analysis-stop` job, every 5 minutes)
+#   host-waste-check.sh cpu [SECS]     the host-service daemons' CPU over SECS (default 300) as cores, the table `make host-cpu` prints
 #
 # Exit 0 = fine, 2 = WARN (the line says what and how to fix). Nothing here fails: `make doctor` shows a WARN and stays green.
 #
@@ -16,6 +18,8 @@ set -uo pipefail
 PS_BIN="${PS_BIN:-/bin/ps}"
 LAUNCHCTL_BIN="${LAUNCHCTL_BIN:-/bin/launchctl}"
 TAILSCALE_BIN="${TAILSCALE_BIN:-tailscale}"
+TOP_BIN="${TOP_BIN:-/usr/bin/top}"
+KILL_BIN="${KILL_BIN:-/bin/kill}"
 ORPHAN_SLEEP_MAX="${ORPHAN_SLEEP_MAX:-10}"
 TAILSCALED_CPU_MAX="${TAILSCALED_CPU_MAX:-40}"   # percent of one core over the window
 TAILSCALED_WINDOW="${TAILSCALED_WINDOW:-10}"
@@ -68,14 +72,15 @@ check_mediaanalysisd() {
   # Captured, then matched: `grep -q` closing a pipe early makes the producer die of SIGPIPE, which pipefail turns into a miss.
   local states procs
   states=$("$LAUNCHCTL_BIN" print-disabled "gui/$uid" 2>/dev/null)
-  procs=$("$PS_BIN" -Ao comm=)
+  # A process in state T (SIGSTOPped by stop-mediaanalysisd) costs nothing and counts as stopped.
+  procs=$("$PS_BIN" -Ao stat=,comm= | grep -v '^T')
   grep -q "\"$AGENT\" => \(disabled\|true\)" <<<"$states" && disabled=1
   grep -q '/mediaanalysisd$' <<<"$procs" && running=1
   if [ "$disabled" -eq 1 ] && [ "$running" -eq 0 ]; then echo "$AGENT disabled and stopped"; return 0; fi
   if [ "$disabled" -eq 0 ]; then
     echo "$AGENT is enabled (Photos analysis burns about half a core on a library this size; fix: make photos-analysis-off)"
   else
-    echo "$AGENT is disabled but still running (launchd keeps the loaded agent until the next restart, make planned-restart; kill the pid meanwhile, docs/host-waste.md §mediaanalysisd)"
+    echo "$AGENT is disabled but still running (launchd keeps the loaded agent until the next restart, make planned-restart; the 5-minute com.jkrumm.photos-analysis-stop job SIGSTOPs it, so this line clears within minutes; if it does not, make photos-analysis-off, docs/host-waste.md §mediaanalysisd)"
   fi
   return 2
 }
@@ -97,11 +102,49 @@ fix_mediaanalysisd() {
   echo "$AGENT disabled (undo: launchctl enable gui/$(id -u)/$AGENT)"
 }
 
+# CPU seconds per pid from the accumulated cputime column, so a bursty daemon is read over the whole window. A pid that is new in
+# the second snapshot counts in full (it was born inside the window: mediaanalysisd respawns); one that exited in between is missed.
+cpu_snap() {
+  # ps does not list pid 0; top reads kernel_task's accumulated TIME (hh:mm:ss, one-second resolution: use windows of a minute or more)
+  "$TOP_BIN" -l 1 -pid 0 -stats pid,time 2>/dev/null | awk '$1 == 0 { n = split($2, a, ":"); if (n == 3) print 0, a[1] * 3600 + a[2] * 60 + a[3], "kernel_task" }'
+  "$PS_BIN" -Ao pid=,cputime=,comm= | awk '{
+    n = split($2, a, /[-:.]/); s = 0
+    if (n == 3) s = a[1] * 60 + a[2] + a[3] / 100
+    else if (n == 4) s = a[1] * 3600 + a[2] * 60 + a[3] + a[4] / 100
+    else if (n == 5) s = a[1] * 86400 + a[2] * 3600 + a[3] * 60 + a[4] + a[5] / 100
+    m = $3; for (i = 4; i <= NF; i++) m = m " " $i; sub(/.*\//, "", m); print $1, s, m }'
+}
+
+# The daemons issue 1744 named: Photos analysis, Spotlight, XProtect and Gatekeeper, the VPN, the copy job, the kernel.
+cmd_cpu() {
+  local w="${1:-300}" a b
+  a=$(mktemp); b=$(mktemp); trap 'rm -f "$a" "$b"' RETURN
+  cpu_snap > "$a"; "$SLEEP_BIN" "$w"; cpu_snap > "$b"
+  awk -v W="$w" 'NR == FNR { t[$1] = $2; next }
+    { d = ($1 in t) ? $2 - t[$1] : $2; if (d < 0) d = 0; g[$3] += d }
+    END { for (k in g) if (k ~ /^(kernel_task|mediaanalysisd|corespotlightd|managedcorespotlightd|mds|mds_stores|mdworker_shared|fseventsd|XprotectService|syspolicyd|tailscaled|rclone)$/) { printf "%5.2f cores  %s\n", g[k] / W, k; sum += g[k] } printf "%5.2f cores  total\n", sum / W }' "$a" "$b" | sort -rn
+  echo "window ${w}s, load: $(uptime | sed 's/.*load averages*: //')"
+}
+
+# The disable above takes effect at the next login and SIP refuses to unload the loaded agent, so the running daemon stays: killed,
+# it respawns within 2-12 minutes and starts over; SIGSTOPped, it stays alive, so launchd has nothing to restart and it costs 0 CPU
+# until the restart ends it. Its XPC callers (photoanalysisd, Photos) just wait; nothing on the host reads the analysis.
+stop_mediaanalysisd() {
+  local pids stopped=0 pid
+  pids=$("$PS_BIN" -Ao pid=,stat=,comm= | awk '$2 !~ /^T/ && $3 ~ /\/mediaanalysisd$/ { print $1 }')
+  for pid in $pids; do
+    "$KILL_BIN" -STOP "$pid" 2>/dev/null && stopped=$((stopped + 1))
+  done
+  echo "mediaanalysisd: stopped $stopped process(es) (resume: kill -CONT <pid>; the next restart ends it)"
+}
+
 case "${1:-}" in
+  stop-mediaanalysisd) stop_mediaanalysisd ;;
+  cpu)cmd_cpu "${2:-300}" ;;
   orphan-sleeps) check_orphan_sleeps ;;
   tailscaled) check_tailscaled ;;
   mediaanalysisd) check_mediaanalysisd ;;
   sshd-sessions) check_sshd_sessions ;;
   fix-mediaanalysisd) fix_mediaanalysisd ;;
-  *) echo "usage: host-waste-check.sh orphan-sleeps|tailscaled|mediaanalysisd|sshd-sessions|fix-mediaanalysisd" >&2; exit 64 ;;
+  *) echo "usage: host-waste-check.sh orphan-sleeps|tailscaled|mediaanalysisd|sshd-sessions|fix-mediaanalysisd|cpu [SECS]" >&2; exit 64 ;;
 esac

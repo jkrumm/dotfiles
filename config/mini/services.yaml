@@ -70,6 +70,7 @@ services:
   - { name: linewatch-watchdog, repo: linewatch, kind: launchd, tier: core, label: com.jkrumm.linewatch-watchdog, memory_mib: 50 }
   - { name: lock-at-boot, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.lock-at-boot, memory_mib: 50 }
   - { name: log-rotate, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.log-rotate, memory_mib: 50 }
+  - { name: photos-analysis-stop, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.photos-analysis-stop, memory_mib: 50, note: "every 5 min; SIGSTOP on a running mediaanalysisd, which the launchctl disable only ends at the next login" }
   - { name: mini-apps, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.mini-apps, process_type: interactive, memory_mib: 100, note: "the apps page control endpoint on 127.0.0.1:7797 behind the wildcard tailnet door; core because a wake and a Start button wait on it" }
   - { name: mini-apps-idle, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.mini-apps-idle, memory_mib: 50, note: "120 s: stops an on-demand dev server whose door had no request for its idle window" }
   - { name: modelpick-refresh, repo: modelpick, kind: launchd, tier: core, label: com.jkrumm.modelpick-refresh, memory_mib: 50 }
