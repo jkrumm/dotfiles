@@ -173,5 +173,5 @@ Burn-in 2026-11-10: 116 blocked-`sleep` errors in 113 of 308 lead sessions.
   A root AGENTS.md holds what every task in the repo needs, at most 12,000 bytes; where a lesson or any other fact goes
   instead: `rules/writing-for-agents.md`.
 - **Rules:** `~/.claude/rules/` ← `dotfiles/rules/`. Always on: attribution,
-  code-style, formatting, research-first, security. Lazy (`paths:`): the rest.
+  clis, code-style, formatting, research-first, security. Lazy (`paths:`): the rest.
 - **Output style:** `output-styles/Direct.md` — tone only; does not reach subagents.
