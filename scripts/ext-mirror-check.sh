@@ -3,7 +3,7 @@ set -u
 # ext-mirror-check — the heartbeat's "ext mirror" component: every share of the EXT mirror has synced clean within 36 h
 # (docs/storage.md §EXT mirror). Reads ONLY the local stamps scripts/ext-mirror.py writes outside the volume
 # (~/.local/state/ext-mirror/last-ok.json), so a volume that cannot be read still has an age, and it never touches the volume.
-#   attached=false (config/external-volume.json), or not the dev host -> prints nothing, exit 0
+#   attached=false (config/external-volume.json; only the mini sets it) -> prints nothing, exit 0
 #   every source stamped within the limit                              -> one "ext mirror ok" line, exit 0
 #   a source with no stamp, or one older than the limit                -> one FAIL line naming it, exit 1
 # FAIL, not WARN: the heartbeat's detail monitor goes DOWN on it and the factory door files it with a lead, which is the alert

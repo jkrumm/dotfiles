@@ -59,7 +59,7 @@ SSD/                      HDD/                       EXT/
 | Job | From → to | When | Proof it ran |
 |-|-|-|-|
 | restic (`homelab` repo, `docs/backups.md`) | SSD share, `HDD/fuji/RAWs`, `HDD/backups`, service state → B2 | daily 03:30 | Uptime Kuma push monitor, 25 h |
-| EXT mirror (`com.jkrumm.ext-mirror`, dotfiles; §EXT mirror) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror/{ssd,fuji,videos}` | nightly 05:00, pulled by the mini over S3 (`hl`), behind the volume gate | `jobrun` grade and `EXT/mirror/.status.json` |
+| EXT mirror (`com.jkrumm.ext-mirror`, dotfiles; §EXT mirror) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror/{ssd,fuji,videos}` | nightly 05:00 and hourly to 22:00 while skipped or red, pulled by the mini over S3 (`hl`), behind the volume gate | `jobrun` grade and `EXT/mirror/.status.json` |
 | iCloud Photos export (`com.jkrumm.icloud-photos-export`, dotfiles) | the mini's Photos library → `SSD/Bilder/iCloud/<year>/<month>/` | nightly 01:30, over S3 (`hl`) | `jobrun` grade, `Bilder/iCloud/.status.json` |
 | Shutterflow sync (its own app) | finals on the MacBook → B2 | on demand | the app's pipeline view |
 
