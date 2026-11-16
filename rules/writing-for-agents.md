@@ -55,6 +55,7 @@ never to the root file by default: that is how one root file reached 128 KB in t
 - **Order by weight.** What must hold comes first; rules early in a file are kept more often.
 - **Say what this project cares about** that a general model would not assume: the stakes, who the users are, the scar behind
   a rule. Name a recurring failure once, then use the name.
+- **Say when the work is bold.** Agents plan on timelines from before agents; one line sets the ambition.
 
 ## A CLI
 
@@ -89,7 +90,9 @@ coined word costs its definition.
 
 - A model-invoked skill pays its description on every turn; a user-invoked one (`disable-model-invocation: true`) pays nothing
   and is unreachable for agents. Johannes never types skill names, so here almost every skill is model-invoked.
+- Split off a second model-invoked skill only for a trigger word the owner's prompts use, or because another skill must reach it.
 - Reference two skills share lives in a plain file both point at.
+- User-invoked skills too many to remember get one router skill that names each and when to reach for it.
 - A skill body over its budget splits into reference files one level down, each named in the body with when to read it.
 
 ## Prove it

@@ -71,7 +71,7 @@ is silently absent. That is why the rule asks for proof that moved text is still
 
 | Budget | Basis |
 |-|-|
-| 12,000 bytes for a root `AGENTS.md` and the global `CLAUDE.md` | Anthropic's 200 lines at the 63 bytes a line of our global file |
+| 12,000 bytes for a root `AGENTS.md` and the global `CLAUDE.md` | Anthropic's 200 lines at the 63 bytes a line of our global file, 12,600, rounded down |
 | 8,000 bytes for text loaded on reach | our choice: 9 of 26 skill bodies exceed it today |
 | 600 characters for a skill description | our choice, a cap and not a target: the mean today is 367 and three descriptions exceed 600 |
 | 4,000 bytes for injected command output | our choice: the help of every dotfiles CLI fits, `factory --help` at 19 KB does not |

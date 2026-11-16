@@ -127,7 +127,7 @@ interface. AGENTS.md carries exactly these sections, in this order, among its ow
 | `## Validate` | what `make check` runs, and anything it does not cover |
 | `## Deploy` | how the default branch ships (CI, RollHook, `make deploy`) and the rollback story |
 | `## Verify & Monitor` | the **full** health URL, the Kuma monitor name, the OTel `service.name` |
-| `## Gotchas` | the traps that cost someone an hour |
+| `## Gotchas` | the traps every task in the repo can meet, inside the root file's 12,000 bytes; a trap of one directory goes to that directory's `AGENTS.md`, a feature's design to `docs/` (`rules/writing-for-agents.md`) |
 
 Repos without a runtime (`brain`, `kobo-mods`, `dotfiles-private`) need `check`
 only, and only if trivial. A signal is routed to a repo by its own label (Kuma
