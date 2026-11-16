@@ -118,3 +118,6 @@ All on 2026-11-16. **To reopen a verdict, bring a measurement taken on the mini.
 | 1611 | agent-workflows | Stack Exchange API and Wayback legs for pages behind an interactive check |
 | 1612 | basalt-ui | layout and quality-matrix suites on the headless shell where results match |
 | 1613 | shutterflow | e2e projects on the headless shell where they pass |
+| 1615 | dotfiles | `chrome-devtools` CLI in place of the MCP in `agents/browser.md` and in `config/opencode/opencode.json`, if it can attach to the shared Chrome |
+| 1616 | software-factory | hygiene probe: a suite that pins installed Chrome without a reason, and a checked-in `.mcp.json` |
+| 1619 | finances | `chrome-live` (`.mcp.json`, the owner's signed-in Chrome for portals) through the same CLI |
