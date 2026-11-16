@@ -116,6 +116,9 @@ class Cfg:
         self.due_after_h = float(e("EXT_MIRROR_DUE_AFTER_H", "18"))
         self.retry_failed_after_h = float(e("EXT_MIRROR_RETRY_FAILED_AFTER_H", "6"))
         self.state_dir = e("EXT_MIRROR_STATE_DIR", os.path.join(os.path.expanduser("~"), ".local", "state", "ext-mirror"))
+        # tailscaled does the WireGuard work for every byte (measured 2026-11-16: 0.45 core at 5 MiB/s, docs/host-waste.md §tailscaled), so by
+        # day the copy is held to 4 MiB/s (about 0.35 core); an rclone timetable, "" = unlimited. Catch-ups after days away run slower by day.
+        self.bwlimit = e("EXT_MIRROR_BWLIMIT", "07:00,4M 23:00,off")
 
 
 def now_utc():
@@ -198,6 +201,8 @@ def sync_source(cfg, flt, mirror, name, remote, day, dry):
     argv = [cfg.hl, "sync", remote, dest, "--backup-dir", backup, "--filter-from", flt, "--create-empty-src-dirs",
             "--transfers", str(cfg.transfers), "--checkers", "16", "--retries", "3", "--low-level-retries", "10",
             "--use-json-log", "--stats", "600s", "--stats-log-level", "NOTICE"]
+    if cfg.bwlimit:
+        argv += ["--bwlimit", cfg.bwlimit]
     if dry:
         argv.append("--dry-run")
     rc, stats, errors = stream_rclone(argv)
@@ -268,8 +273,11 @@ def check_source(cfg, flt, mirror, name, remote, seed, tmpdir):
     report = os.path.join(tmpdir, f"{name}.combined")
     with open(listing, "w") as f:
         f.write("\n".join(picked) + "\n")
-    rc, _stats, _errs = stream_rclone([cfg.hl, "check", remote, dest, "--download", "--one-way", "--files-from", listing,
-                                       "--combined", report, "--checkers", str(cfg.transfers), "--use-json-log", "--stats", "0"])
+    check_argv = [cfg.hl, "check", remote, dest, "--download", "--one-way", "--files-from", listing,
+                  "--combined", report, "--checkers", str(cfg.transfers), "--use-json-log", "--stats", "0"]
+    if cfg.bwlimit:
+        check_argv += ["--bwlimit", cfg.bwlimit]
+    rc, _stats, _errs = stream_rclone(check_argv)
     counts = {"=": 0, "*": 0, "+": 0, "-": 0, "!": 0}
     try:
         with open(report, errors="replace") as f:
