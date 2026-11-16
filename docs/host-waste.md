@@ -86,7 +86,7 @@ The owner's sample (2026-11-16 21:34 UTC, load 31 to 39 on 12 cores): kernel_tas
 | tailscaled | 0.40 | 0.50 | nothing: 5 MiB/s of the ext-mirror catch-up copy (`rclone sync`, started 20:13, not the 05:00 schedule); the copy is now capped by day, see rclone |
 | XprotectService | 0.32 | 0.15 | nothing: build exec churn; fell with the load, not with a change |
 | syspolicyd | 0.16 | 0.09 | nothing, same cause |
-| rclone | 0.13 | 0.15 | `--bwlimit "07:00,2M 23:00,off"` for the next run; the running process keeps the limit it started with |
+| rclone | 0.13 | 0.15 | `--bwlimit "07:00,4M 23:00,off"` for the next run (4 MiB/s is about 0.35 core of tailscaled at the measured 0.09 core per MiB/s); the running process keeps the limit it started with |
 | fseventsd | 0.11 | 0.19 | nothing, `docs/spotlight.md` §fseventsd |
 | mds, corespotlightd | 0.03, 0.03 | 0.03, 0.02 | nothing: indexing is off on every volume (`mdutil -a -s`: `/`, Data, Preboot, `/Volumes/EXT` disabled, both HomeLab SMB mounts "Indexing and searching disabled"); `docs/spotlight.md` |
 | **Total** | **2.31** | **1.58** | |
