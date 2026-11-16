@@ -23,7 +23,8 @@ has an age); scripts/ext-mirror-check.sh turns a stamp older than 36 h into a he
 
   ext-mirror.py              one run (through the gate)
   ext-mirror.py --if-due     what the job runs: skips (exit 0, or 1 while the last run was red) when the last run is recent
-                             enough, so the hourly triggers cost a second once the night's copy is done
+                             enough, decided from STATE_DIR/last-run.json before the volume gate, so the hourly triggers cost
+                             a second and never touch the volume once the night's copy is done
   ext-mirror.py --dry-run    rclone --dry-run: nothing written, no status, no prune
   ext-mirror.py --check-now  run the sample check this time whatever its last date
   ext-mirror.py --status     print the status file (through the gate)
@@ -308,6 +309,28 @@ def stamp_ok_sources(cfg, results, finished, keep_newer=False):
     write_json(path, stamps)
 
 
+def write_last_run(cfg, finished, ok):
+    """The last finished run, kept outside the volume: --if-due decides from it before the gate, so a trigger with nothing to do
+    never touches the volume and a stalled sentinel read at 14:00 cannot turn a clean mirror red."""
+    os.makedirs(cfg.state_dir, exist_ok=True)
+    write_json(os.path.join(cfg.state_dir, "last-run.json"), {"finished": finished, "ok": bool(ok)})
+
+
+def not_due_before_the_gate(cfg, args):
+    """Exit code when --if-due finds nothing to do from the local record alone, else None (go through the gate)."""
+    if "--if-due" not in args or "--dry-run" in args or "--status" in args:
+        return None
+    last = read_status(os.path.join(cfg.state_dir, "last-run.json"))
+    if not last.get("finished"):
+        return None
+    due, why = run_due(cfg, last)
+    if due:
+        return None
+    red = not last.get("ok")
+    log(f"not due: {why}" + ("; the mirror is red until a run passes" if red else ""))
+    return 1 if red else 0
+
+
 def check_due(cfg, status, force):
     if force or not (status.get("check") or {}).get("ok", True):
         return True  # a failed check is tried again the next night, so one repaired file does not hold the job red for a month
@@ -349,6 +372,7 @@ def run_inside_gate(cfg, args):
             red = not prev.get("ok")
             if prev.get("finished"):  # a run made before the stamps existed (or with the state lost) still counts
                 stamp_ok_sources(cfg, prev.get("sources", {}), prev["finished"], keep_newer=True)
+                write_last_run(cfg, prev["finished"], prev.get("ok"))
             log(f"not due: {why}" + ("; the mirror is red until a run passes" if red else ""))
             return 1 if red else 0
         log(f"due: {why}")
@@ -430,6 +454,7 @@ def run_inside_gate(cfg, args):
     if not dry:
         finished = now_utc()
         stamp_ok_sources(cfg, results, finished)
+        write_last_run(cfg, finished, ok)
         status = {"started": started, "finished": finished, "ok": ok, "free_gib": round(shutil.disk_usage(root).free / GIB, 1),
                   "sources": {n: {k: v for k, v in r.items() if k != "ok"} | {"ok": r["ok"]} for n, r in results.items()}}
         if check is not None:
@@ -444,6 +469,9 @@ def main(argv):
     args = argv[1:]
     if "--inner" in args:
         return run_inside_gate(cfg, [a for a in args if a != "--inner"])
+    early = not_due_before_the_gate(cfg, args)
+    if early is not None:
+        return early
     # Not inside the gate yet: hand over to it. The gate sets VOLUME_ROOT, or prints its one skipped line and exits SKIP_RC.
     os.execv(cfg.gate, [cfg.gate, "run", "--skip-rc", str(SKIP_RC), "--", sys.executable, os.path.abspath(__file__), "--inner", *args])
 
