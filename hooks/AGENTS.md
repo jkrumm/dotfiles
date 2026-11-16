@@ -10,6 +10,10 @@ Hooks are symlinked live into `~/.claude/hooks/`, so a change applies on the nex
 
 `hooks/herdr-core-guard.ts` denies, in every session, restarting, stopping, updating or starting the core (`hc server restart|stop|start`, `hc update`, `hc machine update`, `make herdr-core-update`, `launchctl` on its label), reboot, shutdown and halt, and killing herdr-core and its wrappers at `~/.local/bin/{hc,herdr-core}`. The one update path is `make herdr-core-update`, by the owner by hand (`docs/incident-2026-11-13-mini-panic.md`).
 
+## nested-agents
+
+`hooks/nested-agents.ts` hands an agent that edits or writes a file the nested `AGENTS.md` files of that directory (Claude Code loads them only on a Read), once per session and subagent, at most about 9,500 bytes a call; it never blocks.
+
 ## review-bypass-guard
 
 `hooks/review-bypass-guard.ts` denies review bypasses in factory sessions (`FACTORY_SESSION`); the owner does those by hand:

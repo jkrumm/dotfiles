@@ -105,7 +105,20 @@ The three marked "our choice" are defaults to test, not findings.
   did not touch. A second probe in a scratch repo (Claude Code 2.1.325, one marker per directory) separated the tools: `cat` and
   `rg` through Bash loaded nothing, an Edit without a prior Read changed the file and loaded nothing, a Write loaded nothing,
   a Read loaded the directory's file. An agent that inspects with the shell and then edits never sees the nested file, so a
-  root file's pointer has to tell it to Read the nested one first. Not measured: whether a rule with `paths:` behaves the same.
+  root file's pointer has to tell it to Read the nested one first.
+- **`hooks/nested-agents.ts` closes that gap for Claude Code (2026-11-16, 2.1.325).** A PreToolUse hook on Write, Edit,
+  MultiEdit and NotebookEdit returns the nested files between the target and the repository root as `additionalContext`,
+  nearest last, once per session. Proven in an interactive session (`hc run`) in the scratch repo, with the hook registered in
+  the repo's own settings: an Edit without a Read in `server/` left `MARKER-SERVER-7Q` in the model's context and
+  `MARKER-WEB-3K` of the untouched `web/` out of it; a second Edit in `server/` added no second `hook_additional_context` entry to
+  the transcript. Claude Code caps a hook's `additionalContext` at 10,000 characters (longer text becomes a file path and a
+  2,000-character preview), so the hook delivers at most about 9,500 bytes a call, nearest first, and names the rest with
+  "Read it". OpenCode and Codex do not run it; the matrix in `docs/agents-md.md` records OpenCode as loading a nested file lazily and Codex
+  as reading AGENTS.md from the working directory upward only, so for them the root file's pointer is the only route (not re-measured for edits).
+- **A rule with `paths:` has no such gap (2026-11-16, 2.1.326).** A scratch rule `paths: ["**/*.probe"]` with a marker was in
+  the model's context after an Edit without a Read, after a Write that created a matching file, and after a Read; the
+  tool result showed `Loaded .claude/rules/probe.md` each time. `rules/browser.md` and `rules/run-on-mini.md` load when the
+  agent edits or writes a matching file, and nothing needs extending to rules.
 
 ## Open work
 
