@@ -1,31 +1,22 @@
 ---
 name: home
-description: Control and diagnose Apple Home (HomeKit) — lights, outlets, sensors, scenes, automations, accessories that show "No Response" — via the `home` CLI over HomeClaw on the mini. Use when the user mentions Apple Home, HomeKit, Home app, a scene ("Chill", "Gute Nacht"), turning lights on/off, a room (Wohnzimmer, Schlafzimmer, Bad, Flur), motion sensors, Hue, Eve, Meross, the dog-alone lighting, or broken/missing smart-home devices. For the router itself use `router`; for the internet line use linewatch.
+allowed-tools: Bash(home --help *)
+description: Control and diagnose Apple Home (HomeKit) — lights, outlets, sensors, scenes, automations, accessories that show "No Response" — via the home CLI over HomeClaw on the mini. Use when the user mentions Apple Home, HomeKit, Home app, a scene ("Chill", "Gute Nacht"), turning lights on/off, a room (Wohnzimmer, Schlafzimmer, Bad, Flur), motion sensors, Hue, Eve, Meross, the dog-alone lighting, or broken/missing smart-home devices. For the router itself use `router`; for the internet line use linewatch.
 ---
 
 # Home — Apple Home via HomeClaw
 
-`home` (repo `~/SourceRoot/home`, `make install` → `~/.local/bin/home`) wraps
+home (repo `~/SourceRoot/home`, `make install` → `~/.local/bin/home`) wraps
 `homeclaw-cli`. On the mini it runs locally; elsewhere it SSHes to the mini.
 JSON when piped, human output on a TTY.
 
-```bash
-home doctor                      # not responding, low battery, drop-offs (24 h)
-home scenes                      # user scenes: name<TAB>id
-home trigger "Chill"             # run a scene
-home device-map                  # LLM-oriented map: rooms, semantic types, aliases — read this first
-home list --room Wohnzimmer      # accessories with state
-home get "Sofa"                  # one accessory, all characteristics
-home set "Sofa" power true       # power | brightness 0-100 | color_temperature | target_temperature …
-home set "Sofa" brightness 40 --dry-run   # validate without actuating
-home search "bett"
-home automations                 # list; `automations get "<name>"` for detail
-home events --since 1d           # characteristic changes, reachability, scene triggers
-home events --type reachability_change --since 7d
-home help <subcommand>           # full homeclaw-cli help
-```
+Verbs, live from the CLI (if you see the command and not its output, run it):
 
-Everything not `scenes|trigger|doctor` passes straight to `homeclaw-cli`.
+!`home --help 2>&1 || echo "home is not on this machine"`
+
+The status verb is climate and presence, doctor is device health ("is something broken"). Start with `home device-map` (rooms, semantic types, aliases) before addressing an accessory by name; `home list`, `get`, `set`,
+`search`, `events` and `automations` pass through to `homeclaw-cli` (`home help <subcommand>` for its flags). `home set` takes
+`power`, `brightness 0-100`, `color_temperature` or `target_temperature`; `--dry-run` validates without actuating.
 
 ## Rules
 

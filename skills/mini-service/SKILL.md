@@ -1,12 +1,17 @@
 ---
 name: mini-service
-description: "Add or move a service on the Mac mini: place it, declare it in the registry, wire its files. Use when adding a LaunchAgent or plist, a background job or schedule, a compose file or container, a dev server door, a database or cache, or anything that should keep running on the mini; also when `make mini-ps` or `make doctor` names a run-rule breach."
+allowed-tools: Bash(jobrun --help *)
+description: "Add or move a service on the Mac mini: place it, declare it in the registry, wire its files. Use when adding a LaunchAgent or plist, a background job or schedule (jobrun records and grades a run), a compose file or container, a dev server door, a database or cache, or anything that should keep running on the mini; also when `make mini-ps` or `make doctor` names a run-rule breach."
 ---
 
 # Add a service to the mini
 
 The ruling is `rules/run-on-mini.md` (placement, tiers, never list, the check); this page is the procedure. The registry is
 `config/mini/services.yaml` plus a `mini-services.yaml` at the root of the owner repo (`docs/mini-registry.md`).
+
+jobrun wraps a scheduled job (`--owner` takes the repo name), live from the CLI (if you see the command and not its output, run it):
+
+!`jobrun --help 2>&1 || echo "jobrun is not on this machine"`
 
 ## 1. Place it
 
@@ -19,7 +24,7 @@ Tier is `on-demand` unless the entry's `note` says who reaches it and why it mus
 | Kind | Files |
 |-|-|
 | Schedule | a plist template in the owner repo running `jobrun <label> --owner <repo> --every <s> --timeout <s> -- <cmd>`, label `com.jkrumm.<repo>-<job>`; a `make <x>-setup` target that installs and loads it (copy `~/SourceRoot/linewatch/collector/*.plist.template` and its target); log under `~/Library/Logs` |
-| Native service | a launch script (secrets through `secrets-run`, dependency check that exits non-zero, e.g. `pg_isready`), an installed release directory, a plist with `KeepAlive`, a port on 127.0.0.1, a door: `<name>.test { reverse_proxy localhost:PORT }` in `config/Caddyfile`, then `make caddy-tailnet`; start/stop/status as make targets |
+| Native service | a launch script (secrets through secrets-run, dependency check that exits non-zero, e.g. `pg_isready`), an installed release directory, a plist with `KeepAlive`, a port on 127.0.0.1, a door: `<name>.test { reverse_proxy localhost:PORT }` in `config/Caddyfile`, then `make caddy-tailnet`; start/stop/status as make targets |
 | Compose project | `restart: "no"` (core: `unless-stopped`), `mem_limit` and a healthcheck on every service, ports `127.0.0.1:HOST:CONTAINER`, named volumes, no `container_name` clash across repos, make targets for up and down per service (the registry's `start`/`stop` act on one service); the project runs in the default VM |
 | Database | a role and a database in `config/postgres/cluster.yaml`, then `make pg-plan` and `make pg-apply` |
 | Cache or queue | none installed today. The first service that needs one adds the one native Valkey under launchd through its own plan row; later services take a logical database or key prefix. Never a container per app |
