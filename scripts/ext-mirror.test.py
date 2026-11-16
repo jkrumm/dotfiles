@@ -193,6 +193,10 @@ class ExtMirror(unittest.TestCase):
         s.update(fields)
         with open(path, "w") as f:
             json.dump(s, f)
+        last = os.path.join(self.home, ".local", "state", "ext-mirror", "last-run.json")  # the local record --if-due reads before the gate
+        os.makedirs(os.path.dirname(last), exist_ok=True)
+        with open(last, "w") as f:
+            json.dump({"finished": s["finished"], "ok": s["ok"]}, f)
 
     def hours_ago(self, h):
         return (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -228,9 +232,9 @@ class ExtMirror(unittest.TestCase):
 
     def test_a_run_made_before_the_stamps_existed_is_stamped_when_it_is_not_due(self):
         self.run_job()
-        shutil.rmtree(os.path.join(self.home, ".local"))
         fin = self.hours_ago(2)
         self.set_status(finished=fin)
+        shutil.rmtree(os.path.join(self.home, ".local"))  # the state is lost: only the volume's status file remembers the run
         self.run_job("--if-due")
         self.assertEqual(self.stamps(), {"ssd": fin, "fuji": fin, "videos": fin})
 
@@ -251,6 +255,32 @@ class ExtMirror(unittest.TestCase):
         rc, out = self.run_job("--if-due")
         self.assertEqual(rc, 0, out)
         self.assertTrue(self.status()["ok"])
+
+    def test_a_clean_run_that_is_not_due_never_reaches_the_gate(self):
+        self.run_job()
+        write(self.mode, "locked")  # the volume stalls or leaves at 14:00: nothing is due, so nothing may turn red
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("not due", out)
+        self.assertNotIn("skipped", out)
+
+    def test_a_red_run_that_is_not_due_stays_red_without_the_gate(self):
+        self.run_job()
+        with open(os.path.join(self.home, ".local", "state", "ext-mirror", "last-run.json"), "w") as f:
+            json.dump({"finished": self.hours_ago(1), "ok": False}, f)
+        write(self.mode, "locked")
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 1, out)
+        self.assertNotIn("skipped", out)
+
+    def test_a_due_run_still_goes_through_the_gate(self):
+        self.run_job()
+        with open(os.path.join(self.home, ".local", "state", "ext-mirror", "last-run.json"), "w") as f:
+            json.dump({"finished": self.hours_ago(20), "ok": True}, f)
+        write(self.mode, "locked")
+        rc, out = self.run_job("--if-due")
+        self.assertEqual(rc, 3, out)
+        self.assertIn("skipped: volume locked", out)
 
     def test_if_due_with_no_status_runs(self):
         rc, out = self.run_job("--if-due")
