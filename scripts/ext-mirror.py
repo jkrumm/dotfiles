@@ -109,7 +109,7 @@ class Cfg:
         self.sample_files = int(e("EXT_MIRROR_CHECK_SAMPLE_FILES", "100"))
         self.sample_bytes = int(e("EXT_MIRROR_CHECK_SAMPLE_BYTES", str(1 * GIB)))
         self.probe_timeout = int(e("EXT_MIRROR_PROBE_TIMEOUT_S", "120"))
-        # The path to the HomeLab carries about 10 MiB/s over 16 streams (docs/storage.md §EXT mirror); streams keep small files from queueing.
+        # The path to the HomeLab carries about 9 MiB/s over 16 streams (docs/storage.md §EXT mirror); streams keep small files from queueing.
         self.transfers = int(e("EXT_MIRROR_TRANSFERS", "16"))
         # --if-due: a clean run is due again after 18 h (the 05:00 trigger of the next night), a red one after 6 h.
         self.due_after_h = float(e("EXT_MIRROR_DUE_AFTER_H", "18"))
