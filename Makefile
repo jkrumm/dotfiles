@@ -2499,8 +2499,9 @@ opbackup-seed-test:
 # Hermetic suites for the rd work / rd say host script (agent-name collisions, say delivery verification, FACTORY_SESSION at spawn, which path rd takes when the factory answers, holds, fails or is absent) and the factory hooks in settings.template.json.
 .PHONY: rd-test
 rd-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh $(DOTFILES_DIR)/scripts/remote-dev-fake-hc.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh $(DOTFILES_DIR)/scripts/remote-dev-fake-hc.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh $(DOTFILES_DIR)/scripts/remote-dev-help.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-help.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
