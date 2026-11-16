@@ -133,6 +133,17 @@ result. `disk-sweep` now carries a `lima-cache` step for the IPSWs. The VM disks
 `limactl list` and `du -sk ~/.lima/*/disk` name them; a stopped `cm-*` whose result is recorded is safe to
 `limactl delete -f`.
 
+## Rust worktree `target/` dirs (Beszel "disk above 90%", 91-92%, no `.building-*`)
+
+Issue 1771 (2026-11-16, 90.9-92.1% for 55+ min, 76 GiB free at the low) was shutterflow's live leads: `~/SourceRoot/shutterflow/.claude/worktrees`
+held 126 GB by `du`, nearly all `target/` (one lead's 61 GB, running `cargo check` for two extra targets; the others 17-30 GB). A `target/`
+cloned from `~/cache/shutterflow/seed` shares blocks until it is written, so `du` overstates the host cost; the growth is what a lead
+compiles itself. Cut: the `target/` of the one closed Issue (its source and a dirty file that is not on master stay), 20 GiB back,
+and 17 closed, merged basalt-ui worktrees (about 1.4 GB each). The page came back at 90.2% within the hour; `make disk-sweep-run`
+(the Colima data disk had grown to 113 GiB, `fstrim` returned 21 GiB) brought it to 89%, 100 GiB free. The daily 04:40 sweep alone
+does not hold the line while three shutterflow leads build at once. The live leads' `target/` dirs are theirs and stay. A repeat: `du -xsh ~/SourceRoot/*/.claude/worktrees`,
+then `du -xsh <worktree>/target` per live lead, and `rm -rf` the `target/` (never the worktree) of a closed Issue whose work is not merged.
+
 ## What goes to the external SSD
 
 **Class `external` in the budget table above:** a row for a volume that is not part of the Data volume. It counts nothing against the
