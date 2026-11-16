@@ -489,7 +489,9 @@ held 2978 MiB idle on the mini. `make setup` removes any leftover registration, 
 project. Test-browser Chrome trees that outlive their launcher (Playwright/puppeteer temp profile, parent
 launchd, older than 30 min) are ended by `com.jkrumm.browser-reap` every 30 min
 (`scripts/browser-reap.py`, `make browser-reap-run ARGS=--dry-run`, log `~/Library/Logs/browser-reap.log`);
-never the owner's Chrome or a persistent profile. Claude Code
+never the owner's Chrome or a persistent profile. Which browser a suite, a check or a page read gets (headless shell by
+default, installed Chrome only with `// chrome: <reason>`), every browser on the mini and its cost: `rules/browser.md`,
+`docs/browser.md`. Claude Code
 reaches the platform through `agw` (`/check`, `/review`, `/prose`,
 `/excalidraw-diagram`, `/brain` lookups, `/otel` — mini-only). HyperDX is deliberately *not* registered — `/otel`
 speaks its endpoint through `agw hdx`. Keep project MCPs minimal.

@@ -41,7 +41,7 @@ footprint after an hour of use, read from `make mini-ps` (`top`'s mem column sum
 - **Native service:** an installed release directory, a launch script that reads secrets through `secrets-run`, logs under `~/Library/Logs`, a port on 127.0.0.1 and a door in `config/Caddyfile`, its start/stop/status command, a heartbeat when core.
 - **Compose project:** `restart: "no"` (core: `unless-stopped` allowed), `mem_limit` on every service, ports on 127.0.0.1, a healthcheck, named volumes for data, `needs: [vm]` in its entry and a make target that starts it. The sum of the limits of a VM's core services fits the VM.
 - **Database:** a role and a database in `config/postgres/cluster.yaml`, sized for what its clients measure. **Cache or queue (Valkey, Redis):** one native instance under launchd, like the one Postgres, added by the first service that needs one through its own plan row; later services take a logical database or key prefix. None runs today; do not install one on spec.
-- **Browser:** the shared headless Chrome (`shared-chrome ensure`). **Heavy tests or builds:** `factory slot run`; the full suites run in CI.
+- **Browser:** the shared headless Chrome (`shared-chrome ensure`); which browser a suite, a check or a page read gets: `rules/browser.md`. **Heavy tests or builds:** `factory slot run`; the full suites run in CI.
 
 ## Never on the mini
 

@@ -161,5 +161,5 @@ per agent (about 135 MiB for the server, wrapper and watchdog, 0.35 to 0.45 GiB 
 | Supervisor | `scripts/shared-chrome.ts run` under `com.jkrumm.shared-chrome` (loaded, not running; `ensure` kickstarts it; with no job loaded `ensure` runs it detached). Registry: `shared-chrome`, on-demand |
 | Idle | a context whose pages did not open, close, navigate or retitle for 15 min is closed (the same 15 min is `playwright-cli attach --idle-timeout`, which detaches and closes the session's context); 60 s without a context, Chrome stops and the supervisor exits. A crashed Chrome ends the supervisor and the next `ensure` restarts both |
 | Drive | `playwright-cli` 0.1.24 (`make setup`, npm global): `attach --cdp=<url>`, `tab-new --isolated-context=<name>`, `resize 1600 1100`, `detach`. A new context is 1280x720; `resize` sets the viewport and the screenshot size is the check |
-| Not covered | basalt-ui's own harness (starts its own Chrome in test slots) and the research Chrome on `:9222` (`agw web`) |
+| Not covered | basalt-ui's own harness (starts its own Chrome in test slots) and the research Chrome on `:9222` (`agw web`). Every browser on the mini, what each costs and which one a job gets: `docs/browser.md`, `rules/browser.md` |
 | Log | `~/Library/Logs/shared-chrome.log` |
