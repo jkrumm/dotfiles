@@ -23,11 +23,11 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 A tier is a promise the registry holds. For a dev server behind a tailnet door the host keeps it (§Apps page): the door
 starts it, the idle stop ends it.
 
-**One VM, always on, 3 GiB.** The mini runs one Colima VM, `default`. The VPN, the import dashboard and the teamchat sandbox
+**One VM, always on, 2.5 GiB.** The mini runs one Colima VM, `default`. The VPN, the import dashboard and the teamchat sandbox
 (opencode, relay, egress) run in it, colleagues reach them, so they are `core` and no profile verb stops them: `make
 mini-profile NAME=work UP=0` reaches only the student-enrolment containers. The dev databases (`dev-db`) start in the same
 VM on demand. The VM's budget is its measured footprint times 1.1 (a vz guest cannot exceed its ceiling by much); its
-revert signal is an out-of-memory kill in the guest, answered by `COLIMA_MEMORY=4`, never by a second VM.
+revert signal is an out-of-memory kill in the guest, answered by `COLIMA_MEMORY=3` (then 4), never by a second VM.
 
 ## An entry
 

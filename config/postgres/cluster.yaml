@@ -66,6 +66,9 @@ server:
 
 roles:
   agent_workflows:
+    # 8 live today (lease, journal, host and request pools); an idle backend costs
+    # about 7 MB, so the cap guards a pool that leaks, not a saving (issue 1684).
+    connection_limit: 16
     password: op://mini/vps-dev/AGENT_WORKFLOWS_DB_PASSWORD
   argo:
     connection_limit: 20
@@ -76,6 +79,8 @@ roles:
     connection_limit: 5
     password: op://mini/vps-dev/ARGO_AGW_RO_DB_PASSWORD
   athena_app:
+    # One pool of 8, idle for a day at a time (issue 1684).
+    connection_limit: 12
     password: none
   athena_owner:
     password: none

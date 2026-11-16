@@ -455,6 +455,48 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
 | postgres `shared_buffers` 4 GB → 2 GB | keep 4 GB | trades 31–38 ms p95 for ~2 GB; a measured product choice. Later: 2 GB, then 512 MB on 2026-11-14 while weatherorb's jobs are disabled (revert signal in `docs/postgres.md`) |
 | Chrome / Obsidian | no limit | 0.5 GB, not a driver |
 
+## Memory accounting: what `top` over-reports (issue 1684)
+
+2026-11-16 19:30, uptime 1 d 18 h, `PhysMem 29G used`, swap 865 of 2048 MB, pressure normal. `top` listed kernel_task at 17.4 GB,
+Postgres at 6.2 GB and the sessions at 7.4 GB: 45.8 GB on a 32 GB host. Those are ledger figures that count compressed and shared
+pages, not RAM. Read the physical split with `vm_stat` (pages × 16 KiB) and size a tree with `footprint -p <pid>`.
+
+| Physical, from `vm_stat` | GB |
+|-|-|
+| wired | 5.2 |
+| compressor (holds 32.1 GB of pages) | 7.4 |
+| anonymous, resident | 12.7 |
+| file cache (reclaimable) | 6.3 |
+
+**kernel_task.** `footprint -p 0` splits its own pages at 5.8 GB (the `VM_KERN_COUNT_WIRED` 5.9 to 6.8 GB): the GPU driver 1.9 GB,
+boot-stolen 0.7, page tables 0.5, the ANE's DMA 0.2, APFS 0.1. Its "billed footprint" of 17 GB is a ledger over that plus
+anonymous pages no process owns: `footprint --sysFootprint` reads `sys_unwired` 43.1 GB (the compressor's 32.1 GB counted at full
+size plus 12.7 resident) against 32 GB of RAM. Nothing holds 17 GB, and nothing needs freeing for it. What was checked and holds
+almost nothing: the three mounted simulator runtimes (`diskimagesiod` ×3, 2.8 MB RSS each; the volumes are read-only APFS file
+cache, and `hdiutil detach` answers "busy" because CoreSimulator uses them), the two SMB mounts, the Virtualization guest (its
+own process, 3.1 GB). Not proven: which pages make up the 11.6 GB residual; `zprint` needs root, which a headless lead has not.
+
+**Postgres.** Every process that touched the 512 MB shared segment shows it in its own footprint: the checkpointer 545 MB, the
+io workers and the busier backends 350 to 580 MB, twelve of them for the 6.2 GB. An idle client backend is 6.8 MB private (`footprint`
+on an athena backend). The real tree is the 512 MB segment plus about 7 MB × 31 clients, roughly 0.8 GB. `shared_buffers`
+(512 MB, hit ratio 99.6 % on `shared`), `work_mem` 16 MB, `max_connections` 100 stay: halving the segment would save 256 MB and
+needs a restart that stops the factory, argo and agw. Live clients: factory 8, agw 8, athena 8, argo 2. Caps added without a
+restart: `agent_workflows` 16 and `athena_app` 12 (factory 10, usage 10, argo 20 already had one); they bound a leaking pool,
+they do not save memory. `idle_session_timeout` is not set: a pool that does not expect the server to drop it fails on the next query.
+
+**Claude Code.** 26 sessions, 7.4 GB by `footprint` (mean 285 MB, range 212 to 408 MB), none with an MCP child (`--strict-mcp-config`
+and no server configured), the plugins add a few MB. The memory is the JavaScript heap (248 MB of 295 in a fresh session) and does
+**not** grow with idle time: sessions up to 35 h old sit at 212 to 408 MB, fresh leads at 235 to 332 MB. A session cannot be made
+smaller from outside; the only lever is how many exist, and ending interactive ones is the owner's call (Decision, not taken here).
+At the measurement 12 factory leads had started within five minutes: that is 3.5 GB the admission gate (`factory capacity get`) decides,
+not a host setting.
+
+**Applied.** The Colima ceiling 3 → **2.5 GiB** (`COLIMA_MEMORY`; the guest used 1.3 GB with six containers, 1.6 GB of it idle
+page cache the host cannot take back; it lands on the next `make colima-restart`). `mediaanalysisd` was already disabled by
+`make photos-analysis-off`; the 490 MB it held was freed by killing it (launchd may start it again on an XPC event until the next restart, `docs/host-waste.md`; the
+doctor line names that). Spotlight indexing was already off (`mdutil -s /`). Stopping the VM when idle is not possible: the VPN, the
+dashboard and teamchat run always and colleagues reach them (§Memory budget).
+
 ## Upstream drift
 
 `make brew-upgrade` asserts its own invariants and the heartbeat fails loudly on
