@@ -67,3 +67,7 @@ The spawners in a 20 s sample were `bun` (the factory server and a scenario test
 the home repo's `tools/audio/speaker-watch.sh` at about 1.5 per second (it polls every 2 s), which is 0.4 % of that rate. XprotectService and
 syspolicyd checked 7 CPU-min/h together over the same window; kernel_task's share follows the tailnet traffic and the forks. The lead's and the
 factory's processes are out of scope, so this stays; a fork-rate probe would read the leads' load, not a fault, and gets no doctor line.
+
+## Rule (moved from the root AGENTS.md)
+
+**Host waste** — `make host-waste-check` (a `make doctor` section, WARN only): orphaned `sleep`s (a watchdog that kills its subshell, not its timer), `tailscaled` CPU (it follows bulk-copy throughput), `mediaanalysisd` (disabled by `make photos-analysis-off`, which `make setup` re-applies; `launchctl enable gui/$UID/com.apple.mediaanalysisd` undoes it), sshd sessions. Causes, numbers, what stays: `docs/host-waste.md`.

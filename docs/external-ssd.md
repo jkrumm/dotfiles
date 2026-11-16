@@ -155,3 +155,11 @@ In a window where no dependent job runs, never by reboot or cable pull: `diskuti
 `make doctor` WARNs), then the unlock job re-unlocks it within 120 s, **only once `passphraseRef` is set**; a plain `diskutil mount` does
 not work on this drive (§As attached). The hermetic proof is `make volume-gate-test` (a stub `diskutil`, a temp directory as the
 stand-in volume).
+
+## Rule (moved from the root AGENTS.md)
+
+**External volume** — the mini's USB SSD can be absent, locked or half-mounted and launchd has no mount
+dependency, so every dependent gates itself (`scripts/lib/volume-gate.sh run -- <cmd>`: present = unlocked and the sentinel
+reads, else one `skipped: volume <state>` line and exit 0, nothing created, no fallback to the internal disk). Never
+format, erase or convert the drive. The mount point is read at run time, never written down. Check, unlock job, TCC class,
+keep-off list: `docs/external-ssd.md`.

@@ -42,7 +42,7 @@ every vault. The goal is a prompt at a sane moment.
 - **Hourly via `StartCalendarInterval`**, never `RunAtLoad`/`StartInterval` — only
   those coalesce a sleep-missed fire into one wake-up run.
 - **A skip line in `~/Library/Logs/opbackup.log` is a claim, not a diagnosis** —
-  every guard exits **0**; three Secrets gotchas (see `dotfiles/AGENTS.md`
+  every guard exits **0**; three Secrets gotchas (see `scripts/AGENTS.md`
   §Secrets) each present as one.
 
 Full rationale: `docs/opbackup.md`.
@@ -171,3 +171,12 @@ Full setup, the verb list, the identity model (`ssh iumac` carries none; a dotfi
 
 Owning doc for the rest of the remote-dev model: `docs/remote-dev.md`. Map:
 `docs/architecture.md`.
+
+## MacBook-only subsystems (moved from the root AGENTS.md)
+
+opbackup + secrets auto-reseed (hourly guard, `make opbackup-{setup,check,teardown}`),
+the battery charge limiter (`make batt-{setup,limit,status}`), the database
+tunnel (`make db-tunnel-setup`), the Keychain half of the HomeLab SMB keepalive (`make
+smb-keepalive-setup`, which also runs on the mini) and the reverse `ssh iumac` reach on :2222 all
+run only on the MacBook and cost every mini agent context for no benefit — full
+command tables and gotchas: `docs/macbook.md`.

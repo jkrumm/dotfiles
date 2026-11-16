@@ -145,7 +145,7 @@ import 'basalt-ui/styles.css'            // declares @layer mantine, basalt
 
 ## Launchers
 
-One table: `AGENTS.md` §Claude Code launchers (and `docs/codex.md` for the
+One table: `config/zsh/AGENTS.md` (and `docs/codex.md` for the
 non-Anthropic lane: `cx`, `cxa`, `astra`). Rationale:
 `brain/wiki/engineering/model-routing.md`.
 

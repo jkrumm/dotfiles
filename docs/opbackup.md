@@ -5,8 +5,7 @@ memory and rsyncs the ciphertext to homelab. The same hourly agent
 (`com.jkrumm.opbackup`) also reseeds the headless mini's secrets cache, through
 its own guard in `scripts/opbackup-seed-auto.sh`.
 
-Commands and the one-line rules live in `AGENTS.md` → *opbackup + secrets
-auto-reseed*; this is the rationale behind them.
+Commands and the one-line rules live in `docs/macbook.md` §MacBook-only subsystems; this is the rationale behind them.
 
 ## Why it stays attended
 

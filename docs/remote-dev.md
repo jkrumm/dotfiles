@@ -931,3 +931,67 @@ pointed at a read-only token, and only the dry-run saw it.
   `ssh-agent.zsh` (loaded from `~/.zshenv`) is gated on the `op` backend, not on
   the socket's existence, because the same socket path exists on the mini, where
   exporting it hangs.
+
+## Reach, housekeeping and facts to hold (moved from the root AGENTS.md)
+
+Agents run on the mini and outlive the MacBook. Stack: Tailscale (reachability) →
+herdr-core on the mini (persistence; the Herdr app is the UI) → Caddy (service exposure). **No layer
+substitutes for another.**
+
+
+| Want | Command |
+|-|-|
+| A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` (core up only; else it starts one keychain-less) picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
+| Work *placed on* the mini, no terminal | `rd work\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`) |
+| Housekeeping | the janitor (`com.jkrumm.hc-reap`, every 30 min; `scripts/hc-reap.py`): closes finished factory-spawned agent terminals (idle past the age limit, clean and pushed tree), messages a dirty one instead, closes orphan shells, stops old background sessions; never a working agent. Rules in `docs/remote-dev.md` §Janitor rules. Log: `~/Library/Logs/hc-reap.log` |
+| The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
+| What every agent is doing | the app's sidebar; the factory (software-factory, `factory read overview` / `read sessions`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
+
+Commands take a repo **name, never a path** — resolution happens on the host.
+
+Facts to hold:
+
+- **A core restart or update keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
+  shells, and `com.jkrumm.hc-resume` (mini only) types `claude --resume <id>` under the right account from the
+  `jk.claude.*` labels, only where the foreground is positively a login shell (model, effort and the turn in flight are
+  lost). Core updates are `make herdr-core-update` (the official `hc update`, by hand in a quiet window; it can end programs
+  inside terminals, upstream #133, and hc-resume repairs them). Never `hc server restart|stop` or `hc machine update` outside it.
+- **"The core is up" has one definition**, `scripts/lib/core-up.sh`: the socket answers AND a launchd-born core exists
+  (`herdr-core --hc-launchd`, parent pid 1). `rd`, `claude-relogin`, doctor and the heartbeat use it; a core that answers
+  without being launchd-born is a stray (attributed to sshd, no keychain). The core is upstream's `Herdr Core.app`
+  (`~/.local/share/herdr-core/active/`, official installer); on the mini `com.jkrumm.herdr-core` is only a one-shot
+  starter, the MacBook's Herdr app starts its own. No wrapper at `~/.local/bin`, no Homebrew core: `docs/herdr-core.md`
+  §How the core runs now.
+- **`ssh iumac` runs fixed verbs only** (forced-command gate `scripts/iumac-gate.sh`; list in `docs/remote-dev.md` §mini → iumac) and carries no SSH identity. A dotfiles pull and its link targets: `ssh iumac dotfiles-sync` (ff-only, `config/macbook-sync.tsv`). File pulls: `rsync … iumac:<path>`; anything else MacBook-side: `ask-human.sh ask … --cmd`. Installers that write to the MacBook run from its own terminal.
+- **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
+  keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
+  billing, and still looks healthy in `claude agents`. `rd work` spawns *through* the launchd core (a GUI-session
+  child) precisely to avoid this.
+- **A core's env is every terminal's env**, and `hc run` forwards nothing: choose the Claude account on the
+  command (`CLAUDE_CONFIG_DIR`, unset = `iu`), never by inheritance.
+- **Full Disk Access sits on `Herdr Core.app`** (one human grant per machine, survives updates; terminal programs take
+  their holder's identity). A terminal whose holder predates the bundle keeps the old identity until it ends. A frozen
+  agent at 0 % CPU = a missing grant or an AppData dialog (`docs/tcc.md`, `make tcc-probe`/`tcc-check`). The launcher
+  `~/.local/libexec/herdr-core-launcher` is now only the umbrella for `op` in the opbackup LaunchAgent.
+
+
+### human-queue
+
+**human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a *present human* (biometric `op`, the ACL
+push, a person-only call) is enqueued on the mini with `ask-human ask "…" [--cmd …]` (pushes to the MacBook by default;
+`--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only); `make human-queue` **walks** each one on the MacBook
+(r/already-done/deny/skip; `-run`, `-resolve`, `-deny ID=` one-shot; no TTY → a list). The mini only *proposes* a string;
+`run` needs a typed `yes` on a real TTY, and a push shows the exact string in a native dialog that executes only on a click.
+No poller, no path without a present human. `ask` posts each request to the factory as an Errand (`--check <sh>` = exits 0 while
+it is still needed; the factory runs it hourly) and prints its `errand_…` id; the queue file is only the offline fallback, posted
+once the factory answers (`docs/remote-dev.md`). An unreachable MacBook or unanswered dialog leaves it open (and fires the
+ntfy notify). `--key K` replaces older pending requests with that key, a producer's success path calls
+`ask-human clear K`, and items expire (default 3d, `--expires`; `reap`); a lead that enqueued (`FACTORY_SESSION`) is told
+the result via `factory session note`, and the Herdr sidebar's ✓/× resolve a row. Detail: `docs/remote-dev.md`.
+
+
+### File shuttle
+
+**File shuttle** — `smb://mini/jkrumm` on the MacBook, `~/Shuttle` the drop
+folder, for ad-hoc **human** file movement only (code → `rd`/git; vault pages →
+brain-sync; anything an agent reads must live on the mini). **A running `smbd` is not a working SMB server** (no NTLM hash, GUI-only fix). `docs/remote-dev.md`.

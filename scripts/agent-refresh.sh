@@ -13,7 +13,7 @@
 # Writes the deliberate-restart marker (scripts/lib/launchd-restarts.sh) right
 # before the kickstart so the heartbeat reads the bumped `runs` as a deploy.
 # NEVER restarts com.jkrumm.herdr-core: a core restart ends every terminal and
-# is owner-timed (AGENTS.md §Machines & remote dev).
+# is owner-timed (AGENTS.md §Machines & remote dev: herdr-core-guard).
 #
 # Overridable for the hermetic suite: LAUNCHCTL_BIN PS_BIN STAT_BIN DATE_BIN
 # AGENT_REFRESH_UID DEVHOST_DELIBERATE_RESTART_DIR.

@@ -187,3 +187,25 @@ the attach to the owner's default profile behind Chrome's prompt is proven at it
 
 dotfiles ships no MCP entry since Issue 1615: the `browser` agent and `config/opencode/opencode.json` both went to the CLI.
 The `--strict-mcp-config` guard in dotfiles is §Strict MCP; the factory lead launcher is Issue 1620 above.
+
+## MCP servers (moved from the root AGENTS.md)
+
+**MCP servers**: none registered at user scope, none inline in an agent, none in OpenCode's `opencode.json`. The `browser` subagent
+(`/browse`) drives the **shared headless Chrome** (`shared-chrome ensure`, `127.0.0.1:9223`, on demand, one isolated context per agent, idle 15 min,
+`docs/global-reference.md` §Shared browser) with `playwright-cli`, plus the `chrome-devtools` CLI (pinned in the
+Makefile, `docs/browser.md` §chrome-devtools CLI) for traces, Lighthouse and CSS; a
+user-scope server costs an `npx` + `node` pair (~124 MiB) in every session, 24 of them
+held 2978 MiB idle on the mini. `c`/`ch`/`cs`/`cf`, `rd work` and the resume path pass `--strict-mcp-config`, so a repo `.mcp.json`
+starts nothing; plugin tools, tool search, hooks and `--resume` survive it (`docs/browser.md` §Strict MCP). `make setup` removes any leftover registration, project-local ones too
+(`projects[<dir>].mcpServers` in every account's `.claude.json`, which the user-scope remove and
+`claude mcp list` from this directory never see; `scripts/claude-project-mcp.sh`, backup
+`.claude.json.bak-chrome-devtools`), and `make status` §Browser debugging prints a ✗ line for one, naming account and
+project. Test-browser Chrome trees that outlive their launcher (Playwright/puppeteer temp profile, parent
+launchd, older than 30 min) are ended by `com.jkrumm.browser-reap` every 30 min
+(`scripts/browser-reap.py`, `make browser-reap-run ARGS=--dry-run`, log `~/Library/Logs/browser-reap.log`);
+never the owner's Chrome or a persistent profile. Which browser a suite, a check or a page read gets (headless shell by
+default, installed Chrome only with `// chrome: <reason>`), every browser on the mini and its cost: `rules/browser.md`,
+`docs/browser.md`. Claude Code
+reaches the platform through `agw` (`/check`, `/review`, `/prose`,
+`/excalidraw-diagram`, `/brain` lookups, `/otel` — mini-only). HyperDX is deliberately *not* registered — `/otel`
+speaks its endpoint through `agw hdx`. Keep project MCPs minimal.

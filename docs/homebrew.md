@@ -1,6 +1,6 @@
 # Homebrew — Brewfile as supply-chain audit trail, and why auto-upgrade stays off
 
-Condensed reference lives in `AGENTS.md` → "Homebrew". This is the full rationale.
+The commands and one-line rules are in §Commands and rules at the end; the rest is the full rationale.
 
 ## Brewfile is the source of truth, not the machine
 
@@ -138,3 +138,28 @@ replaces AppCleaner. `mo uninstall <app>` removes an app with its leftovers;
 only after reading the preview); `mo analyze` is the disk treemap. `stats` stays
 the menu-bar monitor — `mo status` is a TUI, so it is an alternative to opening
 Stats, not a replacement for the bar.
+
+## Commands and rules (moved from the root AGENTS.md)
+
+`Brewfile` (repo root) is the single source of truth — taps + formulae + casks —
+and **its git history is the supply-chain audit trail**. `make setup` installs it
+in one `brew bundle install`; npm-global and uv tools stay Makefile-managed.
+
+| Command | Does |
+|-|-|
+| `make brew-check` | Verify machine == Brewfile (read-only) |
+| `make brew-diff` | List installed-but-undeclared packages (dry-run) |
+| `make brew-dump` | Regenerate from machine — then **review the git diff** |
+| `make brew-upgrade` | Converge pins, upgrade outdated homebrew/core formulae, assert the invariants |
+| `make brew-upgrade-dry` | True no-op preview — touches nothing, does not converge pins |
+
+Adding a package: `brew install X` → `make brew-dump` → review diff → commit.
+Hardening (`config/zsh/brew.zsh`): `HOMEBREW_REQUIRE_TAP_TRUST=1` (setup trusts
+exactly the Brewfile's declared taps *before* bundling, or an untrusted tap aborts
+the whole install), plus `NO_INSECURE_REDIRECT` / `NO_ANALYTICS`. Auto-*update*
+(metadata) stays on.
+
+**Auto-upgrade stays off because of silent config revert, not supply chain**: caddy's DNS module, colima's plist and
+op's TCC grant each revert on an unrelated brew upgrade, invisible until the failure it caused; `make brew-upgrade`
+asserts them. Pins: **`caddy`** (its dependencies too) and **`tailscale`** (`make tailscale-upgrade`, `config/AGENTS.md` §Codex, OpenCode, tailnet); `colima` is unpinned on purpose. herdr-core is not a brew package. Casks and third-party taps are reported,
+never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/homebrew.md`.

@@ -154,4 +154,4 @@ When the probe passes once on the MacBook: drop the FDA-on-Caskroom-path asserti
 
 Rejected: a stable-path copy of `op` (refresh logic after each upgrade, one more grant to keep) and the
 `OP_LOAD_DESKTOP_APP_SETTINGS` switch (undocumented, may cost biometric unlock). `secrets-run` is untouched
-(`AGENTS.md` §Secrets).
+(`scripts/AGENTS.md` §Secrets).
