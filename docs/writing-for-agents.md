@@ -87,3 +87,14 @@ The three marked "our choice" are defaults to test, not findings.
   a session of that size shows what was dropped; Issue 1636 is to read it and set `skillListingBudgetFraction` if anything was.
 - **Whether a nested `AGENTS.md` is reached reliably enough** to hold what "Gotchas" held. The first repo to split is to prove
   it with the marker method in `docs/agents-md.md`.
+
+## Open work
+
+| Issue | Repo | What |
+|-|-|-|
+| 1635 | agent-workflows | `agw schema --index [group…]`: one `command<TAB>summary` line per command |
+| 1636 | dotfiles | the always-on CLI index, the live verb list in eleven skills, the injection and `/context` proofs |
+| 1642 | dotfiles | `context-load`: prints what every session loads, fails `make check` over budget |
+| 1643 | iris | the 128 KB root file split into a 12 KB root, nested files and docs; the first marker proof |
+| 1644 | dotfiles | the 55 KB root file under 12 KB |
+| 1645 | software-factory | hygiene probe `context`: a root `AGENTS.md` over budget becomes a finding, so the other repos follow |
