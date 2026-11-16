@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { HOME_BIN, PEER_SCRIPT, boundedSpawnSync } from "./claude-account.ts"
+import { HOME_BIN, PEER_SCRIPT, VERBS, boundedSpawnSync, helpText, verbHelp } from "./claude-account.ts"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
   mergeSample, newestAge, pick, rank, fableAccount, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, markVerified, readVerified, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
@@ -1691,5 +1691,79 @@ describe("boundedSpawnSync", () => {
     const ok = boundedSpawnSync("/bin/sh", ["-c", "echo hi; echo err >&2; exit 3"], { timeoutMs: 5000 })
     expect(ok).toEqual({ status: 3, stdout: "hi\n", stderr: "err\n" })
     expect(boundedSpawnSync("/nonexistent/claude", ["auth", "status"], { timeoutMs: 5000 }).error?.code).toBe("ENOENT")
+  })
+})
+
+describe("help (--help lists every verb the dispatch accepts and never runs one)", () => {
+  const CLI = join(import.meta.dir, "claude-account.ts")
+  const src = readFileSync(CLI, "utf8")
+  // The verbs `main` dispatches: the `case "<verb>":` labels of its switch.
+  const dispatched = (() => {
+    const body = src.slice(src.indexOf("switch (cmd) {"), src.indexOf("default:", src.indexOf("switch (cmd) {")))
+    return [...body.matchAll(/^ {4}case "([a-z-]+)":/gm)].map((m) => m[1])
+  })()
+
+  test("the dispatch was found (the parse below is not vacuous)", () => {
+    expect(dispatched.length).toBeGreaterThanOrEqual(13)
+  })
+  test("every dispatched verb is in the top-level help and has its own help", () => {
+    const top = helpText()
+    for (const v of dispatched) {
+      expect(top, `verb '${v}' missing from helpText()`).toContain(`claude-account ${v}`)
+      expect(verbHelp(v), `no verb help for '${v}'`).not.toBeNull()
+    }
+  })
+  test("the help lists no verb the dispatch does not accept", () => {
+    expect(VERBS.map((v) => v.name).sort()).toEqual([...dispatched].sort())
+  })
+  test("verbs meant for a job or a hook sit under 'not for agents' with their caller", () => {
+    const [agents, jobs] = helpText().split("Not for agents")
+    for (const v of VERBS) expect(v.caller ? jobs : agents).toContain(`claude-account ${v.name}`)
+    expect(jobs).toContain("statusline")
+  })
+
+  const home = tmp()
+  const bin = join(home, "bin")
+  mkdirSync(bin)
+  const touched = join(home, "touched")
+  for (const b of ["claude", "security", "ssh"]) {
+    writeFileSync(join(bin, b), `#!/bin/sh\ntouch ${touched}\nexit 1\n`)
+    chmodSync(join(bin, b), 0o755)
+  }
+  const cacheDir = join(home, "cache")
+  const picks = join(home, "picks.jsonl")
+  const env = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_REGISTRY: join(home, "no-such-registry.json"), CLAUDE_ACCOUNTS_CACHE_DIR: cacheDir, CLAUDE_ACCOUNTS_PICKS: picks, CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security"), CLAUDE_ACCOUNTS_SSH: join(bin, "ssh"), PATH: `${bin}:${process.env.PATH}` }
+  const cli = (args: string[]) => {
+    const r = Bun.spawnSync(["bun", CLI, ...args], { env, stdout: "pipe", stderr: "pipe" })
+    return { rc: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() }
+  }
+
+  test("--help, -h, help and a bare call print the verbs on stdout, exit 0, with no registry", () => {
+    for (const args of [["--help"], ["-h"], ["help"], []]) {
+      const r = cli(args)
+      expect(r.rc, args.join(" ")).toBe(0)
+      for (const v of dispatched) expect(r.out).toContain(`claude-account ${v}`)
+    }
+    expect(cli(["help", "pick"]).out).toContain("--lane")
+  })
+  test("<verb> --help has no side effect: no cache, no pick log, no Keychain, ssh or claude call", () => {
+    for (const v of dispatched) {
+      const r = cli([v, "--help"])
+      expect(r.rc, v).toBe(0)
+      expect(r.out, v).toContain(`claude-account ${v}`)
+      expect(r.err, v).toBe("")
+    }
+    // the flags a verb takes before --help must not be acted on either
+    expect(cli(["pick", "--lane", "interactive", "--help"]).rc).toBe(0)
+    expect(cli(["record", "--account", "iu", "--s", "5", "--help"]).rc).toBe(0)
+    expect(existsSync(cacheDir)).toBe(false)
+    expect(existsSync(picks)).toBe(false)
+    expect(existsSync(touched)).toBe(false)
+  })
+  test("an unknown verb is still a usage error that names the real verbs", () => {
+    const r = cli(["frobnicate"])
+    expect(r.rc).toBe(2)
+    expect(r.err).toContain("rank")
+    expect(r.err).toContain("health")
   })
 })
