@@ -75,8 +75,15 @@ export default class JkDetails extends View {
   machine(t) {
     const m = props().machine ?? null;
     const hist = (shared("jk.history") ?? {})[m ?? ""] ?? [];
+    // What the bar's chip leaves out: RAM in GiB, and (the mini) the load against the factory's admission ceiling.
+    const last = hist.at(-1);
+    const g = shared("jk.factory.glance");
+    const load = m === "mini" && g && !g.empty ? (g.items ?? []).find((i) => i.key === "load") : null;
+    const facts = [last?.total ? `RAM ${last.used.toFixed(1)} of ${last.total} GiB` : null, load?.value ? `load ${load.value} of the admission ceiling` : null].filter(Boolean);
     return v_flex().gap(12)
-      .child(div().text_size(13).font_bold().text_color(t.foreground).child(m ?? "MacBook"))
+      .child(h_flex().gap(10).items_baseline()
+        .child(div().text_size(13).font_bold().text_color(t.foreground).child(m ?? "MacBook"))
+        .child(div().text_size(11.5).text_color(t.muted).child(facts.join(" · "))))
       .child(this.spark(t, "CPU", hist.map((s) => s.cpu), "%", t.accent))
       .child(this.spark(t, "MEM", hist.map((s) => s.mem), "%", t.ansi5))
       .child(div().text_size(10.5).text_color(t.dim).child(`${hist.length} samples · 5 s apart · newest right`))

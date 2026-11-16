@@ -1,11 +1,12 @@
-// The status bar: CPU and memory of this computer and of every connected machine (the
-// mini), Claude Max usage per account, then branch and the palette hint. It shares the
+// The status bar: one compact chip (CPU %, RAM %) for this computer and for every connected machine
+// (the mini's adds its load as a percent of the factory's admission ceiling), Claude Max usage per
+// account, and the palette hint. It shares the
 // status row with jk-glance's bar (the factory's items, left of this block, with the
 // "needs you" count): what does not fit its width is dropped, least important first (`fit`).
 // Click a machine or the usage for jk-details (history, top processes, quota resets).
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, theme, run, window, exec, hc, shared, setShared, openOverlay } from "herdr";
+import { theme, run, window, exec, hc, shared, setShared, openOverlay } from "herdr";
 
 // macOS: "<cpu %> <used GiB> <total GiB>", one decimal each. Used = active + wired +
 // compressed, the figure Activity Monitor calls memory used; the file cache is left out.
@@ -65,16 +66,18 @@ const STALE_S = 3 * 3600;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// Room each item takes at the bar's 11.8 px text, gap included, rounded up from the app as it draws them (measured
-// 2026-11-16 on the MacBook: MacBook chip 144, mini chip 135, quota with three accounts 236, branch 56, Kuma 60):
-// a drop costs nothing, an overlap does.
-const ROOM = { local: 170, usage: 270, kuma: 80, logins: 140, remote: 160, branch: 100, palette: 110 };
+// Room each item takes at the bar's 11.8 px text, gap included, rounded up. The machine chips are fixed-width cells
+// (icon 13, 28 per figure, 5 between, 6 padding each side, 10 bar gap): 104 without the load figure, 144 with it. The
+// quota is ~6 px a character: icon 12 + 8 gaps + "iu 46 me 2/75 me2 29/45 ∑56" is ~200 for three accounts, 220 kept.
+// Before (measured 2026-11-16 on the MacBook): MacBook chip 144, mini chip 135, quota 236, branch 56, Kuma 60.
+// A drop costs nothing, an overlap does.
+const ROOM = { local: 104, usage: 220, kuma: 80, logins: 140, remote: 144, palette: 110 };
 const BAR_PAD = 24;
 
 // The items that fit `width`, in the order they matter (a missing width, before the first measurement, is everything).
 // `want` is the set of items that exist now; `remotes` how many machines are connected.
 export function fit(width, want, remotes = 0) {
-  const order = ["local", "usage", "kuma", "logins", ...Array.from({ length: remotes }, (_, i) => `remote${i}`), "branch", "palette"];
+  const order = ["local", "usage", "kuma", "logins", ...Array.from({ length: remotes }, (_, i) => `remote${i}`), "palette"];
   const shown = new Set();
   let left = (width ?? Infinity) - BAR_PAD;
   for (const key of order) {
@@ -160,7 +163,7 @@ export default class JkStatus extends View {
         this.pending.delete(key);
         const [cpu, used, total] = (r?.stdout ?? "").trim().split(" ").map(Number);
         const next = Number.isFinite(total) && total > 0 ? { cpu, used, total } : null;
-        if (next) this.history[key] = [...(this.history[key] ?? []), { t: Date.now(), cpu, mem: (used / total) * 100 }].slice(-HISTORY);
+        if (next) this.history[key] = [...(this.history[key] ?? []), { t: Date.now(), cpu, mem: (used / total) * 100, used, total }].slice(-HISTORY);
         if (!same(this.stats[key], next)) { this.stats[key] = next; changed = true; }
       }));
       setShared("jk.history", this.history);
@@ -213,37 +216,55 @@ export default class JkStatus extends View {
     openOverlay(popupSpec({ ...props, anchor, width }, height));
   }
 
+  // The mini's load as a percent of the factory's admission ceiling, from jk-glance's shared model (null when the
+  // factory has no answer, no ceiling is known, or the figure is stale). The tone is the factory's (it folds in swap);
+  // the thresholds are the ones it used: amber from 75 % of the ceiling, red at it.
+  loadFigure() {
+    const g = shared("jk.factory.glance");
+    const item = g && !g.empty && !g.stale ? (g.items ?? []).find((i) => i.key === "load") : null;
+    const v = /^(\d+)%$/.exec(String(item?.value ?? ""));
+    if (!v) return null;
+    const n = Number(v[1]);
+    return { n, level: item.tone === "bad" || n >= 100 ? 2 : item.tone === "warn" || n >= 75 ? 1 : 0 };
+  }
+
+  // One compact chip per machine: icon (the name is the tooltip), CPU %, RAM %, and on the mini the load % of its
+  // ceiling. Fixed-width cells, so the bar doesn't jump. Detail (history, GiB, processes) is the click popup.
   machine(t, name, stats) {
     const hot = (v) => (v >= 85 ? t.blocked : t.muted);
-    const num = (w, text, color) => div().w(w).flex_none().text_right().text_color(color).child(text);
-    return h_flex().id(`stats-${name ?? "local"}`).gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
+    const num = (text, color) => div().w(28).flex_none().text_right().text_color(color).child(text);
+    const load = name === "mini" ? this.loadFigure() : null;
+    const tip = stats
+      ? `${name ?? "MacBook"}: CPU ${pct(stats.cpu)}, RAM ${pct((stats.used / stats.total) * 100)} (${stats.used.toFixed(1)} of ${stats.total} GiB)${load ? `, load ${load.n}% of the admission ceiling` : ""}`
+      : `${name ?? "MacBook"}: no reading yet`;
+    return h_flex().id(`stats-${name ?? "local"}`).gap(5).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
+      .tooltip(tip)
       .on_mouse_move((e) => this.track(`m-${name ?? ""}`, e))
       .on_mouse_up("left", (e) => this.details({ kind: "machine", machine: name }, e, `m-${name ?? ""}`))
       .child(svg(`mods/workspace-chrome/${name ? "server" : "monitor"}.svg`).size(13))
-      .child(div().child(name ?? "MacBook"))
       .when(Boolean(stats), (el) => el
-        .child(num(32, pct(stats.cpu), hot(stats.cpu)))
-        .child(num(48, `${Math.round(stats.used)}/${stats.total}G`, hot((stats.used / stats.total) * 100))))
+        .child(num(pct(stats.cpu), hot(stats.cpu)))
+        .child(num(pct((stats.used / stats.total) * 100), hot((stats.used / stats.total) * 100)))
+        .when(Boolean(load), (el) => el.child(num(`${load.n}%`, [t.muted, t.ansi3, t.blocked][load.level]))))
       .when(!stats, (el) => el.child(div().text_color(t.dim).child("…")));
   }
 
-  // "iu 7/59": 5-hour / 7-day %, as in the Claude statusline. No quota color (a full account is the picker's job, not
-  // an alarm); red only for a failed login, dim when stale.
+  // "iu 46" (no five-hour window: weekly only) or "me 2/75": 5-hour / 7-day %, as in the Claude statusline. No quota
+  // color (a full account is the picker's job, not an alarm); red only for a failed login, dim when stale.
   account(t, a) {
     const bad = !a.auth_ok;
     const stale = (a.age_s ?? 0) > STALE_S;
     const color = bad ? t.blocked : stale ? t.dim : t.muted;
-    const text = bad ? `${a.id} login` : `${a.id} ${a.five_hour ?? "?"}/${a.seven_day ?? "?"}`;
+    const week = a.seven_day ?? "?";
+    const text = bad ? `${a.id} login` : a.five_hour == null ? `${a.id} ${week}` : `${a.id} ${a.five_hour}/${week}`;
     return div().text_color(color).child(text);
   }
 
   render() {
     const t = theme();
-    const space = spaces().find((s) => s.active);
     const want = new Set(["local", "palette"]);
     if (this.usage.length > 0) want.add("usage");
     if (this.issues.length > 0) want.add("logins");
-    if (space?.branch) want.add("branch");
     if (this.kuma) want.add("kuma");
     const shown = fit(this.width, want, this.remotes.length);
     const sep = () => div().w(1).h(12).bg(t.border);
@@ -256,11 +277,11 @@ export default class JkStatus extends View {
       .child(this.machine(t, null, this.stats[""]))
       .children(this.remotes.filter((_, i) => shown.has(`remote${i}`)).map((m) => this.machine(t, m, this.stats[m])))
       .when(shown.has("usage"), (el) => el.child(sep())
-        .child(h_flex().id("usage").gap(10).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
+        .child(h_flex().id("usage").gap(8).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
           .on_mouse_move((e) => this.track("usage", e))
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "usage"))
           .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))
-          .when(pool(this.usage) != null, (el) => el.child(div().text_color(t.muted).child(`∑${pool(this.usage)}%`)))))
+          .when(pool(this.usage) != null, (el) => el.child(div().text_color(t.muted).child(`∑${pool(this.usage)}`)))))
       .when(shown.has("logins"), (el) => {
         const bad = this.issues.some((x) => x.state === "fail");
         const who = [...new Set(this.issues.map((x) => `${x.id}·${x.machine === "macbook" ? "MacBook" : x.machine}`))].join(" ");
@@ -270,7 +291,6 @@ export default class JkStatus extends View {
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "logins"))
           .child(`⚠ ${who}`));
       })
-      .when(shown.has("branch"), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .child(div().flex_1())
       .when(shown.has("kuma"), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).text_color(t.dim)
         .tooltip(this.kuma.down.length ? `Uptime Kuma down: ${this.kuma.down.join(", ")}` : "Uptime Kuma: every active monitor up")
