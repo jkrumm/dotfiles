@@ -1,0 +1,8 @@
+# The closed list behind `ssh iumac report <name>` (scripts/iumac-gate.sh, run on the MacBook).
+# One row per report: <name><TAB><command>. The command is one fixed read-only shell line run with `bash -c`, stderr merged
+# into stdout, 60 s, 64 KB; the verb always exits 0 once it ran and ends the output with `[exit N]`. A row needs no secret, no write
+# and no network beyond what the command itself does. The factory mirrors the names in domains/checkpoints/triage.ts
+# (MACBOOK_REPORTS): add a row in both. A row reaches the MacBook with the next `dotfiles-sync`.
+smb-mounts	mount | grep smbfs
+ntfy-mac-update-check	ntfy-mac update --check
+iumac-gate-log	tail -n 50 ~/Library/Logs/iumac-gate.log
