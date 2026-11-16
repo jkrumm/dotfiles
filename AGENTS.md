@@ -10,7 +10,7 @@ The MacBook (`iumac`) is a thin client: editing, the Herdr app, biometric 1Passw
 
 `docs/architecture.md` is the map of every machine, repo, launchd job, inbound door and secrets flow. Anything that runs on a machine appears there, or `scripts/architecture-check.sh` (run by `make doctor`) exits 1.
 
-Nested `AGENTS.md` files load when you work in their directory: `hooks/`, `scripts/`, `config/`, `config/mini/`, `config/postgres/`, `config/zsh/`, `colima/`, `kuma-door/`, `skills/`.
+A nested `AGENTS.md` loads only when you Read a file in its directory, not on an Edit or a shell command: Read the one for a directory before you change anything in it: `hooks/`, `scripts/`, `config/`, `config/mini/`, `config/postgres/`, `config/zsh/`, `colima/`, `kuma-door/`, `skills/`.
 
 ## Validate
 

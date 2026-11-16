@@ -87,6 +87,10 @@ the same object. Write one trigger per branch that should reach it, the leading 
 carries. Sharpen the wording before inlining the target. Reuse a word the model already holds and repeat it as one token; a
 coined word costs its definition.
 
+A nested `AGENTS.md` loads by itself only when a file in its directory is opened with the Read tool. An Edit, a Write or a
+shell command there loads nothing. So the root file's pointer to it is an instruction that names the work: "Before changing
+anything under `server/`, Read `server/AGENTS.md`."
+
 ## Skills
 
 - A model-invoked skill pays its description on every turn; a user-invoked one (`disable-model-invocation: true`) pays nothing

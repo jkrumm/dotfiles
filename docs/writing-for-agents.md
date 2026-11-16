@@ -100,8 +100,12 @@ The three marked "our choice" are defaults to test, not findings.
   and every one of our 26 skills was listed by name only, while the built-in skills kept theirs. A smaller
   `autoCompactWindow` (300,000) dropped nothing, so the budget follows the model's own window. With
   `skillListingBudgetFraction` at 0.025 descriptions were still dropped (`modern-web-guidance`, `analyze` and `distill` among them); at 0.03 all were kept. The template sets 0.03: the smallest step that keeps all, with about 500 tokens to spare.
-- **Not yet proven: whether a nested `AGENTS.md` is reached reliably enough** to hold what "Gotchas" held. The first repo to split is to prove
-  it with the marker method in `docs/agents-md.md`.
+- **A nested `AGENTS.md` loads on a Read, and only on a Read (2026-11-16).** iris's split was checked with markers: the
+  session reported the root marker at start, `server` and `web` after reading one file in each, and none of the directories it
+  did not touch. A second probe in a scratch repo (Claude Code 2.1.325, one marker per directory) separated the tools: `cat` and
+  `rg` through Bash loaded nothing, an Edit without a prior Read changed the file and loaded nothing, a Write loaded nothing,
+  a Read loaded the directory's file. An agent that inspects with the shell and then edits never sees the nested file, so a
+  root file's pointer has to tell it to Read the nested one first. Not measured: whether a rule with `paths:` behaves the same.
 
 ## Open work
 
