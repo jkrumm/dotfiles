@@ -109,6 +109,11 @@ assert_not_contains "no ESC byte reaches the terminal" $'\033' "$MSG"
 assert_not_contains "no CR reaches the terminal" $'\r' "$MSG"
 assert_eq "the note is one line" "1" "$(printf '%s\n' "$MSG" | wc -l | tr -d ' ')"
 
+reset
+STDIN=$'t7\nmini:t31z\nfirst note'
+run macbook deliver
+assert_eq "a first note prints one JSON line and nothing else (no stderr from a missing rate file)" '{"status":"delivered","target":"t7"}' "$OUT"
+
 echo "== deliver refusals"
 refuse_case() { # <label> <stdin> <reason fragment>
   reset
