@@ -10,7 +10,7 @@ description: Operate the Mac mini remote dev host — connecting from the MacBoo
 `Backend: cache` = the mini, `Backend: op` = the MacBook. The model behind every
 command below (why three layers, why a core restart is survivable, why ssh
 can't reach the keychain) lives in `dotfiles/docs/remote-dev.md` and
-`dotfiles/AGENTS.md` §Machines & remote dev — this file is the command
+`dotfiles/AGENTS.md` §Machines & remote dev and `docs/remote-dev.md` — this file is the command
 reference and the troubleshooting table, not the rationale.
 
 Verbs of rd, live from the CLI (if you see the command and not its output, run it). hc has its own list in the `herdr` skill:
@@ -94,7 +94,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | A file/state pull the other direction | `rsync … iumac:<path>` from the mini (`usage-tracker` stats dirs); `ssh iumac` runs fixed verbs only — anything else MacBook-side (`op`, git, installers) goes through `ask-human ask … --cmd …` (dialog, then Touch ID) |
 
 If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
-`dotfiles/AGENTS.md` → *File shuttle* for the deterministic check.
+`dotfiles/docs/remote-dev.md` §File shuttle for the deterministic check.
 
 ## human-queue — the present-human channel
 

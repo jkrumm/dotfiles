@@ -1,6 +1,6 @@
 # Collie — the phone control surface
 
-Condensed reference lives in `AGENTS.md` → "Collie". This is the full rationale.
+The commands and one-line rules are in §Commands and rules at the end; the rest is the full rationale.
 
 [Collie](https://github.com/AltanS/collie) is a loopback-bound Bun bridge + PWA
 that mirrors the herd on a phone: open a URL, see which agent is blocked, type
@@ -178,3 +178,17 @@ for why it is a separate monitor rather than a composite component. On a fresh m
 Until step 2 the collie push is skipped silently, which is deliberate: a machine
 that never ran `collie-setup` has no collie and must not fail the heartbeat.
 
+## Commands and rules (moved from the root AGENTS.md)
+
+| Command | Does |
+|-|-|
+| `make collie-setup` | Dev-host only: install/refresh the pinned bridge (standalone `com.jkrumm.collie`, `COLLIE_MUX=herdr-core`), start, assert liveness + rebind guard + launchd supervision |
+| `make collie-upgrade` | Resolve the newest tag, print changelog/diffstat/scope, on `y` bump the pin + reinstall + assert + commit |
+| `make collie-status` | Read-only: LaunchAgent, bridge health, rebind guard, serve state |
+| `make collie-teardown` | Boot out the agent, remove the bridge (never `collie-ctl.sh uninstall` — it mutates declared serve state); `make collie-pair` pairs a phone |
+
+**It is remote shell access by design, not "just a web UI"** — one bridge call
+types arbitrary keystrokes into a live pane; treat the URL like a root login.
+The gate is the tailnet ACL (`tag:phone → tag:mac`), not `COLLIE_TRUSTED_USER`;
+third-party and commit-pinned (`COLLIE_REF`). Full rationale (the behavioural
+health check, `COLLIE_SKIP_SERVE=1`, monitoring opt-in): `docs/collie.md`.

@@ -236,3 +236,25 @@ Content hashes over the SSD share, `HDD/fuji` and the personal folders on EXT.
 
 The duplication the many iterations were suspected of is small. The real gap was the opposite:
 data with one copy.
+
+## Rules (moved from the root AGENTS.md)
+
+**Storage** — which disk is the home of which data, every copy and the job that makes it, the mounts per
+Mac: `docs/storage.md`. One home per class; a second copy is made by a job, never by hand.
+
+
+### HomeLab files
+
+**HomeLab files** — agents on the mini use **`hl`** (S3 against the HomeLab
+VersityGW, buckets `ssd` and `hdd` = the same roots as SMB: `hl lsd homelab:hdd/fuji`,
+`hl copy ./x homelab:hdd/inbox/…`, `hl presign <bucket>/<key> [ttl]`) for anything an
+S3 call does; the mini's key (`s3-agent`, in the headless cache) reads and writes both, no delete. For a bulk
+copy to or from the shares the mini has a self-healing SMB mount, `~/HomeLab/SSD` and `~/HomeLab/HDD`, kept by
+`com.jkrumm.smb-keepalive` (`docs/macbook.md` §HomeLab Samba; password from the cache, can delete: use it
+for copies, not as a scratch disk; absent while the HomeLab is down). The MacBook's `hl` resolves `s3-admin`
+(full access) through live `op`. Humans use
+Finder SMB, kept alive by the same agent (`SSD` and `HDD` automount), or
+Cyberduck (manual install — not in the Brewfile); `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
+nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
+**Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not
+permitted". Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.

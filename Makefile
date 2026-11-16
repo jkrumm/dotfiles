@@ -1937,7 +1937,7 @@ status:
 	@[ -d "/Applications/Ghostty.app" ] \
 		&& echo "    ✓ Ghostty.app" \
 		|| echo "    · Ghostty.app [not installed — brew bundle install]"
-	@echo "  Skills ($(shell ls $(DOTFILES_DIR)/skills/ | wc -l | xargs) — global)"
+	@echo "  Skills ($(shell ls -d $(DOTFILES_DIR)/skills/*/ | wc -l | xargs) — global)"
 	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
 		$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/skills/$$name"; \

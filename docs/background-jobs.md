@@ -72,3 +72,14 @@ commit`, which lands in the run record's tail. To exercise the chain, set `"heal
 enough): the job grades `failing` after 3 runs, and two heartbeat ticks later `jobs-grade --report` files a signal on `dotfiles`
 (ntfy topic `alerts`, priority 3, only if the factory is unreachable). Set it back to `true`; recovery sends nothing.
 Never leave it committed `false`.
+
+## Agent logs (moved from the root AGENTS.md)
+
+**Agent logs live in `~/Library/Logs/<name>.{log,err}`, never `/tmp`.** macOS
+deletes `/tmp` files untouched for 3+ days and launchd opens its stdio **once, at
+spawn** — after a sweep a `KeepAlive` agent writes into an unlinked inode and
+nothing reports it. `make log-rotate-setup` bounds them: every 15 min, **copytruncate**
+(a rename follows the inode, exactly like the sweep), 16 MB cap, one `.1`
+generation, safe because launchd's fds are `O_APPEND`. The list in
+`scripts/log-rotate.sh` derives its list from the `com.jkrumm.*`/`com.iu.*` plists' log paths plus
+a short declared `EXTRA` list; it never globs `~/Library/Logs` (which also holds Apple and vendor logs).

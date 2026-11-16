@@ -34,7 +34,7 @@ auth, Keychain API-key caching, MCP registration, `settings.json` merge.
 | `make theme` | Apply the terminal/prompt theme and reload live. |
 
 Machine-specific setup (remote access, battery limiter, backups, etc.) is
-opt-in per target — see `AGENTS.md` for the full list.
+opt-in per target — see `docs/make-targets.md` for the full list.
 
 ## Layout
 

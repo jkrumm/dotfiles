@@ -1,7 +1,7 @@
 # Dev-host health heartbeat and upstream drift (mini only)
 
 The full rationale behind the two monitoring surfaces on the mini. Commands and
-one-line gotchas live in `AGENTS.md`.
+one-line gotchas live in §Heartbeat components below and in `docs/make-targets.md`.
 
 ## The heartbeat
 
@@ -423,7 +423,7 @@ claude fleet growing through the day (about 25 resumed terminals after a boot, w
 
 **The budget**
 
-- **Applied (config):** `COLIMA_MEMORY` on the mini 6 → **4** (`Makefile`; AGENTS.md and `docs/remote-dev.md` follow). It
+- **Applied (config):** `COLIMA_MEMORY` on the mini 6 → **4** (`Makefile`; `colima/AGENTS.md` and `docs/remote-dev.md` follow). It
   lands on the next planned `make colima-restart`; nothing was restarted. Guest peak is unknown (steady 1.5 GB, the heaviest
   container limit is 3 GiB); revert signal is a guest OOM kill (`colima ssh -- dmesg | rg -i oom`) or `available` under
   1 GB: go to 5 GB, not back to 6. Saves ~2 GB host-resident and ~2 GB less to compress.
@@ -546,3 +546,24 @@ conclusions. Both paths are tested rather than asserted (backdate a `first-seen`
 entry → stale, exit 1; point `GIT_BIN` at `/usr/bin/false` → every pin check
 `skipped`, exit 0). The push URL file is optional and its absence silent.
 **Bash 3.2**, same constraint and same reason as the heartbeat.
+
+## Heartbeat components (moved from the root AGENTS.md)
+
+`scripts/devhost-health-check.sh` (`jobrun --timeout 270`) pushes **three** Uptime Kuma monitors.
+`MacMini Dev Host - Push` is **liveness only** (tailnet Running, sshd listening, core socket answering: pushed first, within ~15 s; a slow or hung component is WARN text, never DOWN); the **22 components** below ride a second push (WARN text there, and the optional `MacMini Dev Host Detail - Push` monitor carries their verdict): tailscale,
+core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
+services (6), claude auth, claude version, AGENTS.md flag, obsidian, research chrome (WARN-only, gated on its plist), disk, external volume (WARN-only, silent until `config/external-volume.json` says attached), runaways,
+jobs (WARN-only, `jobs-grade`), registry (`mini-registry.ts check`: FAIL on an unregistered loaded job or a worktree program, WARN on a budget breach), spotlight (FAIL when Spotlight indexing is on again on any volume; `docs/spotlight.md`), quota (in every msg; WARN never pages). The composite and
+the jobs push (no ACL grant runs `tag:homelab → tag:mac`); service health is pulled
+through the Kuma door (`kuma-door/AGENTS.md`). Every watcher in one table: `docs/architecture.md` §Watchers.
+Rationale, knobs, applier: `docs/devhost-health.md`, [[mac-host-monitoring]].
+
+
+## Unattended boot posture (mini only)
+
+Three settings survive a power cut with no human: FileVault **off**, automatic
+login **on**, `pmset -a autorestart 1` (**its absence is silent** — the machine
+never powers back on). Auto-login is also what makes Max auth work headlessly.
+`make lock-at-boot-setup` closes the resulting screen-lock-≠-keychain-lock
+window (`make lock-at-boot-check` reports both plus live state). Full posture,
+the physical-possession trade and `docs/remote-dev.md` own the rationale.

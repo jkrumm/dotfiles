@@ -172,3 +172,10 @@ weatherorb's ADR 0009 and `~/SourceRoot/homelab/docs/s3.md`.
   ~/.Trash …'"`. The mini's sshd session can read them.
 - `docker system df` overstates reclaimable image space (layers are shared). The host only
   gets space back after `fstrim`.
+
+## Rule (moved from the root AGENTS.md)
+
+**Disk** — the mini's budget per owner, the daily `com.jkrumm.disk-sweep` (`make
+disk-sweep-run` runs it once), what moved to the HomeLab and how to
+restore it: `docs/disk.md`. **Agents cannot see `~/.Trash`** (no Full Disk Access; it held
+246 GiB unnoticed) — measure it through `ask-human` over `ssh mini`.

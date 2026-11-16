@@ -1,6 +1,6 @@
 # The look — One Zinc terminal, basalt-ui chrome in the Herdr app
 
-Condensed reference lives in `AGENTS.md` → "The look". This is the full rationale.
+The commands and one-line rules are in §Commands and rules at the end; the rest is the full rationale.
 
 Three programs paint one screen and none of them can see the other two. The Herdr app
 paints its **chrome** (sidebar, bars, popups) from a theme file; the outer terminal
@@ -78,3 +78,11 @@ Font must be **`JetBrainsMono Nerd Font Mono`** — the Mono variant forces
 single-width glyphs so icons can't break alignment. Ghostty validates syntax but
 **silently accepts a bad theme hex**, so `make theme` asserts the theme files exist
 and are non-empty.
+
+## Commands and rules (moved from the root AGENTS.md)
+
+**The look** — `make theme` applies the terminal layer, `make herdr-app-setup` the Herdr app's (run both on each
+machine); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
+on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
+middle-ground zinc (`#1f1f23` / `#f2f2f5`); font is `JetBrainsMono Nerd Font Mono`;
+`make theme` asserts the theme files rather than trusting a config check's exit code.

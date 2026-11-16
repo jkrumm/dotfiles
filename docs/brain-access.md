@@ -90,3 +90,11 @@ launchd's minimal PATH is fixed up inside the script.
 
 **The door goes dark whenever the mini is off.** That is what the MacBook clone
 covers.
+
+## Obsidian on the mini (moved from the root AGENTS.md)
+
+**Obsidian must keep running on the mini** (`make obsidian-autostart` — `open -a
+Obsidian`, deliberately no `KeepAlive`, or it respawns the instant a human quits
+it). `obsidian` (`/opt/homebrew/bin/obsidian` → the app bundle) is a **client of
+the running app** and exits 1 on every subcommand when it is down, so a closed
+Obsidian is a closed agent door for `/brain` and Hermes. `docs/brain-access.md`.

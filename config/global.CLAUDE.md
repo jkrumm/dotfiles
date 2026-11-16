@@ -121,8 +121,8 @@ inline.
 
 The mini is the dev host; the MacBook and iPhone are clients — agents run on the
 mini and outlive the MacBook. Map: `docs/architecture.md`; reach table, traps
-(core restart, never `ssh mini 'claude …'`), human-queue: `AGENTS.md` §Machines &
-remote dev. The Herdr app (MacBook) shows the mini's terminals; `rd` puts work on it.
+(core restart, never `ssh mini 'claude …'`), human-queue: dotfiles `AGENTS.md` §Machines &
+remote dev and `docs/remote-dev.md`. The Herdr app (MacBook) shows the mini's terminals; `rd` puts work on it.
 `/remote-dev` for this stack, `make doctor` when it's broken.
 
 ## Secrets
@@ -157,7 +157,7 @@ Burn-in 2026-11-10: 116 blocked-`sleep` errors in 113 of 308 lead sessions.
 - **`make -C <dir>`**, never a bare `make` in a background shell (it does not start where you are). One check per tree: while a worker runs one, don't start your own.
 - **Kill by pid.** `pkill -f` is refused by a hook; an until-loop on `pgrep -f '<cmd>'` matches itself and never ends.
 - **zsh:** quote a glob or use `rg` — an unmatched `--include=*` stops with "no matches found". Some sessions (factory leads) have no Grep/Glob tool: `rg`/`ls` in Bash.
-- In a factory session `gh pr merge --admin` is refused (except the owner's `ADMIN_MERGE_REPOS`, `AGENTS.md` §review-bypass-guard); fix the red run instead.
+- In a factory session `gh pr merge --admin` is refused (except the owner's `ADMIN_MERGE_REPOS`, `dotfiles/hooks/AGENTS.md` §review-bypass-guard); fix the red run instead.
 
 ## Config hierarchy
 
