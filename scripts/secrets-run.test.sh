@@ -757,6 +757,31 @@ else
   bad "drift: secrets-seed.sh not found next to the shim"
 fi
 
+# === help: every dispatched verb is documented, and help has no side effect ================
+# The verbs main() dispatches: the `case "$verb"` arm labels of its first alternation.
+dispatched=$(sed -n '/^main() {/,/^}/p' "$SHIM" | sed -n 's/^    \([a-z | ]*\))$/\1/p' | tr -d ' ' | tr '|' ' ')
+assert_eq "help: the dispatch was found (not a vacuous parse)" "run read export" "$dispatched"
+help_all_out=$(HOME="$TESTREPO/nohome" "$SHIM" --help 2>/dev/null); help_rc=$?
+assert_eq "help: --help exits 0" "0" "$help_rc"
+for v in $dispatched; do
+  assert_contains "help: dispatched verb '$v' is in --help" "secrets-run $v" "$help_all_out"
+  vh=$(HOME="$TESTREPO/nohome" "$SHIM" "$v" --help 2>&1); vh_rc=$?
+  assert_eq "help: '$v --help' exits 0" "0" "$vh_rc"
+  assert_contains "help: '$v --help' describes the verb on stdout" "secrets-run $v" "$vh"
+  assert_not_contains "help: '$v --help' reads no backend (no error line)" "✗" "$vh"
+done
+assert_eq "help: -h prints the same text" "$help_all_out" "$(HOME="$TESTREPO/nohome" "$SHIM" -h 2>/dev/null)"
+assert_eq "help: a bare call prints it too" "$help_all_out" "$(HOME="$TESTREPO/nohome" "$SHIM" 2>/dev/null)"
+# no side effect: a `run --help` never reaches the command, even with a template and a command after `--`
+HELPMARK="$TESTREPO/help-ran"
+SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" "$SHIM" run --env-file="$TESTREPO/app.env.tpl" --help -- touch "$HELPMARK" >/dev/null 2>&1
+if [[ -e "$HELPMARK" ]]; then bad "help: run --help executed the command"; else ok "help: run --help executes nothing"; fi
+# a --help after `--` belongs to the command
+out=$(run run --env-file="$TESTREPO/app.env.tpl" -- sh -c 'echo "arg=$1"' sh --help 2>/dev/null)
+assert_contains "help: a --help after -- reaches the command" "arg=--help" "$out"
+# an unknown verb is still an error
+if "$SHIM" bogus >/dev/null 2>&1; then bad "help: unknown verb must still fail"; else ok "help: unknown verb still fails"; fi
+
 # --- summary -----------------------------------------------------------------
 echo
 echo "  $pass passed, $fail failed"
