@@ -3215,7 +3215,7 @@ ext-mirror-setup:
 	chmod +x "$(DOTFILES_DIR)/scripts/ext-mirror.py"; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
 	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.ext-mirror" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
-	echo "    ↳ 05:00 daily → homelab ssd, hdd/fuji, hdd/Videos into <volume>/mirror (hl, behind the gate); log: ~/Library/Logs/ext-mirror.log"
+	echo "    ↳ 05:00 daily, retried hourly to 22:00 while skipped or red → homelab ssd, hdd/fuji, hdd/Videos into <volume>/mirror (hl, behind the gate); log: ~/Library/Logs/ext-mirror.log"
 ext-mirror-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.ext-mirror.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -3226,7 +3226,9 @@ ext-mirror-run: ## Run the EXT mirror once now (the nightly job's own run, foreg
 ext-mirror-status: ## Last EXT mirror run: <volume>/mirror/.status.json, then the jobs-grade row
 	@python3 $(DOTFILES_DIR)/scripts/ext-mirror.py --status; \
 	jobs-grade 2>/dev/null | jq -r '.[] | select(.label=="com.jkrumm.ext-mirror") | "grade: \(.grade)"' 2>/dev/null || true
-ext-mirror-test: ## Hermetic suite for ext-mirror.py (real volume gate on a stub diskutil, rclone alias as the HomeLab)
+ext-mirror-test: ## Hermetic suites for ext-mirror.py (real volume gate on a stub diskutil, rclone alias as the HomeLab) and its age check
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/ext-mirror-check.sh $(DOTFILES_DIR)/scripts/ext-mirror-check.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/ext-mirror-check.test.sh
 	@python3 -W ignore $(DOTFILES_DIR)/scripts/ext-mirror.test.py
 
 # The shared headless Chrome for UI checks (scripts/shared-chrome.ts): one Chrome, DevTools on 127.0.0.1:9223,

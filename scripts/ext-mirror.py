@@ -5,11 +5,12 @@ Pulls over S3 (`hl`, the mini's key reads and cannot delete on the HomeLab) behi
 (scripts/lib/volume-gate.sh): the SSD share, HDD/fuji and HDD/Videos into <volume>/mirror/{ssd,fuji,videos}.
 
 Per run:
-  1. The gate: the volume absent, locked or unreadable = one "skipped: volume <state>" line, exit 0, nothing run or created.
+  1. The gate: the volume absent, locked or unreadable = one "skipped: volume <state>" line, exit SKIP_RC (3), nothing run or
+     created. A skip is not a green run: jobrun grades it failing, and the nightly job's hourly triggers (see --if-due) try again.
   2. Less than MIN_FREE_GIB free on the volume -> "refusing to start", exit 1.
-  3. HomeLab unreachable (every source is probed first) -> "skipped: HomeLab not reachable", exit 0, nothing synced.
+  3. HomeLab unreachable (every source is probed first) -> "skipped: HomeLab not reachable", exit 3, nothing synced.
      Another run in progress (a long first copy, a manual run) holds <volume>/mirror/.lock: "skipped: a run is already in
-     progress", exit 0. Two syncs into one mirror would fight over the same files.
+     progress", exit 0 (that run is the work). Two syncs into one mirror would fight over the same files.
   4. `rclone sync` per source, comparing size and modification time. A file changed or deleted at the source is MOVED
      to <volume>/mirror/.deleted/<YYYY-MM-DD>/<source>/ (--backup-dir), never removed; those dated folders are deleted after
      RETAIN_DAYS (30). What restic leaves out (FILTERS below) is left out here too.
@@ -17,14 +18,18 @@ Per run:
      recorded in the status file. A difference makes the run exit 1.
   6. <volume>/mirror/.status.json: started, finished, ok, free_gib, per source files, bytes, transferred, errors, and `check`.
 Exit 1 when any sync or check failed, so `jobs-grade` shows the job failing.
+Each source that synced clean is stamped in STATE_DIR/last-ok.json (outside the volume, so a volume that cannot be read still
+has an age); scripts/ext-mirror-check.sh turns a stamp older than 36 h into a heartbeat FAIL.
 
   ext-mirror.py              one run (through the gate)
+  ext-mirror.py --if-due     what the job runs: skips (exit 0, or 1 while the last run was red) when the last run is recent
+                             enough, so the hourly triggers cost a second once the night's copy is done
   ext-mirror.py --dry-run    rclone --dry-run: nothing written, no status, no prune
   ext-mirror.py --check-now  run the sample check this time whatever its last date
   ext-mirror.py --status     print the status file (through the gate)
 
 Env (tests and manual runs): HL_BIN, RCLONE_BIN, EXT_MIRROR_{MIN_FREE_GIB,RETAIN_DAYS,CHECK_EVERY_DAYS,CHECK_SAMPLE_FILES,
-CHECK_SAMPLE_BYTES,PROBE_TIMEOUT_S,TRANSFERS,GATE}; the gate's own VOLUME_GATE_{CONFIG,DISKUTIL}. Contract: docs/storage.md §EXT mirror.
+CHECK_SAMPLE_BYTES,PROBE_TIMEOUT_S,TRANSFERS,GATE,DUE_AFTER_H,RETRY_FAILED_AFTER_H,STATE_DIR}; the gate's own VOLUME_GATE_{CONFIG,DISKUTIL}. Contract: docs/storage.md §EXT mirror.
 """
 import datetime
 import fcntl
@@ -44,6 +49,7 @@ SECRET_ERRORS = ("could not resolve", "config incomplete", "missing required too
 # AccessDenied or a signature error from a rotated key, is a failure and must not hide behind a skipped night.
 AWAY_ERRORS = ("no such host", "i/o timeout", "connection refused", "no route to host", "network is unreachable",
                "timed out", "connection reset", "request send failed", "tls handshake timeout")
+SKIP_RC = 3  # a skipped run (volume or HomeLab away) exits with this, never 0: nothing ran, so the grade must not be green
 DATE_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # (name under <volume>/mirror, remote). The HomeLab's HDD/fuji holds RAWs and Videos; HDD/Videos is the owner's other big videos.
@@ -103,8 +109,12 @@ class Cfg:
         self.sample_files = int(e("EXT_MIRROR_CHECK_SAMPLE_FILES", "100"))
         self.sample_bytes = int(e("EXT_MIRROR_CHECK_SAMPLE_BYTES", str(1 * GIB)))
         self.probe_timeout = int(e("EXT_MIRROR_PROBE_TIMEOUT_S", "120"))
-        # The path to the HomeLab gives one stream 1-2 MiB/s (measured 2026-11-15, 92 ms), so throughput comes from streams.
+        # The path to the HomeLab carries about 10 MiB/s over 16 streams (docs/storage.md §EXT mirror); streams keep small files from queueing.
         self.transfers = int(e("EXT_MIRROR_TRANSFERS", "16"))
+        # --if-due: a clean run is due again after 18 h (the 05:00 trigger of the next night), a red one after 6 h.
+        self.due_after_h = float(e("EXT_MIRROR_DUE_AFTER_H", "18"))
+        self.retry_failed_after_h = float(e("EXT_MIRROR_RETRY_FAILED_AFTER_H", "6"))
+        self.state_dir = e("EXT_MIRROR_STATE_DIR", os.path.join(os.path.expanduser("~"), ".local", "state", "ext-mirror"))
 
 
 def now_utc():
@@ -273,6 +283,31 @@ def check_source(cfg, flt, mirror, name, remote, seed, tmpdir):
     return res
 
 
+def run_due(cfg, status):
+    """(due, why). No finished run on record, or the last one older than its threshold: due."""
+    try:
+        when = datetime.datetime.strptime(status.get("finished", ""), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except (ValueError, TypeError):
+        return True, "no finished run on record"
+    age_h = (datetime.datetime.now(datetime.timezone.utc) - when).total_seconds() / 3600
+    limit = cfg.due_after_h if status.get("ok") else cfg.retry_failed_after_h
+    if age_h >= limit:
+        return True, f"the last run finished {age_h:.1f} h ago"
+    return False, f"the last run{'' if status.get('ok') else ' (FAILED)'} finished {age_h:.1f} h ago, due after {limit:g} h"
+
+
+def stamp_ok_sources(cfg, results, finished, keep_newer=False):
+    """Remember, outside the volume, when each source last synced clean. A source that failed keeps its older stamp;
+    keep_newer: never move a stamp back (stamping from an old status file)."""
+    path = os.path.join(cfg.state_dir, "last-ok.json")
+    stamps = read_status(path)
+    for name, r in results.items():
+        if r.get("ok") and not (keep_newer and stamps.get(name, "") >= finished):
+            stamps[name] = finished
+    os.makedirs(cfg.state_dir, exist_ok=True)
+    write_json(path, stamps)
+
+
 def check_due(cfg, status, force):
     if force or not (status.get("check") or {}).get("ok", True):
         return True  # a failed check is tried again the next night, so one repaired file does not hold the job red for a month
@@ -307,6 +342,17 @@ def run_inside_gate(cfg, args):
         print(json.dumps(read_status(status_path), indent=1, sort_keys=True))
         return 0
 
+    if "--if-due" in args and not dry:
+        due, why = run_due(cfg, read_status(status_path))
+        if not due:
+            prev = read_status(status_path)
+            red = not prev.get("ok")
+            if prev.get("finished"):  # a run made before the stamps existed (or with the state lost) still counts
+                stamp_ok_sources(cfg, prev.get("sources", {}), prev["finished"], keep_newer=True)
+            log(f"not due: {why}" + ("; the mirror is red until a run passes" if red else ""))
+            return 1 if red else 0
+        log(f"due: {why}")
+
     free = shutil.disk_usage(root).free / GIB
     if free < cfg.min_free_gib:
         log(f"FAILED: refusing to start: {free:.0f} GiB free on the volume, the floor is {cfg.min_free_gib:.0f} GiB")
@@ -324,7 +370,7 @@ def run_inside_gate(cfg, args):
             return 1
         if state == "away":
             log(f"skipped: HomeLab not reachable ({detail})")
-            return 0
+            return SKIP_RC
         listed[name] = detail
 
     os.makedirs(mirror, exist_ok=True)
@@ -382,7 +428,9 @@ def run_inside_gate(cfg, args):
 
     ok = all(r["ok"] for r in results.values()) and (check is None or check.get("ok", True))
     if not dry:
-        status = {"started": started, "finished": now_utc(), "ok": ok, "free_gib": round(shutil.disk_usage(root).free / GIB, 1),
+        finished = now_utc()
+        stamp_ok_sources(cfg, results, finished)
+        status = {"started": started, "finished": finished, "ok": ok, "free_gib": round(shutil.disk_usage(root).free / GIB, 1),
                   "sources": {n: {k: v for k, v in r.items() if k != "ok"} | {"ok": r["ok"]} for n, r in results.items()}}
         if check is not None:
             status["check"] = check
@@ -396,8 +444,8 @@ def main(argv):
     args = argv[1:]
     if "--inner" in args:
         return run_inside_gate(cfg, [a for a in args if a != "--inner"])
-    # Not inside the gate yet: hand over to it. The gate sets VOLUME_ROOT, or prints its one skipped line and exits 0.
-    os.execv(cfg.gate, [cfg.gate, "run", "--", sys.executable, os.path.abspath(__file__), "--inner", *args])
+    # Not inside the gate yet: hand over to it. The gate sets VOLUME_ROOT, or prints its one skipped line and exits SKIP_RC.
+    os.execv(cfg.gate, [cfg.gate, "run", "--skip-rc", str(SKIP_RC), "--", sys.executable, os.path.abspath(__file__), "--inner", *args])
 
 
 if __name__ == "__main__":
