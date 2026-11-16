@@ -22,7 +22,7 @@ const KILL_GRACE_MS = Number(process.env.JOBRUN_KILL_GRACE_MS) || 10_000
 const MAX_FAIL_TIMES = 100
 const DRAIN_MS = Number(process.env.JOBRUN_DRAIN_MS) || 2_000
 
-/** The options the parser accepts: the parser reads its allowed set from here, so help and parser cannot drift. */
+/** The options the parser accepts and the help lists. The allowed set is built from here; reading a new option's value still needs an `opt(...)` line in parseArgs. */
 export const OPTIONS: { flag: string; arg: string; summary: string }[] = [
   { flag: "--owner", arg: "<repo>", summary: "required: the repo that owns the job (its HEAD sha is recorded in the state file)" },
   { flag: "--every", arg: "<seconds>", summary: "the schedule interval, recorded for jobs-grade (overdue after 3x it, at least 30 min; daily and slower: interval + 2 h)" },

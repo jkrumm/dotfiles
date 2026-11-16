@@ -95,6 +95,7 @@ describe("help", () => {
     expect(existsSync(join(dir, "log"))).toBe(false)
     expect(await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)).toBe(false)
     expect(run("frobnicate").exitCode).toBe(2)
+    expect(run("frobnicate", "--help").exitCode).toBe(2) // help is for a verb that exists
     rmSync(dir, { recursive: true, force: true })
   })
 })
