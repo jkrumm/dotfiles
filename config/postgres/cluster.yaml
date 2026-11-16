@@ -29,8 +29,9 @@ server:
     unix_socket_directories: /tmp, ${HOME}/.local/state/athena/pgsock
     unix_socket_permissions: "0700"
   settings:
-    # About 60 clients today; the sum of the role limits plus weatherorb's
-    # pools fits under 100 with the reserved superuser slots.
+    # About 60 clients today; the live counts plus weatherorb's pools fit under
+    # 100 with the reserved superuser slots. The role limits are ceilings for a
+    # leaking pool, not reservations: their sum (105) is above it on purpose.
     max_connections: "100"
     superuser_reserved_connections: "3"
     # 32 GiB host shared with every agent: 512 MB of buffers while weatherorb's
