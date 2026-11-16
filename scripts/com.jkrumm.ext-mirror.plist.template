@@ -18,7 +18,7 @@
     <string>__DOTFILES_DIR__/scripts/ext-mirror.py</string>
     <string>--if-due</string>
   </array>
-  <!-- --timeout 43200: the path to the HomeLab carries about 10 MiB/s (docs/storage.md §EXT mirror), so a first or catch-up run takes hours; a wedged transfer must not hold the job open for ever
+  <!-- --timeout 43200: the path to the HomeLab carries about 9 MiB/s (docs/storage.md §EXT mirror), so a first or catch-up run takes hours; a wedged transfer must not hold the job open for ever
        (launchd would skip every later night). A held lock skips a run that overlaps a long one. -->
   <!-- jobrun is a bun script and launchd's PATH is minimal: bun's dir, ~/.local/bin (hl, secrets-run) and Homebrew
        (python3, rclone) must be on it. -->
