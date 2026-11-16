@@ -722,6 +722,7 @@ if [[ -n "${FX_AUTH:-}" && -n "${FACTORY_TOKEN:-}" && "$2" != request ]]; then e
 sub="$2"; shift 2
 case "$sub" in
   request)
+    if [[ -n "${FX_REFUSE:-}" ]]; then echo '{"error":"unprocessable","message":"Nothing was raised: the command runs wholly on the mini."}' >&2; exit 1; fi
     text="" cmd="" key="" check="" expires="" where=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
@@ -767,16 +768,16 @@ STUB
     assert_contains "post: --expires as an ISO time" "--expires 20" "$call"
     assert_contains "post: --format json" "--format json" "$call"
     assert_eq "post: no queue file" "0" "$(queued_count)"
-    eid2="$(bash "$AH" ask "plain question" 2>/dev/null)"
+    eid2="$(bash "$AH" ask "plain question" --need hands 2>/dev/null)"
     call="$(grep 'errand request' "$FXDIR/calls" | tail -1)"
     assert_not_contains "post: no --where without a cmd" "--where" "$call"
     assert_not_contains "post: no --expires by default (the factory decides)" "--expires" "$call"
-    bash "$AH" ask "never expires" --expires never >/dev/null 2>&1
+    bash "$AH" ask "never expires" --need hands --expires never >/dev/null 2>&1
     assert_contains "post: --expires never passes through" "--expires never" "$(grep 'errand request' "$FXDIR/calls" | tail -1)"
-    bash "$AH" ask "bad" --expires soon >/dev/null 2>&1; assert_eq "post: a bad --expires is refused before anything is posted" "1" "$?"
+    bash "$AH" ask "bad" --need hands --expires soon >/dev/null 2>&1; assert_eq "post: a bad --expires is refused before anything is posted" "1" "$?"
 
     # 2. A newer request with the same key replaces (the factory does it; the same words are one call).
-    eid3="$(bash "$AH" ask "install the sudoers rule again" --key sudoers 2>/dev/null)"
+    eid3="$(bash "$AH" ask "install the sudoers rule again" --need hands --key sudoers 2>/dev/null)"
     assert_eq "key: only the newer request is open" "1" "$(jq -s --arg k sudoers '[.[] | select(.requestKey == $k)] | length' "$FXDIR/open.jsonl")"
 
     # 3. List and status read the factory and the queue file.
@@ -820,7 +821,7 @@ STUB
     assert_contains "resolve errand superseded: not_needed" "errand done $eid3 --note resolved as superseded by ask-human resolve --format json --outcome not_needed" "$(cat "$FXDIR/calls")"
 
     # 5. Clear closes the open request with that key, not_needed, and says how many.
-    bash "$AH" ask "drift is red" --key drift-1 >/dev/null 2>&1
+    bash "$AH" ask "drift is red" --need hands --key drift-1 >/dev/null 2>&1
     : > "$FXDIR/calls"
     out="$(bash "$AH" clear drift-1)"
     assert_eq "clear: counts the factory request" "cleared 1" "$out"
@@ -861,6 +862,42 @@ STUB
     [[ "$sid" =~ ^[0-9]{8}T ]] && ok "lead request: stays a queue file" || bad "lead request: stays a queue file" "got [$sid]"
     bash "$AH" reap >/dev/null 2>&1
     assert_eq "lead request: not replayed" "no" "$([[ -e "$EQ/$sid.res" ]] && echo yes || echo no)"
+
+    # --need: sent as --need, required without --cmd, optional with one, validated.
+    : > "$FXDIR/calls"
+    bash "$AH" ask "log in to the portal" --need hands >/dev/null 2>&1
+    assert_contains "need: passed to the factory" "--need hands" "$(grep 'errand request' "$FXDIR/calls" | tail -1)"
+    : > "$FXDIR/calls"
+    nq="$(queued_count)"
+    bash "$AH" ask "no cmd, no need" >/dev/null 2>"$TMP/need.err"; rc=$?
+    assert_eq "need: required without --cmd" "1" "$rc"
+    assert_contains "need: the error names the flag" "--need secret|hands|place" "$(cat "$TMP/need.err")"
+    assert_eq "need: nothing posted without it" "0" "$(grep -c 'errand request' "$FXDIR/calls")"
+    assert_eq "need: nothing queued without it" "$nq" "$(queued_count)"
+    bash "$AH" ask "with cmd" --cmd "echo hi" >/dev/null 2>&1; assert_eq "need: optional with --cmd" "0" "$?"
+    assert_not_contains "need: not sent when not given" "--need" "$(grep 'errand request' "$FXDIR/calls" | tail -1)"
+    bash "$AH" ask "bad need" --need soon >/dev/null 2>&1; assert_eq "need: a bad value is refused" "1" "$?"
+
+    # A refusal of the factory ("Nothing was raised") is shown, exits non-zero and queues nothing.
+    before_q="$(queued_count)"; before_o="$(open_count)"
+    FX_REFUSE=1 bash "$AH" ask "run it on the mini" --cmd "ssh mini true" >"$TMP/ref.out" 2>"$TMP/ref.err"; rc=$?
+    assert_eq "refusal: exits 1" "1" "$rc"
+    assert_contains "refusal: the factory's reason is shown" "Nothing was raised: the command runs wholly on the mini." "$(cat "$TMP/ref.err")"
+    assert_eq "refusal: prints no id" "" "$(cat "$TMP/ref.out")"
+    assert_eq "refusal: nothing queued locally" "$before_q" "$(queued_count)"
+    assert_eq "refusal: nothing open at the factory" "$before_o" "$(open_count)"
+
+    # Another failure (not a refusal) still falls back to the queue file.
+    rid="$(FX_DOWN=1 bash "$AH" ask "needs hands later" --need hands 2>/dev/null)"
+    assert_eq "need: kept in the queue file for the replay" "hands" "$(jq -r .need "$EQ/$rid.req")"
+    : > "$FXDIR/calls"; bash "$AH" reap >/dev/null 2>&1
+    assert_contains "need: the replay sends it" "--need hands" "$(grep 'errand request' "$FXDIR/calls" | tail -1)"
+
+    # A queued request the factory refuses on replay is written off, not asked again on every call.
+    rid="$(FX_DOWN=1 bash "$AH" ask "refused later" --need hands 2>/dev/null)"
+    FX_REFUSE=1 bash "$AH" reap >/dev/null 2>&1
+    assert_eq "refusal on replay: written off" "denied" "$(jq -r .status "$EQ/$rid.res")"
+    assert_contains "refusal on replay: note" "refused by the factory" "$(jq -r .resolvedNote "$EQ/$rid.res")"
 
     # Errands off: the queue file only, the factory never called.
     : > "$FXDIR/calls"

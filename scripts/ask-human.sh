@@ -97,7 +97,7 @@ factory_enabled() {
   [[ "$ERRANDS_ON" != 0 ]] && command -v jq >/dev/null 2>&1 && command -v "$FACTORY_CMD" >/dev/null 2>&1
 }
 
-factory_run() { ${FACTORY_TO[@]+"${FACTORY_TO[@]}"} "$FACTORY_CMD" "$@" </dev/null 2>/dev/null; }
+factory_run() { ${FACTORY_TO[@]+"${FACTORY_TO[@]}"} "$FACTORY_CMD" "$@" </dev/null 2>>"${FACTORY_ERR_FILE:-/dev/null}"; }
 
 # factory <args>: stdout and exit code pass through. A session's agent token may
 # not read or close an Errand (exit 3, auth): the owner's click is what closes it
@@ -119,24 +119,43 @@ factory_call() {
 iso_in() { date -u -r "$(( $(date +%s) + $1 ))" +%Y-%m-%dT%H:%M:%SZ; }
 
 # Posts one request as an Errand; prints its id on stdout. $1 text, $2 cmd, $3 key,
-# $4 check, $5 expires (ISO, `never` or empty = the factory's rule). Non-zero = fall back.
+# $4 check, $5 expires (ISO, `never` or empty = the factory's rule), $6 need
+# (secret|hands|place or empty). Non-zero = fall back to the queue file, except 8:
+# the factory refused the request ("Nothing was raised", HTTP 422) and printed why on
+# stderr; queueing it would only hide the answer.
 post_errand() {
-  local text="$1" cmd="$2" key="$3" check="$4" expires="$5"
+  local text="$1" cmd="$2" key="$3" check="$4" expires="$5" need="${6:-}"
   local args=(errand request --source ask-human --text "$text")
   [[ -n "$cmd" ]] && args+=(--command "$cmd" --where macbook)
   [[ -n "$key" ]] && args+=(--key "$key")
   [[ -n "$check" ]] && args+=(--check "$check")
   [[ -n "$expires" ]] && args+=(--expires "$expires")
+  [[ -n "$need" ]] && args+=(--need "$need")
   args+=(--format json)
-  local out rc=0 id
-  out="$(factory_call "${args[@]}")" || rc=$?
+  local out rc=0 id errf reason
+  errf="$(mktemp "${TMPDIR:-/tmp}/ask-human-err.XXXXXX")" || errf=/dev/null
+  out="$(FACTORY_ERR_FILE="$errf" factory_call "${args[@]}")" || rc=$?
   if (( rc != 0 )); then
+    reason="$(cat "$errf" 2>/dev/null || true)"
+    [[ "$errf" == /dev/null ]] || rm -f "$errf"
+    if [[ "$reason" == *"Nothing was raised"* ]]; then
+      refusal_text "$reason" >&2
+      return 8
+    fi
     (( rc == 7 )) || note "factory errand request failed (rc $rc) — queued locally, a later ask/list/reap posts it"
     return "$rc"
   fi
+  [[ "$errf" == /dev/null ]] || rm -f "$errf"
   id="$(jq -r '.errand.id // empty' <<<"$out" 2>/dev/null)" || id=""
   [[ "$id" =~ $ERRAND_ID_RE ]] || { note "factory answered without an errand id — queued locally"; return 1; }
   printf '%s\n' "$id"
+}
+
+# The factory's refusal as plain text: the `message` (or `error`) of its JSON error line, else the raw text.
+refusal_text() {
+  local raw="$1" msg=""
+  msg="$(jq -r 'select(type == "object") | (.message // .error // empty) | if type == "string" then . else tojson end' <<<"$raw" 2>/dev/null | head -n 1)" || msg=""
+  printf 'ask-human: the factory refused the request: %s\n' "${msg:-$raw}"
 }
 
 # The open ask-human Errands as one JSON array on stdout; `all` as $1 keeps every
@@ -175,7 +194,7 @@ errand_answer() {
 replay_pending() {
   factory_enabled || return 0
   [[ -d "$QUEUE_DIR" ]] || return 0
-  local f id json session text cmd key expires check eid
+  local f id json session text cmd key expires check need eid prc
   for f in "$QUEUE_DIR"/*.req; do
     [[ -e "$f" ]] || continue
     id="$(basename "$f" .req)"
@@ -188,17 +207,26 @@ replay_pending() {
     key="$(json_field "$json" key 2>/dev/null || true)"
     expires="$(json_field "$json" expires 2>/dev/null || true)"
     check="$(json_field "$json" check 2>/dev/null || true)"
+    need="$(json_field "$json" need 2>/dev/null || true)"
     [[ -n "$expires" ]] || expires=never
-    eid="$(post_errand "$text" "$cmd" "$key" "$check" "$expires" 2>/dev/null)" || return 0
+    prc=0
+    eid="$(post_errand "$text" "$cmd" "$key" "$check" "$expires" "$need" 2>/dev/null)" || prc=$?
+    # The factory refused it for good: write it off here instead of asking it again on every call.
+    if (( prc == 8 )); then
+      resolve_one "$id" denied "refused by the factory" 1 || true
+      continue
+    fi
+    (( prc == 0 )) || return 0
     resolve_one "$id" superseded "moved to the factory as $eid" 1 || true
   done
   return 0
 }
 
 # One request object, the shape of a <id>.req file.
-# $1 id $2 text $3 cmd $4 key $5 expires_json $6 session_json $7 check
+# $1 id $2 text $3 cmd $4 key $5 expires_json $6 session_json $7 check $8 need
 req_json() {
-  local cmd_json="null" key_json="null" check_json="null"
+  local cmd_json="null" key_json="null" check_json="null" need_json="null"
+  [[ -n "${8:-}" ]] && need_json="$(json_escape "$8")"
   [[ -n "$3" ]] && cmd_json="$(json_escape "$3")"
   [[ -n "$4" ]] && key_json="$(json_escape "$4")"
   [[ -n "$7" ]] && check_json="$(json_escape "$7")"
@@ -211,6 +239,7 @@ req_json() {
   printf '"cmd":%s,' "$cmd_json"
   printf '"key":%s,' "$key_json"
   printf '"check":%s,' "$check_json"
+  printf '"need":%s,' "$need_json"
   printf '"expires":%s,' "$5"
   printf '"session":%s' "$6"
   printf '}\n'
@@ -300,12 +329,18 @@ poll_for_result() {
 # MacBook unreachable, dialog unanswered — or pushing was turned off; a request
 # the owner clicked through never reaches ntfy. --push is still accepted.
 cmd_ask() {
-  [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command>] [--key <key>] [--expires <dur|never>] [--check <sh>] [--wait <seconds>] [--no-push]"
+  [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command> | --need secret|hands|place] [--key <key>] [--expires <dur|never>] [--check <sh>] [--wait <seconds>] [--no-push]"
   local text="$1"; shift
-  local cmd="" wait_seconds=0 push_after="$PUSH_DEFAULT" key="" expires_arg="" check=""
+  local cmd="" wait_seconds=0 push_after="$PUSH_DEFAULT" key="" expires_arg="" check="" need=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --need)
+        [[ $# -ge 2 ]] || die "--need requires a value"
+        [[ "$2" =~ ^(secret|hands|place)$ ]] || die "invalid --need: $2 (allowed: secret, hands, place)"
+        need="$2"
+        shift 2
+        ;;
       --cmd)
         [[ $# -ge 2 ]] || die "--cmd requires a value"
         cmd="$2"
@@ -360,6 +395,12 @@ cmd_ask() {
     session="$FACTORY_SESSION"
   fi
 
+  # The factory refuses a request with no command whose words name no secret and no physical step unless it states
+  # its need: say so here, before anything is written.
+  if [[ -z "$cmd" && -z "$need" && -z "$session" ]] && factory_enabled; then
+    die "a request with no --cmd needs --need secret|hands|place (secret: a 1Password or biometric step; hands: a device, portal or click; place: a command on the MacBook)"
+  fi
+
   # Validate the duration before anything is written.
   # An explicit --expires is also what the factory is given; with none it applies
   # its own rule (7 days, or until the --check says otherwise).
@@ -387,13 +428,19 @@ cmd_ask() {
 
   # The factory first. A lead's request stays a queue file: its answer reaches the
   # lead as a `factory session note`, which an Errand with no Issue cannot send.
-  local errand=""
-  if [[ -z "$session" ]] && errand="$(post_errand "$text" "$cmd" "$key" "$check" "$factory_expires")"; then
+  local errand="" prc=1
+  if [[ -z "$session" ]]; then
+    prc=0
+    errand="$(post_errand "$text" "$cmd" "$key" "$check" "$factory_expires" "$need")" || prc=$?
+  fi
+  # 8: the factory refused the request and printed why; nothing was raised and nothing is queued.
+  (( prc == 8 )) && return 1
+  if (( prc == 0 )); then
     printf '%s\n' "$errand"
     if (( push_after )); then
       local fx_tmp frc=0
       fx_tmp="$(mktemp "$QUEUE_DIR/.${id}.fx.XXXXXX")"
-      req_json "$id" "$text" "$cmd" "$key" "$expires_json" "$session_json" "$check" > "$fx_tmp"
+      req_json "$id" "$text" "$cmd" "$key" "$expires_json" "$session_json" "$check" "$need" > "$fx_tmp"
       chmod 600 "$fx_tmp"
       push_request "$id" "$fx_tmp" "$errand" || frc=$?
       rm -f "$fx_tmp"
@@ -411,7 +458,7 @@ cmd_ask() {
   # world-readable, even for an instant.
   local req_file="$QUEUE_DIR/$id.req" tmp_file
   tmp_file="$(mktemp "$QUEUE_DIR/.${id}.req.XXXXXX")"
-  req_json "$id" "$text" "$cmd" "$key" "$expires_json" "$session_json" "$check" > "$tmp_file"
+  req_json "$id" "$text" "$cmd" "$key" "$expires_json" "$session_json" "$check" "$need" > "$tmp_file"
   chmod 600 "$tmp_file"
   mv "$tmp_file" "$req_file"
 
@@ -978,9 +1025,18 @@ the factory by a later ask/list/reap once it answers. list/status/resolve/clear/
 push take an errand id as well as a queue id. HUMAN_QUEUE_ERRANDS=0 = queue file only.
 
 Usage:
-  ask-human.sh ask <text> [--cmd <command>] [--key <key>] [--expires <dur|never>]
-                          [--check <sh>] [--wait <seconds>] [--no-push]
+  ask-human.sh ask <text> [--cmd <command>] [--need secret|hands|place] [--key <key>]
+                          [--expires <dur|never>] [--check <sh>] [--wait <seconds>] [--no-push]
                               Enqueue a request. Prints the request id.
+                              --need says why a person is needed and is required
+                              when there is no --cmd (the factory reads the shape
+                              of a --cmd itself): secret = a 1Password or
+                              biometric step, hands = a device, portal or click,
+                              place = a command on the MacBook. A request the
+                              factory refuses (it runs wholly on the mini or over
+                              keyless ssh, a bot check, an ask turned back in the
+                              last 3 days) prints the factory's reason, exits 1
+                              and queues nothing.
                               --key replaces: older pending requests with the same
                               key are resolved as superseded. --expires <dur>
                               (seconds, Ns/Nm/Nh/Nd, never) sets when it is
