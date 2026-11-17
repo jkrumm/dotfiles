@@ -161,6 +161,8 @@ and the closed, merged Issue 1934 another 26 GB; `git worktree remove --force` o
 
 Issue 2081 (2026-11-17, same monitor, 94% with 63 GiB free) was the fifth, after 1773's reap-on-close had landed (shutterflow `2329fa63`, 16:59Z): every closed Issue's `target/` was already gone, and the one live lead (1925) held 81 GB of `target/debug` by `du` alone. Reap-on-close does not bound a live lead's growth. `make disk-sweep-run` (Colima `fstrim` +18 GiB, npm and bun caches +7 GiB, +24.8 GiB in all) took it to 91%, 87 GiB free and the monitor recovered on the next run; nothing of a live lead's was touched. Order for a repeat: `du -xsh ~/SourceRoot/*/.claude/worktrees/*/target` (reap only closed, merged Issues'), then `make disk-sweep-run`. The live-growth bound is a signal on shutterflow.
 
+Issue 2163 (2026-11-17 23:00Z, 95% with 48 GiB free) was the sixth. Live shutterflow leads 1892 and 1893 held 28 and 26 GB of `target/`, and closed Issue 1889 (PR 57 closed unmerged, Issue done) another 14 GB; its `target/` went, the worktree stayed. `make disk-sweep-run` freed about nothing: Colima `fstrim` +6 MB, and the uv prune was skipped because another uv process held its lock (pid 69270). Removing `~/Library/Caches/Mozilla.sccache` (9.3 GB, regenerable) together with 1889's `target/` brought it to 93%, 68 GiB free. The next regenerable cuts are sccache (9 GB) and `~/.cache/uv` (8.6 GB); the sweep's uv step is skipped whenever a uv process holds the lock, so the sweep alone will not reach them. The structural fix is still shutterflow's issue 1773 (reap on close or a shared `CARGO_TARGET_DIR`).
+
 ## What goes to the external SSD
 
 **Class `external` in the budget table above:** a row for a volume that is not part of the Data volume. It counts nothing against the
