@@ -25,7 +25,7 @@
  *     (`repos/o/r/$S`), unless its literal text names an unrelated resource
  *     (`…/issues/$N/comments`) or a single `pulls/$N` id slot;
  *   - the GitHub config sync (`make github-config`, `scripts/github-config.sh`) in a
- *     command that names `FACTORY_SESSION` or `TIGHTEN_ONLY`, or clears the environment (`env -i`): the script writes
+ *     command that names `FACTORY_SESSION` or `TIGHTEN_ONLY` or edits the environment around it (`env`, `unset`, `export`, `exec`, `eval`, `source`): the script writes
  *     rulesets with `gh api` out of the hook's sight, so what keeps a lead from
  *     loosening protection through it is its own tighten-only mode, which a factory
  *     session cannot leave unless the marker is cleared. The sync itself is allowed.
@@ -64,7 +64,7 @@ const OWNER =
 const SYNC_TAMPERING =
   "`make github-config` runs tighten-only in a factory session: it applies only what adds or strengthens protection " +
   "(a repo joins config/pr-required-repos.json, a ruleset or rule is added) and skips, with exit 3, a repo it would loosen. " +
-  "A command that names FACTORY_SESSION or TIGHTEN_ONLY would turn that off. " +
+  "A sync command that names FACTORY_SESSION or TIGHTEN_ONLY, or wraps itself in env, unset, export, exec, eval or source, could turn that off. " +
   "A loosening (a repo leaves the list, a rule, approval or check is dropped, enforcement is lowered) is the owner's: " +
   "raise an Errand (`factory errand raise … --need hands`) for his `make github-config`.";
 
@@ -262,10 +262,18 @@ function apiViolation(args: string[]): string | null {
 // ── The GitHub config sync ───────────────────────────────────────────────────
 
 const SYNC_SCRIPT = /(?:^|\/)github-config\.sh$/;
-/** The variables that make the sync tighten-only, or `env -i` / `env -` which clears them. */
-const SYNC_MARKER = /\b(?:FACTORY_SESSION|TIGHTEN_ONLY)\b|\benv\s+(?:\S+\s+)*?(?:-i|--ignore-environment|-)(?:\s|$)/;
+/**
+ * The variables that make the sync tighten-only, and every way a shell command can
+ * drop or change them: `env` (any flag: `-u`, `-uNAME`, `-i`, `-S`), `unset`, `export`,
+ * `declare`, `exec`, `eval`, `source` and a leading `.`. A sync command is a plain
+ * `make github-config` or script call; anything that edits the environment around it
+ * is denied rather than parsed, since the marker can be spelled in too many ways
+ * (`FACTORY''_SESSION`) to match by name.
+ */
+const SYNC_MARKER =
+  /\b(?:FACTORY_SESSION|TIGHTEN_ONLY)\b|\b(?:env|unset|export|declare|typeset|exec|eval|source)\b|(?:^|[;&|(]\s*)\.\s+\S/;
 /** `bash scripts/github-config.sh`: the tokenizer sees a shell without `-c` as nothing to look into. */
-const SYNC_VIA_SHELL = /(?:^|[;&|\n(`]|\$\()\s*(?:\S+\s+)*?(?:bash|sh|zsh|dash|ksh)\s+(?:-\S+\s+)*\S*github-config\.sh\b/;
+const SYNC_VIA_SHELL = /(?:^|[;&|\n(`]|\$\()\s*(?:\S+\s+)*?(?:bash|sh|zsh|dash|ksh|source|\.)\s+(?:-\S+\s+)*\S*github-config\.sh\b/;
 
 /** `make … github-config[-tighten]`, `scripts/github-config.sh` or `bash …/github-config.sh`. */
 function runsSync(inv: Invocation): boolean {
