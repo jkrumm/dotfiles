@@ -173,7 +173,6 @@ describe("the GitHub config sync (Issue 1886)", () => {
     allowed("make github-config-dry");
     allowed("~/SourceRoot/dotfiles/scripts/github-config.sh");
     allowed("bash scripts/github-config.sh --tighten-only");
-    allowed("env GITHUB_OWNER=jkrumm make github-config");
     allowed("DRY_RUN=1 scripts/github-config.sh --tighten-only");
     allowed("GITHUB_OWNER=jkrumm make github-config");
   });
@@ -187,6 +186,16 @@ describe("the GitHub config sync (Issue 1886)", () => {
     denied("make github-config FACTORY_SESSION=");
     denied("bash scripts/github-config.sh FACTORY_SESSION=");
     denied("env -i make github-config");
+    denied("env -uFACTORY_SESSION make -C ~/SourceRoot/dotfiles github-config");
+    denied("env --unset=FACTORY_SESSION make github-config");
+    denied("env -u FACTORY''_SESSION make github-config");
+    denied("unset FACTORY''_SESSION; make github-config");
+    denied("export -n FACTORY''_SESSION && make github-config");
+    denied("unset FACTORY_SESSION; . scripts/github-config.sh");
+    denied("source scripts/github-config.sh");
+    denied("exec -c make github-config");
+    denied("eval make github-config");
+    denied("env GITHUB_OWNER=jkrumm make github-config");
     denied("env -i bash scripts/github-config.sh");
     denied("FACTORY_SESSION= ~/SourceRoot/dotfiles/scripts/github-config.sh");
     denied("FACTORY_SESSION= bash -c 'make github-config'");
