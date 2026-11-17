@@ -196,6 +196,13 @@ describe("the GitHub config sync (Issue 1886)", () => {
     denied("exec -c make github-config");
     denied("eval make github-config");
     denied("env GITHUB_OWNER=jkrumm make github-config");
+    denied("make github-config FACTORY''_SESSION=");
+    denied("make github-config TIGHTEN_ONLY''=0");
+    denied("un''set FACTORY''_SESSION; make github-config");
+    denied("V=FACTORY_SESSION; make github-config $V=");
+    denied('make -C "$HOME/SourceRoot/dotfiles" github-config');
+    denied("make github-config && gh pr comment 1 -b 'done'");
+    denied("make github-config FACTORY_SESS\\ION=");
     denied("env -i bash scripts/github-config.sh");
     denied("FACTORY_SESSION= ~/SourceRoot/dotfiles/scripts/github-config.sh");
     denied("FACTORY_SESSION= bash -c 'make github-config'");

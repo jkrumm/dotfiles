@@ -25,7 +25,7 @@
  *     (`repos/o/r/$S`), unless its literal text names an unrelated resource
  *     (`…/issues/$N/comments`) or a single `pulls/$N` id slot;
  *   - the GitHub config sync (`make github-config`, `scripts/github-config.sh`) in a
- *     command that names `FACTORY_SESSION` or `TIGHTEN_ONLY` or edits the environment around it (`env`, `unset`, `export`, `exec`, `eval`, `source`): the script writes
+ *     command that names `FACTORY_SESSION` or `TIGHTEN_ONLY` or edits the environment around it (`env`, `unset`, `export`, `exec`, `eval`, `source`) or carries a quote, `$`, backtick, backslash or brace, so no name can be spliced: the script writes
  *     rulesets with `gh api` out of the hook's sight, so what keeps a lead from
  *     loosening protection through it is its own tighten-only mode, which a factory
  *     session cannot leave unless the marker is cleared. The sync itself is allowed.
@@ -64,7 +64,7 @@ const OWNER =
 const SYNC_TAMPERING =
   "`make github-config` runs tighten-only in a factory session: it applies only what adds or strengthens protection " +
   "(a repo joins config/pr-required-repos.json, a ruleset or rule is added) and skips, with exit 3, a repo it would loosen. " +
-  "A sync command that names FACTORY_SESSION or TIGHTEN_ONLY, or wraps itself in env, unset, export, exec, eval or source, could turn that off. " +
+  "A sync command that names FACTORY_SESSION or TIGHTEN_ONLY, wraps itself in env, unset, export, exec, eval or source, or carries a quote, `$`, backtick, backslash or brace (a name can be spliced with them) could turn that off: run it plain, as its own call. " +
   "A loosening (a repo leaves the list, a rule, approval or check is dropped, enforcement is lowered) is the owner's: " +
   "raise an Errand (`factory errand raise … --need hands`) for his `make github-config`.";
 
@@ -272,6 +272,12 @@ const SYNC_SCRIPT = /(?:^|\/)github-config\.sh$/;
  */
 const SYNC_MARKER =
   /\b(?:FACTORY_SESSION|TIGHTEN_ONLY)\b|\b(?:env|unset|export|declare|typeset|exec|eval|source)\b|(?:^|[;&|(]\s*)\.\s+\S/;
+/**
+ * Anything that lets a command spell a name without writing it (quotes, `$`, a backtick,
+ * a backslash, braces: `FACTORY''_SESSION`, `un''set`). In a sync command none may appear,
+ * so the name and word checks above cannot be spliced around: the shape is fail-closed.
+ */
+const SYNC_OBFUSCATION = /['"`$\\{}]/;
 /** `bash scripts/github-config.sh`: the tokenizer sees a shell without `-c` as nothing to look into. */
 const SYNC_VIA_SHELL = /(?:^|[;&|\n(`]|\$\()\s*(?:\S+\s+)*?(?:bash|sh|zsh|dash|ksh|source|\.)\s+(?:-\S+\s+)*\S*github-config\.sh\b/;
 
@@ -299,7 +305,7 @@ export function findViolation(command: string, ctx: Context = {}): string | null
   // gh's own `{owner}` / `{repo}` / `{branch}` endpoint placeholders: the tokenizer reads braces as command groups.
   const flattened = command.replace(/\{(owner|repo|branch)\}/g, "$1");
   const invocations = collect(flattened) as Invocation[];
-  if ((invocations.some(runsSync) || SYNC_VIA_SHELL.test(flattened)) && SYNC_MARKER.test(flattened)) return SYNC_TAMPERING;
+  if ((invocations.some(runsSync) || SYNC_VIA_SHELL.test(flattened)) && (SYNC_MARKER.test(flattened) || SYNC_OBFUSCATION.test(flattened))) return SYNC_TAMPERING;
   for (const inv of invocations) {
     if (inv.name !== "gh") continue;
     const positionals = subcommands(inv.args);
