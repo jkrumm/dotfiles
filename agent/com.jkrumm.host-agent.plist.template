@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.host-agent</string>
+  <!-- The slim OpenTelemetry Collector (agent/): host metrics every 30/60 s plus an OTLP receiver on 127.0.0.1:4416
+       (gRPC) and :4417 (HTTP), exported to the authed ClickStack endpoint. The wrapper reads the endpoint and key at
+       runtime (secrets-run), so the plist carries no credential. Binary: make agent-setup builds it from
+       agent/manifest.yaml (scripts/host-agent-install.sh). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__DOTFILES_DIR__/agent/host-agent-wrapper.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>__HOME__/.local/state/host-agent</string>
+  <!-- KeepAlive: a long-lived collector, not a periodic job. ThrottleInterval floors a crash loop (an empty secret
+       cache, a bad config) at one start per 10 s. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/host-agent.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/host-agent.err</string>
+</dict>
+</plist>

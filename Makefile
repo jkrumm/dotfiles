@@ -3930,6 +3930,56 @@ beszel-agent-teardown:
 	echo "    · env file + binary left untouched ($(BESZEL_ENV_FILE), ~/.local/bin/beszel-agent)"
 
 # ----------------------------------------------------------------------------
+# host-agent (both machines)
+#
+# A slim OpenTelemetry Collector built with ocb from agent/manifest.yaml (a copy of vps/agent/manifest.yaml):
+# host metrics every 30/60 s plus an OTLP receiver on 127.0.0.1:4416 (gRPC) / :4417 (HTTP), exported to the authed
+# ClickStack endpoint with a disk-backed queue. host.name is mini or macbook, from the machine's secrets backend.
+# The binary is built, not downloaded (scripts/host-agent-install.sh), and rebuilt only when a pin or the manifest
+# changes. Beszel and the heartbeat keep running beside it (docs/host-agent.md).
+# ----------------------------------------------------------------------------
+HOST_AGENT_VERSION ?= 0.165.0
+OCB_VERSION        ?= 0.165.0
+HOST_AGENT_ENV     := $(HOME)/.config/host-agent/agent.env
+
+.PHONY: agent-setup agent-status agent-uninstall
+agent-setup:
+	@HOST_AGENT_VERSION="$(HOST_AGENT_VERSION)" OCB_VERSION="$(OCB_VERSION)" bash $(DOTFILES_DIR)/scripts/host-agent-install.sh
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" = "op" ] && [ ! -f "$(HOST_AGENT_ENV)" ]; then \
+		echo "    → reading the ClickStack endpoint and key into $(HOST_AGENT_ENV) (mode 600; a LaunchAgent cannot answer 1Password's prompt)"; \
+		mkdir -p "$(dir $(HOST_AGENT_ENV))"; \
+		( umask 077; \
+		  E=$$(secrets-run read op://mini/agent-workflows/OTEL_EXPORTER_OTLP_ENDPOINT) && K=$$(secrets-run read op://vps/argo/HYPERDX_API_KEY_PROD) \
+		  && printf 'AGENT_OTLP_ENDPOINT=%s\nAGENT_OTLP_API_KEY=%s\n' "$$E" "$$K" > "$(HOST_AGENT_ENV)" ) \
+		|| { rm -f "$(HOST_AGENT_ENV)"; echo "  ✗ could not read the two refs through secrets-run"; exit 1; }; \
+	elif [ "$$BACKEND" != "op" ] && [ "$$BACKEND" != "cache" ]; then \
+		echo "  ✗ unknown secrets backend '$$BACKEND'"; exit 1; \
+	fi
+	@if [ -f "$(HOST_AGENT_ENV)" ] && [ "$$(stat -f '%Lp' "$(HOST_AGENT_ENV)")" != "600" ]; then \
+		echo "  ✗ $(HOST_AGENT_ENV) is not mode 600 — refusing to run with a readable credential file"; exit 1; \
+	fi
+	@mkdir -p "$(HOME)/.local/state/host-agent" "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.host-agent" PLIST_DIR="$(DOTFILES_DIR)/agent"
+	@if launchctl list 2>/dev/null | awk '$$3=="com.jkrumm.host-agent"{f=1} END{exit !f}'; then \
+		echo "    ✓ com.jkrumm.host-agent loaded"; \
+	else \
+		echo "  ✗ com.jkrumm.host-agent not loaded — check ~/Library/Logs/host-agent.err"; exit 1; \
+	fi
+	@$(MAKE) --no-print-directory agent-status
+
+# Read-only: the doctor's host-agent section.
+agent-status:
+	@DOCTOR_SECTIONS=host_agent bash $(DOTFILES_DIR)/scripts/doctor.sh --local
+
+agent-uninstall:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.host-agent.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ host-agent unloaded + plist removed"; \
+	echo "    · binary, queue and env file left untouched (~/.local/bin/host-agent, ~/.local/state/host-agent, $(HOST_AGENT_ENV))"
+
+# ----------------------------------------------------------------------------
 # Lock at boot (dev host only)
 #
 # FileVault OFF + automatic login is what lets the mini reboot itself after a
@@ -4164,6 +4214,9 @@ help:
 	@echo "  make beszel-agent-setup         Dev-host only: pinned-release install + push-mode agent → homelab Beszel hub"
 	@echo "  make beszel-agent-status        LaunchAgent + WebSocket-connected state (read-only)"
 	@echo "  make beszel-agent-teardown      Unload + remove the agent (leaves env file + binary alone)"
+	@echo "  make agent-setup                Both machines: build the pinned host-agent collector, install + load it (host metrics + loopback OTLP → ClickStack)"
+	@echo "  make agent-status               host-agent health (LaunchAgent, receiver, export errors, queue)"
+	@echo "  make agent-uninstall            Unload + remove the host-agent LaunchAgent (leaves binary, queue, env file alone)"
 	@echo "  make lock-at-boot-setup         Dev-host only: lock the screen right after the unattended auto-login"
 	@echo "  make lock-at-boot-check         Show FileVault / autologin / autorestart / screenLock / lock state"
 	@echo "  make lock-at-boot-teardown      Unload + remove the lock-at-boot agent"

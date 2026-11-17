@@ -1,0 +1,137 @@
+# host-agent on a Mac: host metrics and a loopback OTLP endpoint, exported to the authed ClickStack tier.
+# The wrapper (agent/host-agent-wrapper.sh) sets the environment:
+#   AGENT_HOST_NAME      host.name (mini | macbook), from the machine's secrets backend
+#   AGENT_ENVIRONMENT    deployment.environment.name (prod)
+#   AGENT_OTLP_ENDPOINT  the ClickStack gateway (a secret ref, never in a tracked file)
+#   AGENT_OTLP_API_KEY   the ingestion key, sent as the authorization header
+#   AGENT_QUEUE_DIR      the exporter's disk queue
+# Not enabled on purpose: icmp_check (linewatch probes the line), the per-process scraper (one series per process).
+
+extensions:
+  # The exporter queue lives on disk: samples collected while ClickStack is unreachable survive a restart of the agent.
+  file_storage/queue:
+    directory: ${env:AGENT_QUEUE_DIR}
+    create_directory: true
+
+receivers:
+  host_metrics/fast:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.time:
+            enabled: false
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      load: {}
+      paging:
+        metrics:
+          system.paging.utilization:
+            enabled: true
+      network:
+        # Physical links only: the tunnel and bridge interfaces of Tailscale, Colima and VPNs are noise.
+        include:
+          interfaces: ["^en[0-9]+$"]
+          match_type: regexp
+        metrics:
+          system.network.packets:
+            enabled: false
+          # One lsof run per scrape on macOS: too heavy for a 30 s tick on a busy host.
+          system.network.connections:
+            enabled: false
+      processes: {}
+  host_metrics/slow:
+    collection_interval: 60s
+    scrapers:
+      disk:
+        # Whole physical devices: a slice (disk3s1) double-counts its container.
+        include:
+          devices: ["^disk[0-9]+$"]
+          match_type: regexp
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+        # The user data volume and an external volume. Left out: the sealed system volume and its snapshot (always the
+        # same), the VM/Preboot/Update/xarts/Hardware volumes, CoreSimulator images, and network shares (an unreachable
+        # SMB share would stall the scrape).
+        include_mount_points:
+          mount_points: ["^/System/Volumes/Data$", "^/Volumes/[^/]+$"]
+          match_type: regexp
+        include_fs_types:
+          fs_types: [apfs, hfs]
+          match_type: strict
+      system: {}
+  otlp:
+    protocols:
+      # Loopback only: an app on this machine sends here without a key; the agent holds the key.
+      grpc:
+        endpoint: 127.0.0.1:4416
+      http:
+        endpoint: 127.0.0.1:4417
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 96
+    spike_limit_mib: 24
+  batch:
+    timeout: 15s
+  # The agent's own host metrics.
+  resource/host:
+    attributes:
+      - { key: host.name, value: "${env:AGENT_HOST_NAME}", action: upsert }
+      - { key: service.name, value: host-agent, action: upsert }
+      - { key: service.namespace, value: infra, action: upsert }
+      - { key: deployment.environment.name, value: "${env:AGENT_ENVIRONMENT}", action: upsert }
+  # Telemetry an app sends in: it keeps its own service.name and environment, the machine is stamped on.
+  resource/app:
+    attributes:
+      - { key: host.name, value: "${env:AGENT_HOST_NAME}", action: upsert }
+      - { key: deployment.environment.name, value: "${env:AGENT_ENVIRONMENT}", action: insert }
+
+exporters:
+  otlp_http/clickstack:
+    endpoint: ${env:AGENT_OTLP_ENDPOINT}
+    headers:
+      authorization: ${env:AGENT_OTLP_API_KEY}
+    # Never give up on a batch (max_elapsed_time 0): the queue on disk holds it until ClickStack is back, and the
+    # samples keep the timestamps they were collected with.
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+      max_elapsed_time: 0s
+    sending_queue:
+      enabled: true
+      storage: file_storage/queue
+      queue_size: 5000
+
+service:
+  extensions: [file_storage/queue]
+  telemetry:
+    metrics:
+      level: none
+    logs:
+      level: info
+  pipelines:
+    metrics/host:
+      receivers: [host_metrics/fast, host_metrics/slow]
+      processors: [memory_limiter, resource/host, batch]
+      exporters: [otlp_http/clickstack]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/app, batch]
+      exporters: [otlp_http/clickstack]
+    metrics/app:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/app, batch]
+      exporters: [otlp_http/clickstack]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/app, batch]
+      exporters: [otlp_http/clickstack]

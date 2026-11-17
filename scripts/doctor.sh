@@ -156,6 +156,52 @@ section_launchagents() {
   done
 }
 
+# --- host-agent (both machines) ------------------------------------------------
+# The OpenTelemetry collector (agent/, make agent-setup): loaded and running, its loopback OTLP receiver answering, no
+# export failure in the last 10 minutes (a failing export retries from the disk queue forever, so the log is the signal),
+# and the queue small. Not installed is a WARN: the MacBook gets it through make agent-setup, and a machine without it
+# only lacks ClickStack metrics.
+section_host_agent() {
+  hdr "host-agent"
+  local label="com.jkrumm.host-agent" agent_dir="${LAUNCHAGENTS_DIR:-$HOME/Library/LaunchAgents}" bin="$HOME/.local/bin/host-agent"
+  local errlog="$HOME/Library/Logs/host-agent.err" queue="$HOME/.local/state/host-agent/queue"
+  if [ ! -f "$agent_dir/$label.plist" ]; then
+    warn "host-agent" "not installed — make agent-setup"
+    return
+  fi
+  if ! launchctl print "gui/$(id -u)/$label" 2>/dev/null | grep -q 'state = running'; then
+    bad "host-agent" "not running — check $errlog"
+    return
+  fi
+  ok "host-agent" "running, $("$bin" --version 2>/dev/null | awk '{print $NF}' | sed 's/^/v/')"
+
+  local code n=0
+  # a start takes a few seconds before the receiver listens
+  while :; do
+    code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"resourceSpans":[]}' \
+      http://127.0.0.1:4417/v1/traces 2>/dev/null || true)
+    [ "$code" = "200" ] && break
+    n=$((n + 1)); [ "$n" -ge 4 ] && break
+    sleep 3
+  done
+  if [ "$code" = "200" ]; then ok "host-agent receiver" "127.0.0.1:4417 answers"; else bad "host-agent receiver" "127.0.0.1:4417 answered '${code:-nothing}' — check $errlog"; fi
+
+  local last ts epoch
+  last=$(grep -E 'Exporting failed|export failed|Dropping data' "$errlog" 2>/dev/null | tail -n 1 || true)
+  # the collector logs local time with a numeric offset: 2026-11-17T22:37:40.855+0100
+  ts=$(printf '%s' "$last" | sed -n 's/^\([0-9T:-]*\)\.[0-9]*\([+-][0-9]\{4\}\).*/\1\2/p')
+  epoch=$([ -n "$ts" ] && date -j -f '%Y-%m-%dT%H:%M:%S%z' "$ts" +%s 2>/dev/null || true)
+  if [ -n "$epoch" ] && [ $(( $(date +%s) - epoch )) -lt 600 ]; then
+    warn "host-agent export" "failing within the last 10 min (queued on disk, retried): $(printf '%s' "$last" | cut -c1-140)"
+  else
+    ok "host-agent export" "no export failure in the last 10 min"
+  fi
+
+  local kb
+  kb=$(du -sk "$queue" 2>/dev/null | awk '{print $1}')
+  if [ "${kb:-0}" -gt 204800 ]; then warn "host-agent queue" "$((kb / 1024)) MiB on disk — ClickStack unreachable for long?"; else info "host-agent queue" "$((${kb:-0} / 1024)) MiB on disk"; fi
+}
+
 # --- herdr-core (both machines) ----------------------------------------------
 # The same grader the mini's heartbeat runs (scripts/lib/core-health.sh): the core is up
 # (lib/core-up.sh: the socket answers AND a launchd-born core exists, else FAIL, a stray included), `hc server
@@ -565,6 +611,7 @@ section_agent_notes() {
 # --- Run -----------------------------------------------------------------------
 
 want launchagents && section_launchagents
+want host_agent && section_host_agent
 want core && section_core
 want tcc && section_tcc
 want architecture && section_architecture

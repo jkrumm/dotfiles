@@ -103,6 +103,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.brain-web-refresh` | 300s | brain-web rebuild |
 | `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma, under `jobrun --timeout 270` (bounded); also pushes the collie, factory and secrets monitors, runs the daily drift sweep as a side job, appends the rolling pre-hang snapshot (`~/Library/Logs/devhost-snapshots.jsonl`, rotated by `log-rotate`), and pushes one ntfy message per new kernel-panic report (`docs/devhost-health.md` §Forensics: the rolling snapshot and the panic push) |
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
+| `com.jkrumm.host-agent` | KeepAlive | slim OpenTelemetry Collector (`agent/`, both machines): host metrics every 30/60 s plus an OTLP receiver on 127.0.0.1:4416 (gRPC) / :4417 (HTTP), exported with a disk queue to the authed ClickStack; `make agent-setup` / `agent-status` / `agent-uninstall`, log `~/Library/Logs/host-agent.{log,err}`, `docs/host-agent.md` |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 900s | copytruncate, 16 MB cap; list derived from our plists; Chrome clone sweep bounded on one clock from script start (background priority, lsof 90 s, removal budget 300 s, `--timeout 840`) after rc=124 under load (issue 870) |
 | `com.jkrumm.fseventsd-watch` | 05:10 daily | restarts a leaking `fseventsd` (memory > 1.5 GB, or CPU >= 150 % for 10 min) with `sudo -n killall fseventsd`, allowed by one sudoers rule the owner installs once (`make fseventsd-sudoers` through ask-human); `make fseventsd-watch-dry` names what it would do |
@@ -244,6 +245,7 @@ rows to the list below (original text: this file's git history), and un-hide the
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.claude-accounts-keepalive` (hourly, `jobrun`, the same job as on the mini) ·
 `com.jkrumm.db-tunnel` (KeepAlive) ·
+`com.jkrumm.host-agent` (KeepAlive, the mini's collector with `host.name=macbook`; `make agent-setup`, `docs/host-agent.md`) ·
 `com.jkrumm.opbackup` (hourly guard; runs through `~/.local/libexec/herdr-core-launcher`, the Full Disk Access umbrella for `op`) ·
 `com.jkrumm.smb-keepalive` (60 s +
 network change, `jobrun`, remounts a stale HomeLab Samba share) · `com.jkrumm.tailnet-sshd`
@@ -332,7 +334,8 @@ rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to
 | Heartbeat side monitors: `MacMini Collie - Push`, `MacMini Secret Seed - Push`, factory monitor | push (same scheduler, own monitors, pushed before the composite) | collie bridge, secrets-cache freshness, the factory's `GET /health` relay (tick and queue movement) | Kuma, Slack | the owner | dotfiles / software-factory (the `/health` source) | kept |
 | `MacMini Drift - Push` | push | pins, brew-upgrade recency, pending macOS update | Kuma, Slack (2-day interval) | the owner applies by hand (`make collie-upgrade`, `make brew-upgrade`, `make mini-macos-update`) | dotfiles | merged into the heartbeat as a daily bounded side job, 2026-11-06 (`com.jkrumm.drift-check` retired) |
 | Kuma door monitors (`Local / Mac mini door`) | pull (Kuma through `:8795`) | mini service health: agent-workflows host, audio and gateway, brain-web, walkingpad, argo, ... from `kuma-door/registry.json` | Kuma, Slack | the owner | dotfiles (door, registry) / homelab (monitors) | kept; replaces the heartbeat's four duplicated service probes (agw host/audio, brain-web, walkingpad), retired 2026-11-06; the audio-vs-host version-mismatch comparison was dropped with them on purpose (the door proves liveness only; agent-workflows' own `make verify` covers release parity) |
-| Beszel agent (`com.jkrumm.beszel-agent`) | push (outbound WebSocket) | mini CPU, RAM, disk, network | the Beszel hub on homelab | unspecified (no alert route in these docs) | dotfiles | kept |
+| Beszel agent (`com.jkrumm.beszel-agent`) | push (outbound WebSocket) | mini CPU, RAM, disk, network | the Beszel hub on homelab | unspecified (no alert route in these docs) | dotfiles | kept; retires once the host-agent matches it (parity table: `docs/host-agent.md`) |
+| Host agent (`com.jkrumm.host-agent`) | push (OTLP/HTTP, outbound) | mini CPU, memory, load, paging, network, disk, filesystem, process counts | ClickStack on the VPS (dashboards and the "host silent" alert live in the vps repo) | the vps lead, through the factory door | dotfiles (agent), vps (registry, alerts) | new 2026-11-17; runs beside Beszel and the heartbeat, replaces neither yet |
 | `jobrun` + `jobs-grade` | in-process record, then grading | every `jobrun` job: failure, absence, flapping, unloaded | a factory signal on the job's owner repo after 2 consecutive not-ok grades (once a day per job at most); ntfy topic `alerts` at priority 3 only when `factory` is unreachable; a WARN in the detail message; MacBook: a native notification on wake | a lead fixes it; nothing auto-heals | dotfiles | kept; the only grader |
 | `com.jkrumm.jobrun-canary` | in-process probe | the job, then signal chain, end to end | jobs-grade, so a signal on dotfiles | a lead | dotfiles | kept |
 | `make doctor` | on demand | LaunchAgents, architecture map, service registry, brew, drift (no push), remote path | the terminal | whoever runs it | dotfiles | kept; read-only |
@@ -364,7 +367,7 @@ narrow grant `tag:homelab → tag:devhost`), with monitors generated from
 `kuma-door/registry.json`. Full rationale: [[mac-host-monitoring]],
 `docs/devhost-health.md`.
 
-The mini additionally reports CPU/RAM/disk/network to a **Beszel** hub on
+The mini and the MacBook report host metrics to the estate's ClickStack through `com.jkrumm.host-agent` (`docs/host-agent.md`). The mini additionally reports CPU/RAM/disk/network to a **Beszel** hub on
 homelab (`https://beszel.jkrumm.com`) via `com.jkrumm.beszel-agent` — its own
 outbound WebSocket, same push posture as the Push monitors below, separate from
 Uptime Kuma.
