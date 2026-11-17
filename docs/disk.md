@@ -159,6 +159,8 @@ monitor is a disk gauge too: its DOWN means `disk` crossed 93% for three runs, s
 Issue 2020 (2026-11-17, same monitor, 93% with 70 GiB free after 91% an hour earlier) was a fourth time: live shutterflow leads held 74 GB (1925) and 17 GB (1755) of `target/`,
 and the closed, merged Issue 1934 another 26 GB; `git worktree remove --force` on that one gave 90%, 97 GiB free. The reap-on-close or shared `CARGO_TARGET_DIR` ask is on shutterflow's open issue 1773; until it lands, expect a fifth.
 
+Issue 2081 (2026-11-17, same monitor, 94% with 63 GiB free) was the fifth, after 1773's reap-on-close had landed (shutterflow `2329fa63`, 16:59Z): every closed Issue's `target/` was already gone, and the one live lead (1925) held 81 GB of `target/debug` by `du` alone. Reap-on-close does not bound a live lead's growth. `make disk-sweep-run` (Colima `fstrim` +18 GiB, npm and bun caches +7 GiB, +24.8 GiB in all) took it to 91%, 87 GiB free and the monitor recovered on the next run; nothing of a live lead's was touched. Order for a repeat: `du -xsh ~/SourceRoot/*/.claude/worktrees/*/target` (reap only closed, merged Issues'), then `make disk-sweep-run`. The live-growth bound is a signal on shutterflow.
+
 ## What goes to the external SSD
 
 **Class `external` in the budget table above:** a row for a volume that is not part of the Data volume. It counts nothing against the
