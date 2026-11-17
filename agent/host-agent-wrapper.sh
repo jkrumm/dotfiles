@@ -4,7 +4,7 @@
 # credential in EnvironmentVariables).
 #   cache backend (the mini):  host.name=mini, both values through secrets-run.
 #   op backend (the MacBook):  host.name=macbook; a LaunchAgent cannot answer a biometric prompt, so `make agent-setup`
-#                              wrote them once into ~/.config/host-agent/agent.env (mode 600), sourced here.
+#                              wrote them into ~/.config/host-agent/agent.env (mode 600, rewritten on every run), read here.
 set -euo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -21,10 +21,13 @@ case "$BACKEND" in
     AGENT_HOST_NAME=macbook
     ENV_FILE="$HOME/.config/host-agent/agent.env"
     [ -r "$ENV_FILE" ] || { echo "host-agent-wrapper: no $ENV_FILE — run make agent-setup" >&2; exit 1; }
-    set -a
-    # shellcheck source=/dev/null
-    . "$ENV_FILE"
-    set +a
+    # Parsed, never sourced: a value is data (an endpoint with & or ;, a key with $ or a space), not shell.
+    while IFS='=' read -r key value; do
+      case "$key" in
+        AGENT_OTLP_ENDPOINT) AGENT_OTLP_ENDPOINT="$value" ;;
+        AGENT_OTLP_API_KEY) AGENT_OTLP_API_KEY="$value" ;;
+      esac
+    done < "$ENV_FILE"
     ;;
   *)
     echo "host-agent-wrapper: unknown secrets backend '$BACKEND'" >&2

@@ -3946,13 +3946,14 @@ HOST_AGENT_ENV     := $(HOME)/.config/host-agent/agent.env
 agent-setup:
 	@HOST_AGENT_VERSION="$(HOST_AGENT_VERSION)" OCB_VERSION="$(OCB_VERSION)" bash $(DOTFILES_DIR)/scripts/host-agent-install.sh
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" = "op" ] && [ ! -f "$(HOST_AGENT_ENV)" ]; then \
-		echo "    → reading the ClickStack endpoint and key into $(HOST_AGENT_ENV) (mode 600; a LaunchAgent cannot answer 1Password's prompt)"; \
+	if [ "$$BACKEND" = "op" ]; then \
+		echo "    → reading the ClickStack endpoint and key into $(HOST_AGENT_ENV) (mode 600; a LaunchAgent cannot answer 1Password's prompt; a rotated key is picked up by re-running this)"; \
 		mkdir -p "$(dir $(HOST_AGENT_ENV))"; \
 		( umask 077; \
 		  E=$$(secrets-run read op://mini/agent-workflows/OTEL_EXPORTER_OTLP_ENDPOINT) && K=$$(secrets-run read op://vps/argo/HYPERDX_API_KEY_PROD) \
 		  && printf 'AGENT_OTLP_ENDPOINT=%s\nAGENT_OTLP_API_KEY=%s\n' "$$E" "$$K" > "$(HOST_AGENT_ENV)" ) \
 		|| { rm -f "$(HOST_AGENT_ENV)"; echo "  ✗ could not read the two refs through secrets-run"; exit 1; }; \
+		launchctl kickstart -k "gui/$$(id -u)/com.jkrumm.host-agent" >/dev/null 2>&1 || true; \
 	elif [ "$$BACKEND" != "op" ] && [ "$$BACKEND" != "cache" ]; then \
 		echo "  ✗ unknown secrets backend '$$BACKEND'"; exit 1; \
 	fi
