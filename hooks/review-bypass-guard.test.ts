@@ -208,6 +208,10 @@ describe("the GitHub config sync (Issue 1886)", () => {
     denied("make github-config FACTORY_SESS?ON=");
     denied("cd ~/SourceRoot/dotfiles && make github-config");
     denied("make github-config | tail -5");
+    denied("T=github-config; FACTORY_SESSION= make -C ~/SourceRoot/dotfiles $T");
+    denied("make github-conf*");
+    denied("echo github-config | FACTORY_SESSION= xargs make");
+    denied("S=scripts/github-config.sh; FACTORY_SESSION= bash $S");
     denied("make github-config GITHUB_OWNER=other");
     denied("make github-config; make github-config FACTORY_SESS*=");
     denied("env -i bash scripts/github-config.sh");
@@ -219,6 +223,8 @@ describe("the GitHub config sync (Issue 1886)", () => {
   test("the marker without the sync is no business of this guard", () => {
     allowed("echo $FACTORY_SESSION");
     allowed("FACTORY_SESSION=1 make check");
+    allowed("make $TARGET");
+    allowed("make -C ~/SourceRoot/dotfiles github-config-test");
     allowed(`git commit -m "make github-config stays tighten-only"`);
   });
 

@@ -46,8 +46,10 @@
  * name the repo (incident 2026-11-15: Issue 1239's `gh pr merge 125 --admin` was
  * sent to the owner and waited eight hours). `gh api` stays denied on them too.
  *
- * Not covered (same hazard class): `curl`/`wget` straight at api.github.com,
- * `gh alias set` wrapping `--admin`, and other forges' CLIs.
+ * Not covered (same hazard class): a sync spelled so that no `make`, `bash` or script
+ * invocation names it (a target or path assembled by a variable in a command that never
+ * writes `github-conf`, a script of the lead's own that calls it); `curl`/`wget` straight
+ * at api.github.com, `gh alias set` wrapping `--admin`, and other forges' CLIs.
  */
 
 import { collect, type Invocation } from "./broad-kill-guard.ts";
@@ -285,9 +287,22 @@ const SYNC_PLAIN = new RegExp(
 /** `bash scripts/github-config.sh`: the tokenizer sees a shell without `-c` as nothing to look into. */
 const SYNC_VIA_SHELL = /(?:^|[;&|\n(`]|\$\()\s*(?:\S+\s+)*?(?:bash|sh|zsh|dash|ksh|source|\.)\s+(?:-\S+\s+)*\S*github-config\.sh\b/;
 
-/** `make … github-config[-tighten]`, `scripts/github-config.sh` or `bash …/github-config.sh`. */
-function runsSync(inv: Invocation): boolean {
-  if (inv.name === "make") return inv.args.some((a) => a === "github-config" || a === "github-config-tighten");
+/** `bash $S`: a shell run on a path only the shell can resolve, in a command that spells `github-conf`. */
+const SYNC_SHELL_VAR = /(?:^|[;&|\n(`]|\$\()\s*(?:\S+\s+)*?(?:bash|sh|zsh|dash|ksh|source|\.)\s+(?:-\S+\s+)*[$`*?[]/;
+
+/** An argument only the shell can resolve (`$T`, a glob, a backtick, the NUL left for `$(…)`). */
+const UNRESOLVED_ARG = /[$`*?[\0]/;
+
+/**
+ * `make … github-config[-tighten]`, `scripts/github-config.sh`, or a `make` whose target
+ * the shell completes (`make $T`, `make github-conf*`, `… | xargs make`) in a command that
+ * spells `github-conf` anywhere, so a variable-built target cannot dodge SYNC_PLAIN.
+ */
+function runsSync(inv: Invocation, text: string): boolean {
+  if (inv.name === "make") {
+    if (inv.args.some((a) => a === "github-config" || a === "github-config-tighten")) return true;
+    return (inv.stdin === true || inv.args.some((a) => UNRESOLVED_ARG.test(a))) && /github-conf/.test(text);
+  }
   return SYNC_SCRIPT.test(inv.name);
 }
 
@@ -309,7 +324,11 @@ export function findViolation(command: string, ctx: Context = {}): string | null
   // gh's own `{owner}` / `{repo}` / `{branch}` endpoint placeholders: the tokenizer reads braces as command groups.
   const flattened = command.replace(/\{(owner|repo|branch)\}/g, "$1");
   const invocations = collect(flattened) as Invocation[];
-  if ((invocations.some(runsSync) || SYNC_VIA_SHELL.test(flattened)) && !SYNC_PLAIN.test(flattened.trim())) return SYNC_TAMPERING;
+  const syncCandidate =
+    invocations.some((inv) => runsSync(inv, flattened)) ||
+    SYNC_VIA_SHELL.test(flattened) ||
+    (SYNC_SHELL_VAR.test(flattened) && /github-conf/.test(flattened));
+  if (syncCandidate && !SYNC_PLAIN.test(flattened.trim())) return SYNC_TAMPERING;
   for (const inv of invocations) {
     if (inv.name !== "gh") continue;
     const positionals = subcommands(inv.args);
