@@ -53,7 +53,7 @@ An entitlement in the tracked `*.entitlements` that the portal's App ID lacks fa
 
 ## The Apple slot: one lock for every app
 
-The mini runs one Apple job at a time across all repos: Xcode builds, archives, `devicectl`, notarization. Two repos share it today, by **one lock file, `/tmp/iris-apple.lock`** (the name is historical; renaming it in one repo splits the lock and re-opens the collision). The wrapper:
+The mini runs one Apple job at a time across all repos: Xcode builds, archives, `devicectl`, notarization. Two guards hold it: the factory's host-wide `apple` class (below) and **one lock file, `/tmp/iris-apple.lock`** (the name is historical; renaming it in one repo splits the lock, which the class still covers). The wrapper:
 
 ```bash
 # on the mini (factory present): lock first, then a factory test slot named per repo; anywhere else (CI, MacBook): the bare command
@@ -62,7 +62,9 @@ exec lockf -t "${APPLE_LOCK_WAIT:-1800}" /tmp/iris-apple.lock factory slot run -
 
 - Reference implementations: iris `scripts/apple-slot` (adds `--sim`: shuts every simulator down when the job ends, and `IRIS_APPLE_SLOT` re-entrancy so a make target called by another runs bare) and ntfy-mac `scripts/apple-slot.sh` (the minimal form, 17 lines). Copy the minimal one.
 - Exit 75 = no lock or slot within the wait. Retry later; never remove the lock file.
-- Order is lock, then slot: the factory's test slots are host-wide (default two), so the lock is what serialises Apple jobs.
+- The factory serialises Apple jobs itself (software-factory issue 1743): `factory slot run` treats every step named `<repo>-apple` (or `<project> apple`) as the host-wide class `apple`, one holder at a time across repos. A waiter held by the class is passed by other steps and never holds the line, so an Apple wait does not block the host's other test slots. This is why the `--name` must end in `-apple`: a differently named step is an ordinary slot and gets no class.
+- The `lockf` is now a second, redundant guard, kept because it is harmless and every repo's wrapper still has it. Its cost: a wait inside `lockf` is invisible to the factory, while a wait in the class shows in the factory's line. A repo may drop the `lockf` and keep only `factory slot run --name <repo>-apple`; do it in all wrappers together, since a wrapper without the lock and one with it still serialise through the class.
+- Order when both are present is lock, then slot.
 
 **A new Mac or iOS app adopts it in three steps:**
 
