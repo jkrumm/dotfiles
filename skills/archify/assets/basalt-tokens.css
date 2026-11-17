@@ -1,0 +1,190 @@
+/* @generated basalt-ui — do not edit; regenerate with the command on the next line */
+/* basalt-ui 3.0.0 — `basalt-ui tokens:css` */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --basalt-canvas: #f2f2f5;
+  --basalt-inset: #ffffff;
+  --basalt-card: #fafafd;
+  --basalt-raised: #ffffff;
+  --basalt-hover: color-mix(in srgb, var(--basalt-ink) 5%, transparent);
+  --basalt-selected: color-mix(in srgb, var(--basalt-ink) 7.5%, transparent);
+  --basalt-scrim: color-mix(in srgb, var(--basalt-ink) 45%, transparent);
+  --basalt-hairline: color-mix(in srgb, var(--basalt-ink) 9%, transparent);
+  --basalt-input: color-mix(in srgb, var(--basalt-ink) 52%, transparent);
+  --basalt-ink: #262629;
+  --basalt-ink-muted: #525255;
+  --basalt-ink-faint: #69696c;
+  --basalt-brand: #4071a4;
+  --basalt-brand-fill: #4374a6;
+  --basalt-on-brand: #ffffff;
+  --basalt-good: #297146;
+  --basalt-warn: #8c5900;
+  --basalt-bad: #af3b39;
+  --basalt-info: #2c6192;
+  --basalt-tint-pct: 12%;
+  --basalt-line: #77777a;
+  --basalt-dim-bar: #a5a5a9;
+  --basalt-grid: color-mix(in srgb, var(--basalt-ink) 10%, transparent);
+  --basalt-crosshair: color-mix(in srgb, var(--basalt-ink) 40%, transparent);
+  --basalt-chart-1: #4374a6;
+  --basalt-chart-2: #9a6632;
+  --basalt-chart-3: #3a7c74;
+  --basalt-chart-4: #7e397d;
+  --basalt-chart-5: #1c5b1f;
+  --basalt-seq-1: #d8e3f4;
+  --basalt-seq-2: #b0c2de;
+  --basalt-seq-3: #87a3c8;
+  --basalt-seq-4: #5f84b0;
+  --basalt-seq-5: #326697;
+  --basalt-shadow-card: 0 1px 2px color-mix(in srgb, var(--basalt-ink) 5%, transparent);
+  --basalt-shadow-raised: 0 1px 2px rgba(28, 25, 23, 0.1);
+  --basalt-shadow-overlay: 0 8px 24px rgba(28, 25, 23, 0.1);
+}
+@media not print {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --basalt-canvas: #27272a;
+    --basalt-inset: #27272a;
+    --basalt-card: #323235;
+    --basalt-raised: #38383b;
+    --basalt-hover: color-mix(in srgb, var(--basalt-ink) 7%, transparent);
+    --basalt-selected: color-mix(in srgb, var(--basalt-ink) 9%, transparent);
+    --basalt-scrim: color-mix(in srgb, #000000 60%, transparent);
+    --basalt-hairline: color-mix(in srgb, var(--basalt-ink) 9%, transparent);
+    --basalt-input: color-mix(in srgb, var(--basalt-ink) 44%, transparent);
+    --basalt-ink: #e5e5e9;
+    --basalt-ink-muted: #d4d4d8;
+    --basalt-ink-faint: #a7a7aa;
+    --basalt-brand: #a2c3f0;
+    --basalt-brand-fill: #4374a6;
+    --basalt-on-brand: #ffffff;
+    --basalt-good: #65d38d;
+    --basalt-warn: #f3b148;
+    --basalt-bad: #ffa59c;
+    --basalt-info: #a2c3f0;
+    --basalt-tint-pct: 16%;
+    --basalt-line: #969699;
+    --basalt-dim-bar: #59595c;
+    --basalt-grid: color-mix(in srgb, var(--basalt-ink) 10%, transparent);
+    --basalt-crosshair: color-mix(in srgb, var(--basalt-ink) 40%, transparent);
+    --basalt-chart-1: #4374a6;
+    --basalt-chart-2: #9a6632;
+    --basalt-chart-3: #3a7c74;
+    --basalt-chart-4: #c57bc2;
+    --basalt-chart-5: #619e5c;
+    --basalt-seq-1: #394351;
+    --basalt-seq-2: #485b73;
+    --basalt-seq-3: #5d799d;
+    --basalt-seq-4: #7a9ecb;
+    --basalt-seq-5: #98c4fc;
+    --basalt-shadow-card: none;
+    --basalt-shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent);
+    --basalt-shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+@media not print {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      color-scheme: dark;
+      --basalt-canvas: #27272a;
+      --basalt-inset: #27272a;
+      --basalt-card: #323235;
+      --basalt-raised: #38383b;
+      --basalt-hover: color-mix(in srgb, var(--basalt-ink) 7%, transparent);
+      --basalt-selected: color-mix(in srgb, var(--basalt-ink) 9%, transparent);
+      --basalt-scrim: color-mix(in srgb, #000000 60%, transparent);
+      --basalt-hairline: color-mix(in srgb, var(--basalt-ink) 9%, transparent);
+      --basalt-input: color-mix(in srgb, var(--basalt-ink) 44%, transparent);
+      --basalt-ink: #e5e5e9;
+      --basalt-ink-muted: #d4d4d8;
+      --basalt-ink-faint: #a7a7aa;
+      --basalt-brand: #a2c3f0;
+      --basalt-brand-fill: #4374a6;
+      --basalt-on-brand: #ffffff;
+      --basalt-good: #65d38d;
+      --basalt-warn: #f3b148;
+      --basalt-bad: #ffa59c;
+      --basalt-info: #a2c3f0;
+      --basalt-tint-pct: 16%;
+      --basalt-line: #969699;
+      --basalt-dim-bar: #59595c;
+      --basalt-grid: color-mix(in srgb, var(--basalt-ink) 10%, transparent);
+      --basalt-crosshair: color-mix(in srgb, var(--basalt-ink) 40%, transparent);
+      --basalt-chart-1: #4374a6;
+      --basalt-chart-2: #9a6632;
+      --basalt-chart-3: #3a7c74;
+      --basalt-chart-4: #c57bc2;
+      --basalt-chart-5: #619e5c;
+      --basalt-seq-1: #394351;
+      --basalt-seq-2: #485b73;
+      --basalt-seq-3: #5d799d;
+      --basalt-seq-4: #7a9ecb;
+      --basalt-seq-5: #98c4fc;
+      --basalt-shadow-card: none;
+      --basalt-shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent);
+      --basalt-shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+  }
+}
+:root {
+  --basalt-surface: var(--basalt-canvas);
+  --basalt-radius-card: 14px;
+  --basalt-radius-inset: 10px;
+  --basalt-radius-ctrl: 8px;
+  --basalt-radius-chip: 5px;
+  --basalt-icon: 1rem;
+  --basalt-font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --basalt-font-head: 'Head Digits', 'Hubot Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --basalt-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --basalt-font-head-stretch: 88%;
+  --basalt-weight-body: 400;
+  --basalt-weight-medium: 500;
+  --basalt-weight-strong: 600;
+  --basalt-text-micro: 0.6875rem;
+  --basalt-text-micro-lh: 1rem;
+  --basalt-text-xs: 0.75rem;
+  --basalt-text-xs-lh: 1rem;
+  --basalt-text-sm: 0.8125rem;
+  --basalt-text-sm-lh: 1.25rem;
+  --basalt-text-md: 0.9375rem;
+  --basalt-text-md-lh: 1.25rem;
+  --basalt-text-base: 1rem;
+  --basalt-text-base-lh: 1.5rem;
+  --basalt-text-lg: 1.125rem;
+  --basalt-text-lg-lh: 1.5rem;
+  --basalt-text-display: 1.875rem;
+  --basalt-text-display-lh: 1;
+  --basalt-dur-fast: 150ms;
+  --basalt-dur-base: 250ms;
+  --basalt-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --basalt-measure: 72ch;
+  --basalt-rhythm-1: 0.75em;
+  --basalt-rhythm-2: 1.25em;
+  --basalt-rhythm-3: 2em;
+  --basalt-contract: 3;
+  --basalt-hit: 1.5rem;
+}
+:root,
+[data-density='dense'] {
+  --basalt-ctl-h: 1.75rem;
+  --basalt-row-h: 2rem;
+}
+[data-density='normal'] {
+  --basalt-ctl-h: 2rem;
+  --basalt-row-h: 2.5rem;
+}
+[data-density='comfortable'] {
+  --basalt-ctl-h: 2.5rem;
+  --basalt-row-h: 3rem;
+}
+@media (pointer: coarse) {
+  :root:not([data-density]),
+  [data-density='dense'],
+  [data-density='normal'] {
+    --basalt-row-h: 2.75rem;
+  }
+  :root {
+    --basalt-hit: 2.75rem;
+  }
+}

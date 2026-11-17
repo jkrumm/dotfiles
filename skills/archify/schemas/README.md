@@ -47,7 +47,10 @@ lower-priority message and fails no render; `validate`/`render`/`deliver`
 report rejected entries and the final resolved coverage to stderr.
 `visual_preset` accepts `classic` (the stable default), `signal-flow` (luminous
 motion-forward presentation), `blueprint` (high-contrast engineering review),
-or `editorial` (warm publication-style design review and documentation).
+`editorial` (warm publication-style design review and documentation), or
+`basalt` (local patch: the basalt-ui look, driven by its `--basalt-*` tokens, which the
+rendered HTML inlines; an inline SVG on a page that already loads them needs only
+`data-preset="basalt"`).
 Presets change only viewer styling; they do not alter semantic IDs or geometry.
 Sequence `meta` additionally accepts `column_fit`. The default `spread` applies whether or not `meta.viewBox` is supplied.
 Explicit `fixed` keeps the historical 108px column gap and 86px participant

@@ -477,6 +477,49 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       --toolbar-menu-bg: #fbf8f1;
     }
 
+    /* ==========================================================
+       BASALT — local patch (config/archify/basalt.patch). Maps the
+       diagram variables onto basalt-ui's --basalt-* tokens, which
+       follow data-theme themselves, so one block serves both modes.
+       Same specificity as the data-theme blocks above, placed after
+       them: order wins. Replace with basalt-ui's generated
+       archify.css block once that ships.
+       ========================================================== */
+    [data-preset="basalt"] {
+      --bg: var(--basalt-canvas);
+      --grid: var(--basalt-grid);
+      --panel: var(--basalt-card);
+      --panel-border: var(--basalt-hairline);
+      --lane-fill: color-mix(in srgb, var(--basalt-ink) 4%, transparent);
+      --lane-stroke: var(--basalt-line);
+      --text: var(--basalt-ink);
+      --text-muted: var(--basalt-ink-muted);
+      --text-dim: var(--basalt-dim-bar);
+      --text-faint: var(--basalt-ink-faint);
+      --mask: var(--basalt-card);
+      --frontend-fill: color-mix(in srgb, var(--basalt-brand) var(--basalt-tint-pct), transparent);
+      --frontend-stroke: var(--basalt-brand);
+      --backend-fill: color-mix(in srgb, var(--basalt-good) var(--basalt-tint-pct), transparent);
+      --backend-stroke: var(--basalt-good);
+      --database-fill: color-mix(in srgb, var(--basalt-chart-4) var(--basalt-tint-pct), transparent);
+      --database-stroke: var(--basalt-chart-4);
+      --cloud-fill: color-mix(in srgb, var(--basalt-warn) var(--basalt-tint-pct), transparent);
+      --cloud-stroke: var(--basalt-warn);
+      --security-fill: color-mix(in srgb, var(--basalt-bad) var(--basalt-tint-pct), transparent);
+      --security-stroke: var(--basalt-bad);
+      --messagebus-fill: color-mix(in srgb, var(--basalt-chart-2) var(--basalt-tint-pct), transparent);
+      --messagebus-stroke: var(--basalt-chart-2);
+      --external-fill: color-mix(in srgb, var(--basalt-ink-faint) var(--basalt-tint-pct), transparent);
+      --external-stroke: var(--basalt-ink-faint);
+      --arrow: var(--basalt-line);
+      --arrow-emphasis: var(--basalt-info);
+      --toolbar-bg: var(--basalt-raised);
+      --toolbar-border: var(--basalt-hairline);
+      --toolbar-text: var(--basalt-ink);
+      --toolbar-hover: var(--basalt-hover);
+      --toolbar-menu-bg: var(--basalt-raised);
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
@@ -5083,6 +5126,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       svg [data-node-id], svg [data-edge-from], svg [data-detail], svg [data-detail-anchor], svg [data-legend-hit], svg { transition: none !important; }
     }
   </style>
+  <!-- ARCHIFY:BASALT_TOKENS -->
 </head>
 <body>
   <!-- Toolbar: theme, live visual style, trace motion, presentation stage, and export.
@@ -5680,9 +5724,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         classic: viewerText('viewer.preset.classic.short'),
         'signal-flow': viewerText('viewer.preset.flow.short'),
         blueprint: viewerText('viewer.preset.blueprint'),
-        editorial: viewerText('viewer.preset.editorial')
+        editorial: viewerText('viewer.preset.editorial'),
+        basalt: 'Basalt'
       };
       var html = document.documentElement;
+      // basalt (local patch) is authored-only: no menu entry, so the cycle never lands on it.
+      if (html.getAttribute('data-preset') === 'basalt') PRESETS = PRESETS.concat('basalt');
       var svg = document.querySelector('.diagram-container svg');
       var btn = document.getElementById('btn-preset');
       var label = document.getElementById('preset-label');

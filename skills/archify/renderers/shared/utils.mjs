@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   escapeHtml as esc,
   localizeTemplate,
@@ -7,6 +8,16 @@ import {
 } from './i18n.mjs';
 
 export { esc };
+
+// Local patch (config/archify/basalt.patch): the basalt preset reads basalt-ui's
+// --basalt-* tokens, so a standalone HTML export carries them inline.
+const BASALT_TOKENS_PLACEHOLDER = '<!-- ARCHIFY:BASALT_TOKENS -->';
+const BASALT_TOKENS_FILE = new URL('../../assets/basalt-tokens.css', import.meta.url);
+
+function basaltTokensStyle() {
+  const css = readFileSync(BASALT_TOKENS_FILE, 'utf8').replaceAll('</style', '<\\/style');
+  return `<style id="basalt-tokens">\n${css}</style>`;
+}
 
 // `extra` appends type-owned definitions (the entity renderer's cardinality
 // markers) inside the same <defs>. Callers that pass nothing keep the exact
@@ -178,6 +189,9 @@ export function applyTemplate(template, {
   }
   // Function replacers: a literal `$&`, `$'`, `$\`` or `$$` in titles, labels,
   // or rendered SVG must not be interpreted as a replacement pattern.
+  if (visualPreset === 'basalt' && !template.includes(BASALT_TOKENS_PLACEHOLDER)) {
+    throw new Error(`applyTemplate: the basalt preset requires placeholder ${JSON.stringify(BASALT_TOKENS_PLACEHOLDER)}`);
+  }
   const sourceEvidenceJson = serializeScriptJson(sourceEvidence);
   const resolvedLocale = resolveLocale(locale);
   const i18nJson = serializeScriptJson({ locale: resolvedLocale, messages: viewerCatalog(resolvedLocale) });
@@ -187,6 +201,7 @@ export function applyTemplate(template, {
   const i18nData = `    <script id="archify-i18n-data" type="application/json">${i18nJson}</script>`;
   return localizeTemplate(template, resolvedLocale)
     .replace(I18N_PLACEHOLDER, () => i18nData)
+    .replace(BASALT_TOKENS_PLACEHOLDER, () => (visualPreset === 'basalt' ? basaltTokensStyle() : ''))
     .replace(TEMPLATE_PLACEHOLDERS[0], () => `<html lang="${esc(resolvedLocale)}" data-theme="dark" data-preset="${esc(visualPreset)}">`)
     .replace(TEMPLATE_PLACEHOLDERS[1], () => `<title>${esc(translateMessage(resolvedLocale, 'page.title', { title }))}</title>`)
     .replace(TEMPLATE_PLACEHOLDERS[2], () => `<h1>${esc(title)}</h1>`)
