@@ -68,7 +68,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 | Lane | When | Engine |
 |-|-|-|
 | Issue (`factory issue new`) | work for a repo that should ship on its own | the software factory: its lead builds, reviews, deploys and verifies (`factory issue list` follows it); no factory, no Issue |
-| `@implementer` | edit must land in this session's live tree | native subagent, Haiku xhigh; raise `model` on the call for novel hard logic, and say why |
+| `@implementer` | edit must land in this session's live tree | native subagent, Haiku high; raise `model` on the call for novel hard logic, and say why |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`, <!-- cli-refs: ignore -->
 Hermes kanban/delegation, Hermes hand-merging PRs.
