@@ -126,8 +126,8 @@ at `https://apps.mini.jkrumm.com`. Detail: `docs/remote-dev.md` §Dev-server doo
 
 Mantine, not Tailwind; canonical reference `argo/apps/dashboard`. Primitives come
 from themed `@mantine/core`; basalt-ui adds shell, dashboard, charts, data,
-content, agent-chat, forms, notifications. Colour via `--vx-*` tokens
-(`basalt-ui/tokens` → `VX.*` + `alpha()`), never raw hex. `BasaltProvider`
+content, agent-chat, forms, notifications. Colour via basalt tokens (`--vx-*` on 2.x, `--basalt-*` from 3.0)
+(`basalt-ui/tokens` → `VX.*` on 2.x, `BASALT.*` from 3.0, + `alpha()`), never raw hex. `BasaltProvider`
 hard-requires `@tanstack/react-query` at build time. After editing basalt-ui:
 `bun run build` before testing consumers.
 

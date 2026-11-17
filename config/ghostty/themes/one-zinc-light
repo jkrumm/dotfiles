@@ -3,7 +3,7 @@
 # Sibling of one-zinc-dark, same split: surfaces from basalt-ui's zinc ramp,
 # accents from Atom One Light desaturated to ~72%.
 #
-# BACKGROUND #f2f2f5 is basalt-ui's own --vx-surface-bg for light mode. Never
+# BACKGROUND #f2f2f5 is basalt-ui's own surface-bg token for light mode. Never
 # pure white: #ffffff and #fafafa both read as glare next to the zinc chrome,
 # and this file deliberately sits a step below them.
 #
