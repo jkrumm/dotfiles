@@ -94,12 +94,10 @@ No script, skill or service runs `claude -p`. Interactive sessions in herdr-core
 subagents and `agw` workflows are the only lanes. Model ids and per-job routing live in
 `agw routes`, never in prose.
 
-The only headless runs, kept on purpose:
+The only headless run, kept on purpose:
 
 - `scripts/claude-accounts-e2e.sh` (`make claude-accounts-e2e`) — tests the launchers
   themselves, a few Haiku tokens per account.
-- modelpick's bench (`modelpick/src/server/bench/`) — it measures the Claude Code harness,
-  so it has to drive the real binary.
 
 ## Where API tokens are spent
 
