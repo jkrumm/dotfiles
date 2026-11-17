@@ -1,4 +1,4 @@
-# How the factory ships this project (software-factory docs/design.md §9).
+# How the factory ships this project (software-factory docs/project.md).
 apiVersion: factory/v2
 name: dotfiles
 deploy:
@@ -6,9 +6,8 @@ deploy:
   targets:
     - { name: mini, host: mini, verify: make verify }
   hold: 15m
-  migrations: []
 ship:
-  - { paths: ["**"], via: push }
+  - { via: push }
 # Not a throttle: the host's memory and load and the `after` edges decide how many run. Rows that restart a shared host
 # service (Postgres, the VM, the work stack) take the `host` lane. Two at a time: a lane holds an Issue for its whole
 # build, not only for its restart, and at one a row waited hours behind another service's drained restart. Rows that
