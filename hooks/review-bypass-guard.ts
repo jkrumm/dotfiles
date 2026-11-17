@@ -47,8 +47,11 @@
  * sent to the owner and waited eight hours). `gh api` stays denied on them too.
  *
  * Not covered (same hazard class): a sync spelled so that no `make`, `bash` or script
- * invocation names it (a target or path assembled by a variable in a command that never
- * writes `github-conf`, a script of the lead's own that calls it); `curl`/`wget` straight
+ * invocation names it (a target or path assembled by a variable or a glob in a command that
+ * never writes `github-conf`, such as `scripts/github-c*fig.sh`; a script of the lead's own
+ * that calls it): the hook stops a lead that misreads the rule, not one that builds a path
+ * to dodge it, and the script's own tighten-only mode already covers every honest spelling.
+ * Also not covered: `curl`/`wget` straight
  * at api.github.com, `gh alias set` wrapping `--admin`, and other forges' CLIs.
  */
 
