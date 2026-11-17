@@ -167,7 +167,7 @@
               "id": "glance-bar",
               "type": "block",
               "size": {
-                "px": 780
+                "px": 608
               },
               "content": {
                 "mod": "jk-glance",
