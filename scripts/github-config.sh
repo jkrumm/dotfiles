@@ -44,6 +44,10 @@
 #   Fine-grained PAT, contents:write on the target repo, owned by jkrumm.
 #
 # Enforced merge settings (all public repos): rebase-only, auto-delete branches.
+# A repo named in `mergeMethod` of config/pr-required-repos.json gets squash-only
+# instead (software-factory: its leads `gh pr merge --squash`, the PR number sits
+# in every subject). The FULL ruleset needs no approval and bypasses for the
+# owner's admin role, so a lead's merge of a green PR passes without --admin.
 #
 # ADDING A PR-REQUIRED REPO:
 #   Add its name to config/pr-required-repos.json. That one file drives BOTH the
@@ -90,6 +94,14 @@ fi
 # Repo is in the PR-required denylist (config/pr-required-repos.json).
 is_pr_required() {
   jq -e --arg r "$1" '.repos | index($r)' "$PR_REQUIRED_FILE" >/dev/null 2>&1
+}
+
+# The one merge method left allowed on a repo: `mergeMethod` in the same file
+# (squash|rebase), default rebase. Anything else falls back to rebase.
+merge_method() {
+  local m
+  m=$(jq -r --arg r "$1" '.mergeMethod[$r] // "rebase"' "$PR_REQUIRED_FILE" 2>/dev/null || echo rebase)
+  [ "$m" = squash ] && echo squash || echo rebase
 }
 
 # Repo has at least one collaborator other than the owner.
@@ -229,13 +241,16 @@ while IFS=" " read -r repo is_private; do
   fi
 
   # Apply merge strategy regardless of protection method
+  method=$(merge_method "$repo")
+  allow_squash=false; allow_rebase=true
+  [ "$method" = squash ] && { allow_squash=true; allow_rebase=false; }
   if gh api "repos/$OWNER/$repo" -X PATCH \
       --field allow_merge_commit=false \
-      --field allow_squash_merge=false \
-      --field allow_rebase_merge=true \
+      --field allow_squash_merge="$allow_squash" \
+      --field allow_rebase_merge="$allow_rebase" \
       --field delete_branch_on_merge=true \
       --silent 2>/dev/null; then
-    echo "    ✓ rebase-only merge, auto-delete branches"
+    echo "    ✓ ${method}-only merge, auto-delete branches"
   else
     echo "    ✗ merge settings update failed" >&2
   fi

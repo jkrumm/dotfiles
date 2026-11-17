@@ -11,6 +11,7 @@
  *   - free-planning-poker  (live web app)
  *   - rollhook             (production deployment tool)
  *   - rollhook-action      (consumed via GitHub Marketplace)
+ *   - software-factory     (every change ships by PR; the factory leads merge them)
  *   - weatherorb           (V2 ships by PR with the full gate in CI)
  *   - any repo under ~/IuRoot/  (work, PR workflow against `main`)
  *
@@ -73,7 +74,7 @@ const PROTECTED = ["main", "master"];
 // dotfiles/config/pr-required-repos.json), shared with scripts/github-config.sh.
 // Fallback array is used only if that file is missing/unreadable — failing safe
 // (keep protecting the known apps) rather than failing open.
-const PR_REQUIRED_FALLBACK = ["basalt-ui", "free-planning-poker", "rollhook", "rollhook-action", "weatherorb"];
+const PR_REQUIRED_FALLBACK = ["basalt-ui", "free-planning-poker", "rollhook", "rollhook-action", "software-factory", "weatherorb"];
 
 export interface RepoConfig {
   prRequired: string[];

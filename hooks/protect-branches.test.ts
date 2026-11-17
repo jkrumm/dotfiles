@@ -374,6 +374,14 @@ describe("the committed config/pr-required-repos.json", () => {
     expect(data.directToMain.every((r: unknown) => typeof r === "string")).toBe(true);
   });
 
+  test("software-factory is PR-required, and the built-in fallback agrees", async () => {
+    const data = JSON.parse(await Bun.file(REAL_CONFIG).text());
+    expect(data.repos).toContain("software-factory");
+    expect(data.directToMain).not.toContain("software-factory");
+    const src = await Bun.file(join(import.meta.dir, "protect-branches.ts")).text();
+    expect(src).toMatch(/PR_REQUIRED_FALLBACK = \[[^\]]*"software-factory"/);
+  });
+
   test("loadRepoConfig reads it verbatim, with no fallback warning", async () => {
     const home = realpathSync(mkdtempSync(join(tmpdir(), "pb-cfg-")));
     const realHome = process.env.HOME;

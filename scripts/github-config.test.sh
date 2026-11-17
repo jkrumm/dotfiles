@@ -43,7 +43,7 @@ mkdir -p "$BIN" "$SB/scripts" "$SB/config"
 ln -s "$(command -v jq)" "$BIN/jq"
 cp "$SRC" "$SB/scripts/github-config.sh"
 cp "$CONF/github-ruleset-full.json" "$CONF/github-ruleset-lite.json" "$SB/config/"
-printf '{"repos":["basalt-ui","rollhook"],"directToMain":["solo"]}\n' > "$SB/config/pr-required-repos.json"
+printf '{"repos":["basalt-ui","rollhook","squashy"],"mergeMethod":{"squashy":"squash","odd":"merge"},"directToMain":["solo"]}\n' > "$SB/config/pr-required-repos.json"
 printf '{"secrets":[]}\n' > "$SB/config/github-secrets.json"
 
 cat > "$BIN/gh" <<'EOF'
@@ -87,6 +87,7 @@ reset() {
 [{"name":"basalt-ui","isPrivate":false},
  {"name":"solo","isPrivate":false},
  {"name":"shared","isPrivate":false},
+ {"name":"squashy","isPrivate":false},
  {"name":"hidden","isPrivate":true}]
 JSON
   echo '[{"login":"jkrumm"},{"login":"friend"}]' > "$ST/collab/shared"
@@ -97,7 +98,7 @@ run() { RC=0; OUT=$(/bin/bash "$SB/scripts/github-config.sh" 2>&1) || RC=$?; }
 
 echo "unit: is_pr_required / has_collaborator / choose_tier (extracted verbatim)"
 OWNER=jkrumm; PR_REQUIRED_FILE="$SB/config/pr-required-repos.json"; export OWNER PR_REQUIRED_FILE   # read by the extracted functions
-for fn in is_pr_required has_collaborator choose_tier apply_ruleset; do
+for fn in is_pr_required merge_method has_collaborator choose_tier apply_ruleset; do
   eval "$(awk -v f="$fn() {" 'index($0, f) == 1 { p = 1 } p { print } p && /^}/ { exit }' "$SRC")"
 done
 reset
@@ -105,6 +106,9 @@ is_pr_required basalt-ui && ok "denylisted repo is PR-required" || bad "denylist
 is_pr_required solo && bad "unlisted repo is not PR-required" || ok "unlisted repo is not PR-required"
 is_pr_required "basalt" && bad "denylist match is exact, not a prefix" || ok "denylist match is exact, not a prefix"
 is_pr_required "" && bad "empty name is not PR-required" || ok "empty name is not PR-required"
+assert_eq "merge_method: listed repo is squash" "$(merge_method squashy)" squash
+assert_eq "merge_method: unlisted repo is rebase" "$(merge_method basalt-ui)" rebase
+assert_eq "merge_method: an unknown value falls back to rebase" "$(merge_method odd)" rebase
 has_collaborator shared && ok "a second login is a collaborator" || bad "a second login is a collaborator"
 has_collaborator solo && bad "the owner alone is not a collaborator" || ok "the owner alone is not a collaborator"
 has_collaborator nobody && bad "no collaborators -> false" || ok "no collaborators -> false"
@@ -168,7 +172,7 @@ assert_eq "dry run writes nothing" "$(cat "$ST/writes.log")" ""
 echo "apply"
 reset; run
 assert_eq "exits 0" "$RC" 0
-assert_contains "all four counted" "$OUT" "Done: 4 configured, 0 failed"
+assert_contains "all five counted" "$OUT" "Done: 5 configured, 0 failed"
 assert_contains "denylisted repo gets FULL" "$OUT" "✓ full ruleset (PR-required (denylist))"
 assert_contains "collaborator repo gets FULL" "$OUT" "✓ full ruleset (has collaborator)"
 assert_contains "solo repo gets LITE" "$OUT" "✓ lite ruleset (direct-to-master)"
@@ -177,14 +181,15 @@ assert_eq "basalt-ui payload has the PR rule" "$(jq '[.rules[].type] | index("pu
 assert_eq "shared payload has the PR rule" "$(jq '[.rules[].type] | index("pull_request") != null' "$ST/body.POST.shared")" true
 assert_eq "solo payload has no PR rule" "$(jq '[.rules[].type] | index("pull_request") != null' "$ST/body.POST.solo")" false
 assert_eq "private repo: no ruleset written" "$([ -e "$ST/body.POST.hidden" ] && echo yes || echo no)" no
-assert_eq "every repo (private too) gets the merge settings" "$(grep -c '^PATCH repos/jkrumm/[a-z-]*$' "$ST/writes.log")" 4
+assert_eq "every repo (private too) gets the merge settings" "$(grep -c '^PATCH repos/jkrumm/[a-z-]*$' "$ST/writes.log")" 5
 assert_contains "merge settings are rebase-only + auto-delete" "$(grep 'api repos/jkrumm/solo -X PATCH' "$ST/gh.log")" "allow_merge_commit=false --field allow_squash_merge=false --field allow_rebase_merge=true --field delete_branch_on_merge=true"
+assert_contains "a mergeMethod repo is squash-only" "$(grep 'api repos/jkrumm/squashy -X PATCH' "$ST/gh.log" || true)" "allow_squash_merge=true --field allow_rebase_merge=false"
 reset; echo '[{"id":5,"name":"protect-default-branch"}]' > "$ST/rulesets/solo"; run
 assert_contains "existing ruleset updated, not duplicated" "$(cat "$ST/writes.log")" "PUT repos/jkrumm/solo/rulesets/5"
 assert_not_contains "no POST for the existing one" "$(cat "$ST/writes.log")" "POST repos/jkrumm/solo/rulesets"
 reset; touch "$ST/fail_ruleset_solo"; run
 assert_contains "a failed ruleset is reported" "$OUT" "✗ lite ruleset failed"
-assert_contains "failure is counted, the rest continue" "$OUT" "Done: 3 configured, 1 failed"
+assert_contains "failure is counted, the rest continue" "$OUT" "Done: 4 configured, 1 failed"
 reset; touch "$ST/fail_patch_solo"; run
 assert_contains "failed merge-settings update is reported" "$OUT" "✗ merge settings update failed"
 
