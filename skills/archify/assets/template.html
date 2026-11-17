@@ -6382,16 +6382,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return names;
         })();
 
-        // Resolve the full variable set for a given data-theme via an
-        // off-DOM probe, independent of what the viewer is currently set to.
+        // Resolve the full variable set for a given data-theme,
+        // independent of what the viewer is currently set to. Resolved on
+        // the root element with its data-theme swapped for the read (a
+        // synchronous style read, never painted, restored in finally): the
+        // basalt tokens are declared for :root[data-theme] only, so a probe
+        // div would inherit the viewer's theme instead of its own.
         function resolveVars(themeAttr) {
-          var probe = document.createElement('div');
-          probe.setAttribute('data-theme', themeAttr);
-          probe.setAttribute('data-preset', document.documentElement.getAttribute('data-preset') || 'classic');
-          probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;';
-          document.body.appendChild(probe);
+          var root = document.documentElement;
+          var previous = root.getAttribute('data-theme');
+          root.setAttribute('data-theme', themeAttr);
           try {
-            var c = getComputedStyle(probe);
+            var c = getComputedStyle(root);
             return {
               background: c.getPropertyValue('--bg').trim(),
               vars: varNames.map(function (n) {
@@ -6399,7 +6401,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               }).join(' ')
             };
           } finally {
-            document.body.removeChild(probe);
+            if (previous === null) root.removeAttribute('data-theme');
+            else root.setAttribute('data-theme', previous);
           }
         }
 
