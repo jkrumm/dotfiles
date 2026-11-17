@@ -90,7 +90,7 @@ inline.
   every implementation session. Near the limit: the picker switches account, else pause
   (`rd` refuses to spill); never IU API tokens. The agw inference gateway holds the IU and Claude API tokens for
   `agw`, OpenCode, Hermes, `oc` and modelpick; Codex (`cx`/`cxa`/`astra`) keeps the IU key in its launcher; use the launchers, never hand-rolled Keychain creds. No headless `claude -p` anywhere
-  (`docs/agent-platform.md` lists the only two exceptions); `hooks/iu-model-guard.ts` still
+  (`docs/agent-platform.md` lists the only exception); `hooks/iu-model-guard.ts` still
   blocks Opus/Fable on any metered endpoint.
 - Don't switch the orchestrator's model mid-session (cache invalidation).
   Worktree isolation only when asked, up front.
