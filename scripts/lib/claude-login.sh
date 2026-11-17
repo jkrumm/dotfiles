@@ -8,14 +8,26 @@ login_local_machine() {
   if [[ "$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null)" == "cache" ]]; then echo mini; else echo macbook; fi
 }
 
-# Callback port of an authorize URL: the port in its redirect_uri (http://localhost:<port>/callback, either
-# percent-encoded as in the real URL or raw). Prints nothing and returns 1 when there is none, or it is not a
-# loopback http URL, or the port is out of range.
-login_url_port() {
-  local port
-  port=$(printf '%s' "${1-}" | sed -n -E 's#.*[?&]redirect_uri=http(%3[Aa]|:)(%2[Ff]|/)(%2[Ff]|/)(localhost|127\.0\.0\.1)(%3[Aa]|:)([0-9]{1,5})(%2[Ff]|/|&|$).*#\6#p')
-  [[ -n "$port" ]] && (( 10#$port >= 1 && 10#$port <= 65535 )) || return 1
-  echo "$((10#$port))"
+# The code-paste variant of an authorize URL: its loopback redirect_uri (http://localhost:<port>/callback, percent-encoded
+# as in the real URL or raw) swapped for the platform's code page, which shows the code instead of calling back. That is
+# the manual URL the CLI itself prints; state and PKCE challenge stay, so the code pasted at the CLI's prompt completes
+# this very login. A URL without a loopback redirect_uri is printed unchanged. `code=true` is added when missing.
+login_paste_url() { # <authorize-url>
+  local out
+  out=$(printf '%s' "${1-}" | sed -E 's#([?&]redirect_uri=)http(%3[Aa]|:)(%2[Ff]|/)(%2[Ff]|/)(localhost|127\.0\.0\.1)(%3[Aa]|:)[0-9]{1,5}[^&]*#\1https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback#')
+  case "$out" in *[\?\&]code=true*|"") ;; *\?*) out="$out&code=true" ;; esac
+  printf '%s' "$out"
+}
+
+# Open <url> in <app> (empty = the default browser) on the MacBook: the fixed `open-url` verb of its ssh gate, the app
+# name and then the URL on stdin. Test seams as in claude-login-browser.sh.
+login_open_on_mac() { # <app> <url>
+  printf '%s\n%s\n' "${1-}" "${2-}" | "${CLAUDE_LOGIN_SSH:-ssh}" -o BatchMode=yes -o ConnectTimeout=8 "${CLAUDE_LOGIN_MAC_HOST:-iumac}" open-url
+}
+
+# A native notification on the MacBook, best effort: the gate's `notify` verb, the title and then the text on stdin.
+login_mac_notify() { # <title> <text>
+  printf '%s\n%s\n' "${1-}" "${2-}" | "${CLAUDE_LOGIN_SSH:-ssh}" -o BatchMode=yes -o ConnectTimeout=8 "${CLAUDE_LOGIN_MAC_HOST:-iumac}" notify >/dev/null 2>&1 || true
 }
 
 # One argument as a single POSIX shell word ('…' with embedded quotes spelled '\''). The authorize URL carries & and
@@ -34,20 +46,6 @@ login_browser_for() { # <registry> <id>
   jq -e '.accounts | type == "object"' "$reg" >/dev/null 2>&1 || { echo "claude-login: registry $reg is unreadable or malformed" >&2; return 2; }
   jq -e --arg id "$id" '.accounts | has($id)' "$reg" >/dev/null 2>&1 || { echo "claude-login: registry $reg has no account '$id'" >&2; return 3; }
   jq -r --arg id "$id" '.accounts[$id].loginBrowser // ""' "$reg"
-}
-
-# What the reverse-forward watchdog does on one poll. Prints `keep` or `close:<reason>`.
-#   owner_alive     1 = the login process still runs (or is unknown), 0 = gone
-#   listening       1 = something listens on the callback port on this machine right now
-#   seen_listening  1 = it listened at least once since the tunnel opened
-#   idle_s          seconds since a connection last used the port (resets on activity)
-#   max_idle_s      the idle watchdog; generous, the only time limit
-login_tunnel_verdict() { # owner_alive listening seen_listening idle_s max_idle_s
-  local owner=$1 listening=$2 seen=$3 idle=$4 max=$5
-  if [[ "$owner" != 1 ]]; then echo "close:owner-gone"; return; fi
-  if [[ "$seen" == 1 && "$listening" != 1 ]]; then echo "close:login-ended"; return; fi
-  if (( idle >= max )); then echo "close:idle"; return; fi
-  echo keep
 }
 
 # Removes anything token-shaped from a stream, line-buffered (nothing is held back, so a flush at exit is never

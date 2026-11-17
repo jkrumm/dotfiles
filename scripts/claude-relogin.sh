@@ -7,7 +7,8 @@
 # that owns the credential (--machine, default: this one). It runs `claude auth login --claudeai` with BROWSER set to
 # claude-login-browser.sh (never `ssh mini claude …`: the login Keychain is only reachable from the GUI session). The
 # helper opens the authorize URL in the browser signed in to the account (registry `loginBrowser`); the owner clicks
-# approve, no copy/paste. Afterwards `claude-account refresh --ids <id>` runs and the owner gets a native notification
+# approve. On the MacBook that is all; on the mini the browser is elsewhere, so the approval page shows a code that the
+# owner pastes into the login terminal (the helper says so, in the terminal and by notification). Afterwards `claude-account refresh --ids <id>` runs and the owner gets a native notification
 # ("Claude login me: renewed, valid until <date>", or a failure line with the log path), on the MacBook. "Renewed"
 # is proven, not assumed: the Keychain item's refresh_expires_at is read before and after the login (`claude-account
 # expiry --json --ids <id>`, which also reads a disabled account's first login) and must be newer afterwards; a login
@@ -21,7 +22,9 @@
 #   mini      a terminal in the mini's herdr-core (`hc run`; the core is a launchd GUI-session child, so the Keychain
 #             works), labelled into the dotfiles space as the tab `relogin <id>`, no parent. After success it exits and
 #             removes itself a few seconds later, only that terminal; the outcome notification goes to the MacBook over
-#             ssh. A failed login drops into a shell there, left open for the paste fallback. Without a running core
+#             ssh. A failed login drops into a shell there, left open for the paste fallback. Asking again while the
+#             terminal still waits opens its approval page again and repeats where the code goes; one whose login is
+#             over (a failed one at its shell) is replaced. Without a running core
 #             (checked through launchd first: an `hc` call would start a stray one) it stops and says so.
 #   --visible   today's behaviour for debugging: a Terminal window / hc terminal that stays open, no worker, no
 #               notification.
@@ -53,6 +56,7 @@ CLOSE_DELAY_S="${CLAUDE_RELOGIN_CLOSE_DELAY_S:-4}"
 BG_IDLE_S="${CLAUDE_RELOGIN_BG_IDLE_S:-600}"   # no new log output for this long = the background login is stuck
 FOREGROUND="${CLAUDE_RELOGIN_FOREGROUND:-0}"
 MAX_WAIT_S="${CLAUDE_RELOGIN_MAX_WAIT_S:-3600}"   # longest the opener waits for a login terminal to report; then it notifies and leaves it open
+STATE_DIR="${CLAUDE_RELOGIN_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claude-accounts}" # <id>.relogin-url: the approval URL while a mini login waits
 ABSENT_N="${CLAUDE_RELOGIN_ABSENT_N:-3}"          # consecutive clean "it is gone" answers before a terminal counts as closed
 TERM_GRACE_S="${CLAUDE_RELOGIN_TERM_GRACE_S:-5}"  # SIGTERM, this long, then SIGKILL
 export PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" # appended: a non-login ssh shell lacks them, an existing PATH entry (or a test stub) wins
@@ -64,7 +68,7 @@ SAMPLE_URL='https://claude.ai/oauth/authorize?client_id=sample&response_type=cod
 
 die() { echo "claude-relogin: $*" >&2; exit 2; }
 
-id=""; machine=""; ask=0; dry=0; in_pane=0; reason=""; visible=0; worker=0; watch_ws=""; result_file=""; tunnel_pid_file=""
+id=""; machine=""; ask=0; dry=0; in_pane=0; reason=""; visible=0; worker=0; watch_ws=""; result_file=""; url_file=""
 while (( $# )); do
   case "$1" in
     --machine) [[ $# -ge 2 ]] || die "--machine needs mini or macbook"; machine=$2; shift ;;
@@ -126,7 +130,7 @@ login_env() { # [extra NAME=value…] — builds login_cmd
   # unset for it (setting it changes the Keychain service)
   login_cmd=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_BASE_URL)
   [[ -z "$dir" ]] && login_cmd+=(-u CLAUDE_CONFIG_DIR)
-  login_cmd+=("USER=${USER:-$(id -un)}" "BROWSER=$HELPER" "CLAUDE_LOGIN_ACCOUNT=$id" "CLAUDE_LOGIN_MACHINE=$machine" "CLAUDE_LOGIN_OWNER_PID=$$" "CLAUDE_LOGIN_TUNNEL_PID_FILE=$tunnel_pid_file")
+  login_cmd+=("USER=${USER:-$(id -un)}" "BROWSER=$HELPER" "CLAUDE_LOGIN_ACCOUNT=$id" "CLAUDE_LOGIN_MACHINE=$machine" "CLAUDE_LOGIN_URL_FILE=$url_file")
   [[ -n "$dir" ]] && login_cmd+=("CLAUDE_CONFIG_DIR=${dir/#\~/$HOME}")
   login_cmd+=("$@" claude auth login --claudeai)
 }
@@ -266,6 +270,7 @@ name_tab() { # <tab id> <name>
   done
   return 0
 }
+login_url_file() { printf '%s/%s.relogin-url' "$STATE_DIR" "$1"; } # <id>
 # hc terminal names: 1-32 of a-z 0-9 - _
 hc_term_name() { local n; n=$(printf 'relogin-%s' "$1" | tr '[:upper:]' '[:lower:]'); printf %s "${n:0:32}"; }
 probe_terminal() { # <address> — 0 live, 1 gone (not found or finished), 2 could not ask
@@ -317,21 +322,21 @@ kill_bounded() { # <pid>
 # ── --in-pane: the login itself, in this terminal ────────────────────────────────────────────────
 if (( in_pane )); then
   [[ "$machine" == "$here" ]] || die "--in-pane runs on the machine that owns the login ($machine), this is the $here"
-  # This process owns the login, and with it the reverse tunnel the helper may start (its pid lands in this file):
-  # whatever way we exit, the tunnel goes too. A result file (written last, atomically) tells whoever opened this
-  # terminal how it ended, so it can close the window and notify.
-  tunnel_pid_file=$(mktemp "${TMPDIR:-/tmp}/claude-relogin-tunnel.XXXXXX") || die "mktemp failed"
+  # This process owns the login. The helper keeps the approval URL in url_file while the login waits (empty while it
+  # starts): a repeated `claude-relogin` reads it, and whatever way we exit it is gone, which is how a later call knows
+  # the login in this terminal is over. A result file (written last, atomically) tells whoever opened this terminal how
+  # it ended, so it can close the window and notify.
+  url_file=$(login_url_file "$id")
+  if ! (( dry )); then ( umask 077; mkdir -p "$STATE_DIR" && : >"$url_file" ) || die "cannot create $url_file"; fi
   write_result() { # temp file next to the target (mktemp, never a predictable name), then an atomic rename
     local t
     [[ -n "$result_file" ]] && ! (( dry )) || return 0
     t=$(mktemp "$result_file.XXXXXX") && printf '%s\n' "$1" > "$t" && mv "$t" "$result_file"
     return 0
   }
-  finish() { # exit trap: tunnel down, and a result for the opener even when we were interrupted
-    local p rc=$?
-    p=$(cat "$tunnel_pid_file" 2>/dev/null)
-    [[ -z "$p" ]] || kill "$p" 2>/dev/null
-    rm -f "$tunnel_pid_file"
+  finish() { # exit trap: the URL file goes, and a result for the opener even when we were interrupted
+    local rc=$?
+    rm -f "$url_file"
     [[ -z "$result_file" ]] || result_ready "$result_file" || write_result "fail $rc"
   }
   trap finish EXIT
@@ -580,12 +585,35 @@ if [[ "$machine" == mini ]]; then
     exit 0
   fi
   hc_usable || die "herdr-core is not up on the mini (an hc call would start a stray one): ${CORE_UP_WHY:-hc is not installed} - fix: ${CORE_UP_FIX:-make herdr-core-setup}, or run 'make doctor'"
-  # A login terminal of this account that is still around (a failed one left at its shell, or one being approved): not ours
-  # to replace silently, and hc refuses a second terminal of the same name anyway.
+  # A login terminal of this account that is still around (hc refuses a second one of the same name). A finished one is
+  # swept. A live one whose login still waits (its URL file exists) is not replaced: the owner asked again because the
+  # first try went nowhere, so open its approval page again and say where the code goes. A live one whose login is over
+  # (no URL file: a failed one left at its shell) is closed and replaced.
   if existing=$(bounded hc get "$tname" --json 2>/dev/null); then
+    old=$(jq -r '.address // "?"' <<<"$existing" 2>/dev/null)
     case "$(jq -r '.state // empty' <<<"$existing" 2>/dev/null)" in
       finished) bounded hc rm "$tname" >/dev/null 2>&1 ;;
-      *) die "a login terminal for '$id' is still open on the mini ($(jq -r '.address // "?"' <<<"$existing")): finish it there, or close it with  hc kill $tname" ;;
+      *)
+        url_file=$(login_url_file "$id")
+        if [[ -f "$url_file" && ! -L "$url_file" && -O "$url_file" ]]; then
+          waiting_url=$(head -1 "$url_file" 2>/dev/null)
+          where="the tab 'relogin $id' (terminal $tname, $old) in the Herdr app"
+          if [[ -z "$waiting_url" ]]; then
+            notify "The login for $id is starting in $where: the approval page opens in a moment, paste its code there."
+            echo "claude-relogin: the login terminal for '$id' ($old) is still starting: its approval page opens in a moment, paste the code in $where"
+            exit 0
+          fi
+          if ! login_open_on_mac "$app" "$waiting_url"; then
+            notify "The login for $id still waits for its code in $where, but the approval page could not be opened. See the terminal."
+            die "the login for '$id' waits in $where; could not open its approval page on the MacBook. Open it yourself and paste the code: $waiting_url"
+          fi
+          notify "The login for $id waits for its code: approve in ${app:-your browser}, then paste the code into $where."
+          echo "claude-relogin: the login for '$id' already waits in $where: its approval page is open again in ${app:-your browser}; paste the code there"
+          exit 0
+        fi
+        bounded hc kill "$tname" >/dev/null 2>&1; bounded hc rm "$tname" >/dev/null 2>&1
+        ! bounded hc get "$tname" --json >/dev/null 2>&1 || die "a login terminal for '$id' ($old) is open and could not be closed: close it with  hc kill $tname"
+        ;;
     esac
   fi
   space=$(hc_space_id) || die "could not read the herdr-app document from the mini's core - refusing to guess the dotfiles space"

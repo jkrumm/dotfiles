@@ -116,7 +116,7 @@ export default class JkDetails extends View {
         .child(div().flex_1().min_w(0).truncate().text_color(x.state === "fail" ? t.blocked : t.ansi3)
           .child(`${x.machine === "macbook" ? "MacBook" : x.machine}: ${x.detail}`))
         .when(runnable, (el) => el.child(shared("jk.relogin")?.key === key
-          ? div().flex_none().text_color(t.dim).child("approve in browser")
+          ? div().flex_none().text_color(t.dim).child(x.machine === "mini" ? "approve, paste code" : "approve in browser")
           : div().id(`fix-${key}`).flex_none().px(6).rounded(4).bg(t.accent).text_color(t.accent_foreground).cursor_pointer()
               .on_click((_e, cx) => this.fix(x, cx)).child("Re-login")));
     });

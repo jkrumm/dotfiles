@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # claude-relogin.test.sh — hermetic suite for claude-relogin.sh, claude-login-browser.sh and lib/claude-login.sh.
 # ssh, open, hc, osascript, claude, claude-account, launchctl, lsof and ask-human are PATH stubs that only record their
-# argv: no real browser, tunnel, dialog or login ever happens. A scratch HOME, registry and machine marker.
+# argv: no real browser, dialog or login ever happens. A scratch HOME, registry and machine marker.
 # Usage: scripts/claude-relogin.test.sh   (exit 0 = all pass)
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +16,7 @@ assert_not_contains() { case "$3" in *"$2"*) bad "$1" "[$3] unexpectedly contain
 
 command -v jq >/dev/null || { echo "✗ jq not found"; exit 2; }
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/claude-relogin-test.XXXXXX")" || exit 2
-cleanup() { [[ -f "$TMP/tunnel.pid" ]] && kill "$(cat "$TMP/tunnel.pid")" 2>/dev/null; rm -rf "$TMP"; }
+cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 mkdir -p "$TMP/bin" "$TMP/home" "$TMP/xdg/secrets"
 export HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" LOG="$TMP/calls"
@@ -35,9 +35,8 @@ export CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
 rec='l=${0##*/}; for a in "$@"; do l="$l[$a]"; done; printf "%s\n" "$l" >> "$LOG"'
 mk() { printf '#!/bin/bash\n%s\n%s\n' "$rec" "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 mk ssh 'case " $* " in
-  *" -N "*) echo $$ > "$TMP_DIR/tunnel.pid"; [ "${STUB_TUNNEL:-ok}" = fail ] && exit 1
-            [ "${STUB_TUNNEL:-ok}" = dies ] && { sleep 2; exit 1; }; exec sleep 60 ;;
-  *" notify "*|*" open-url "*) cat >> "$TMP_DIR/ssh-stdin"; [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
+  *" open-url "*) cat >> "$TMP_DIR/ssh-open-stdin"; [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
+  *" notify "*) cat >> "$TMP_DIR/ssh-stdin"; exit 0 ;;
   *) [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
 esac'
 mk open '[ "${STUB_OPENBIN:-ok}" = fail ] && exit 1; exit 0'
@@ -81,9 +80,11 @@ case "$1" in
     [ "${STUB_HC_RUN:-ok}" = fail ] && { echo "boom" >&2; exit 1; }
     if [ -n "${STUB_PANE_RESULT:-}" ]; then f=$(printf '%s' "${!#}" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -z "$f" ] || echo "$STUB_PANE_RESULT" > "$f"; fi
     echo "{\"address\":\"${STUB_HC_ADDR:-t9}\",\"name\":\"x\",\"state\":\"live\"}" ;;
+  kill) touch "$TMP_DIR/hc-killed" ;;
   get)
     case "$2" in
-      relogin-*) case "${STUB_HC_EXISTING:-none}" in none) exit 3 ;; *) echo "{\"address\":\"t5\",\"state\":\"$STUB_HC_EXISTING\"}" ;; esac ;;
+      relogin-*) [ -e "$TMP_DIR/hc-killed" ] && [ "${STUB_HC_STUCK:-0}" != 1 ] && exit 3
+                 case "${STUB_HC_EXISTING:-none}" in none) exit 3 ;; *) echo "{\"address\":\"t5\",\"state\":\"$STUB_HC_EXISTING\"}" ;; esac ;;
       *) case "${STUB_HC_GET:-live}" in
            gone) exit 3 ;; fail) printf 'hc:get-error\n' >> "$LOG"; exit 1 ;; garbage) echo "not json" ;;
            finished) echo '{"address":"t9","state":"finished"}' ;;
@@ -93,7 +94,7 @@ case "$1" in
 esac
 STUB
 chmod +x "$TMP/bin/hc"
-mk claude 'echo x >> "$TMP_DIR/claude.runs"; [ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 10; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+mk claude 'echo x >> "$TMP_DIR/claude.runs"; [ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 10; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
 # expiry --json answers STUB_EXPIRY_BEFORE until the claude stub has run since the last reset(), then STUB_EXPIRY_AFTER
 # (epoch ms; "none" = the Keychain item is unreadable: refresh_expires_at null; "fail" = the CLI itself fails). The default login moves forward 30 days.
 mk claude-account 'case "$1 $2" in
@@ -118,11 +119,10 @@ mk launchctl 'echo "${STUB_SESSION:-Aqua}"'
 mk ps 'if [ "${STUB_CORE:-running}" = running ]; then echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"; else echo "  4242 /x/Herdr Core.app/Contents/MacOS/herdr-core serve"; fi'
 # the core's socket answers (lib/core-up.sh's second half) unless STUB_SOCK=down
 mk nc '[ "${STUB_SOCK:-up}" = up ]'
-mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH" PS_BIN="$TMP/bin/ps"
 mkdir -p "$TMP/space-repo"; export CLAUDE_RELOGIN_SPACE_DIR="$TMP/space-repo"
-export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
+export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_RELOGIN_STATE_DIR="$TMP/state"
 # workers run inline (never a stray detached process), no waits, a scratch log
 export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=6 CLAUDE_RELOGIN_LOG="$TMP/relogin.log" CLAUDE_RELOGIN_ABSENT_N=2 CLAUDE_RELOGIN_MAX_WAIT_S=4 CLAUDE_RELOGIN_TERM_GRACE_S=1
 # Safety net: every external command the scripts reach must be one of our stubs, never the real hc/ssh/claude.
@@ -130,22 +130,22 @@ for c in ssh open hc osascript claude claude-account launchctl nc; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
-reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/ssh-stdin" "$TMP/tunnel.pid" "$TMP/claude.runs" "$TMP/doc-sets.jsonl"; }
-calls() { grep -v -e "^lsof" -e "^launchctl\[print\]" -e "^nc\[" "$LOG"; } # a watchdog left over from an earlier case may still poll lsof; that is noise here
+reset() { : > "$LOG"; : > "$TMP/msgs"; rm -rf "$TMP/hc-killed" "$TMP/ssh-stdin" "$TMP/ssh-open-stdin" "$TMP/claude.runs" "$TMP/doc-sets.jsonl" "$TMP/state"; }
+calls() { grep -v -e "^launchctl\[print\]" -e "^nc\[" "$LOG"; }
 
 URL='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
 
-# ── lib: URL/port parsing, quoting, browser choice, tunnel verdict ──────────────────────────────
+# ── lib: the code-paste URL, quoting, browser choice ─────────────────────────────────────────────
 # shellcheck source=lib/claude-login.sh
 source "$HERE/lib/claude-login.sh"
-echo "callback port parsing"
-assert_eq "percent-encoded redirect_uri" 58876 "$(login_url_port "$URL")"
-assert_eq "raw redirect_uri" 4242 "$(login_url_port 'https://x/authorize?a=b&redirect_uri=http://localhost:4242/callback&c=d')"
-assert_eq "127.0.0.1 and lower-case hex escapes" 7001 "$(login_url_port 'https://x/a?redirect_uri=http%3a%2f%2f127.0.0.1%3a7001%2fcallback')"
-assert_eq "port at the end of the URL" 9000 "$(login_url_port 'https://x/a?redirect_uri=http://localhost:9000')"
-for bad_url in 'https://x/a?state=1' 'https://x/a?redirect_uri=https%3A%2F%2Flocalhost%3A1%2Fcb' 'https://x/a?redirect_uri=http%3A%2F%2Fevil.example%3A1%2Fcb' 'https://x/a?redirect_uri=http%3A%2F%2Flocalhost%3A70000%2Fcb' 'https://x/a?redirect_uri=http%3A%2F%2Flocalhost%3A0%2Fcb' ''; do
-  login_url_port "$bad_url" >/dev/null && bad "no port for [$bad_url]" || ok "no port for [$bad_url]"
-done
+echo "code-paste URL"
+PASTE='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
+assert_eq "percent-encoded loopback redirect_uri becomes the code page, the rest is untouched" "$PASTE" "$(login_paste_url "$URL")"
+assert_eq "raw loopback redirect_uri in the middle" 'https://x/a?code=true&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&c=d' "$(login_paste_url 'https://x/a?code=true&redirect_uri=http://localhost:4242/callback&c=d')"
+assert_eq "127.0.0.1 and lower-case hex escapes, redirect_uri last" 'https://x/a?code=true&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback' "$(login_paste_url 'https://x/a?code=true&redirect_uri=http%3a%2f%2f127.0.0.1%3a7001%2fcallback')"
+assert_eq "already the code page: unchanged" "$PASTE" "$(login_paste_url "$PASTE")"
+assert_contains "code=true is added when the CLI left it out" "&code=true" "$(login_paste_url 'https://x/a?redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fcallback')"
+assert_eq "an evil host is not rewritten into anything" 'https://x/a?code=true&redirect_uri=http%3A%2F%2Fevil.example%3A1%2Fcb' "$(login_paste_url 'https://x/a?code=true&redirect_uri=http%3A%2F%2Fevil.example%3A1%2Fcb')"
 
 echo "quoting"
 q=$(login_shquote "$URL")
@@ -167,14 +167,6 @@ login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" nobody >/dev/null 2>&1; assert_eq 
 ( export PATH=/nonexistent; login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" me >/dev/null 2>&1 ); assert_eq "jq missing: rc 2" 2 "$?"
 login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" nob >/dev/null 2>&1; assert_eq "account without loginBrowser: rc 0 (empty is a real answer)" 0 "$?"
 
-echo "tunnel watchdog verdict (owner listening seen idle max)"
-assert_eq "login running, nothing to report" keep "$(login_tunnel_verdict 1 1 1 10 2700)"
-assert_eq "not listening yet (CLI still starting)" keep "$(login_tunnel_verdict 1 0 0 10 2700)"
-assert_eq "owner gone" close:owner-gone "$(login_tunnel_verdict 0 1 1 10 2700)"
-assert_eq "listener gone after it was seen: login finished" close:login-ended "$(login_tunnel_verdict 1 0 1 10 2700)"
-assert_eq "idle window reached" close:idle "$(login_tunnel_verdict 1 1 1 2700 2700)"
-assert_eq "owner gone beats idle" close:owner-gone "$(login_tunnel_verdict 0 0 1 9999 2700)"
-
 # ── helper ──────────────────────────────────────────────────────────────────────────────────────
 echo "helper on the MacBook"
 reset
@@ -190,40 +182,30 @@ reset; bash "$BROWSER_SH" "$URL"
 assert_contains "no account at all: default browser, says so" "no CLAUDE_LOGIN_ACCOUNT" "$(cat "$TMP/msgs")"
 bash "$BROWSER_SH" >/dev/null 2>&1; assert_eq "no URL: usage error" 2 "$?"
 
-echo "helper on the mini: reverse forward + remote open"
-reset
-owner_sh=$(sleep 3 & echo $!)   # a login process that ends shortly
-CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$owner_sh bash "$BROWSER_SH" "$URL"; rc=$?
+echo "helper on the mini: the code-paste page is opened on the MacBook, the owner is told where the code goes"
+reset; export CLAUDE_LOGIN_URL_FILE="$TMP/approval-url"; rm -f "$CLAUDE_LOGIN_URL_FILE"
+CLAUDE_LOGIN_ACCOUNT=iu CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; rc=$?
 assert_eq "rc 0" 0 "$rc"
-tunnel_line=$(grep -m1 '^ssh.*\[-N\]' "$LOG"); open_line=$(grep -v '\[-N\]' "$LOG" | grep -m1 '^ssh')   # by content: the two stubs start concurrently
-assert_contains "tunnel forwards the callback port back to the mini" "[-N][-R][127.0.0.1:58876:localhost:58876]" "$tunnel_line"
-assert_contains "tunnel: own connection, fails loudly" "[ExitOnForwardFailure=yes]" "$tunnel_line"
-assert_contains "tunnel: no shared control master" "[ControlPath=none]" "$tunnel_line"
-assert_contains "tunnel goes to the MacBook" "[iumac]" "$tunnel_line"
-assert_contains "opener is the open-url verb" "[iumac][open-url]" "$open_line"
-assert_eq "open-url stdin: app name, then the URL" "Helium|$URL" "$(paste -sd'|' "$TMP/ssh-stdin")"
-assert_contains "user told where it opened" "Helium" "$(cat "$TMP/msgs")"
-for _ in 1 2 3 4 5 6 7 8; do kill -0 "$(cat "$TMP/tunnel.pid")" 2>/dev/null || break; sleep 1; done
-kill -0 "$(cat "$TMP/tunnel.pid")" 2>/dev/null && bad "tunnel closes after the login process is gone" || ok "tunnel closes after the login process is gone"
+assert_not_contains "no reverse forward is attempted any more" "[-N]" "$(calls)"
+assert_eq "exactly two ssh calls: open-url and notify" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][open-url]|ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][notify]" "$(calls | paste -sd'|' -)"
+assert_eq "open-url stdin: the app, then the code-paste URL (not the localhost one)" "Google Chrome|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_eq "the URL is kept for a repeated trigger" "$PASTE" "$(cat "$CLAUDE_LOGIN_URL_FILE")"
+assert_eq "the notification names the account, the browser and the tab the code goes to" "Claude login iu|Approve in Google Chrome, then paste the code into the tab 'relogin iu' (terminal relogin-iu) in the Herdr app on the mini." "$(paste -sd'|' "$TMP/ssh-stdin")"
+assert_contains "the terminal says where to paste" "paste it at the prompt below, in THIS terminal" "$(cat "$TMP/msgs")"
+reset; CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
+assert_contains "me: Helium on the MacBook" "Helium|" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+reset; CLAUDE_LOGIN_ACCOUNT=nob CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
+assert_eq "no loginBrowser: the default browser (empty app line)" "|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+unset CLAUDE_LOGIN_URL_FILE
 
-reset
-CLAUDE_LOGIN_ACCOUNT=iu CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$$ bash "$BROWSER_SH" "$URL"
-assert_contains "iu: Google Chrome on the MacBook" "Google Chrome" "$(cat "$TMP/ssh-stdin")"
-kill "$(cat "$TMP/tunnel.pid")" 2>/dev/null
-
-echo "helper failures print the URL and keep the paste path"
-reset; STUB_TUNNEL=fail CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; rc=$?
-assert_eq "forward refused: rc 1" 1 "$rc"
-assert_not_contains "no open attempted after a dead forward" "Helium" "$(sed -n '2,$p' "$LOG")"
-assert_contains "URL printed" "$URL" "$(cat "$TMP/msgs")"
-assert_contains "tells to paste the code" "paste the code" "$(cat "$TMP/msgs")"
+echo "helper on the mini: failures print the code-paste URL"
 reset; STUB_OPEN=fail CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; rc=$?
 assert_eq "remote open failed: rc 1" 1 "$rc"
-assert_contains "URL printed" "$URL" "$(cat "$TMP/msgs")"
-sleep 1; kill -0 "$(cat "$TMP/tunnel.pid")" 2>/dev/null && bad "tunnel killed after a failed open" || ok "tunnel killed after a failed open"
+assert_contains "the URL that works from the MacBook is printed" "$PASTE" "$(cat "$TMP/msgs")"
+assert_contains "tells to paste the code" "paste the code" "$(cat "$TMP/msgs")"
+assert_eq "no notification for a page that did not open" 0 "$(grep -c 'iumac\]\[notify' "$LOG")"
 reset; CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" 'https://claude.ai/oauth/authorize?state=1'; rc=$?
-assert_eq "no callback port in the URL: rc 1, no ssh at all" "1/" "$rc/$(calls)"
-assert_contains "...and the URL is printed" "authorize?state=1" "$(cat "$TMP/msgs")"
+assert_eq "a URL without a loopback redirect is opened as it is" "0/Helium|https://claude.ai/oauth/authorize?state=1&code=true" "$rc/$(paste -sd'|' "$TMP/ssh-open-stdin")"
 
 echo "helper: open fails on the MacBook, unusable registry, unwritable terminal"
 reset; STUB_OPENBIN=fail CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=macbook bash "$BROWSER_SH" "$URL"; rc=$?
@@ -238,21 +220,11 @@ assert_contains "unwritable terminal: messages fall back to stderr" "system defa
 reset; err=$(STUB_OPENBIN=fail CLAUDE_LOGIN_MSG_FILE="$TMP/no-such-dir/msgs" CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=macbook bash "$BROWSER_SH" "$URL" 2>&1 >/dev/null)
 assert_contains "unwritable terminal: the URL fallback still reaches stderr" "$URL" "$err"
 
-echo "helper: a tunnel that dies mid-login (login still waiting) tells the user to paste the code"
-reset
-STUB_TUNNEL=dies STUB_LISTEN=1 CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$$ bash "$BROWSER_SH" "$URL"
-for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q "dropped" "$TMP/msgs" && break; sleep 1; done
-assert_contains "paste hint after the tunnel dropped" "paste the code" "$(cat "$TMP/msgs")"
-reset
-STUB_TUNNEL=dies CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$$ bash "$BROWSER_SH" "$URL"
-sleep 5
-assert_not_contains "no alarm when nothing was listening any more (login over)" "dropped" "$(cat "$TMP/msgs")"
-
 echo "helper --dry-run runs nothing"
 reset; out=$(CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" --dry-run "$URL" 2>&1)
 assert_eq "no stub called" "" "$(calls)"
-assert_contains "prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
-assert_contains "prints the open-url verb" "'iumac' 'open-url'" "$out"
+assert_contains "prints the open-url step" "login_open_on_mac Helium" "$out"
+assert_contains "prints the notify step" "login_mac_notify 'Claude login me'" "$out"
 
 # ── relogin ─────────────────────────────────────────────────────────────────────────────────────
 echo "relogin --ask"
@@ -294,14 +266,14 @@ as mini; reset
 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
 assert_eq "rc 0" 0 "$rc"
 c=$(calls)
-assert_contains "claude auth login --claudeai on the me dir, BROWSER = helper" "ENV cfg=$HOME/.claude-me browser=$HERE/claude-login-browser.sh acc=me machine=mini owner=set key=unset tok=unset" "$c"
+assert_contains "claude auth login --claudeai on the me dir, BROWSER = helper" "ENV cfg=$HOME/.claude-me browser=$HERE/claude-login-browser.sh acc=me machine=mini key=unset tok=unset" "$c"
 assert_contains "refresh afterwards" "claude-account[refresh][--ids][me]" "$c"
 assert_contains "usage afterwards" "claude-account[usage]" "$c"
 assert_contains "expiry afterwards" "claude-account[expiry][--ids][me]" "$c"
 assert_contains "the login end is read before and after (renewal is proven, not assumed)" "claude-account[expiry][--json][--ids][me]" "$c"
 assert_eq "...exactly twice" 2 "$(grep -c 'claude-account\[expiry\]\[--json\]\[--ids\]\[me\]' <<<"$c")"
 reset; ANTHROPIC_API_KEY=k CLAUDE_CODE_OAUTH_TOKEN=t CLAUDE_CONFIG_DIR=/elsewhere bash "$RELOGIN" iu --machine mini --in-pane >/dev/null
-assert_contains "iu: CLAUDE_CONFIG_DIR stays unset, token env stripped" "ENV cfg=unset browser=$HERE/claude-login-browser.sh acc=iu machine=mini owner=set key=unset tok=unset" "$(calls)"
+assert_contains "iu: CLAUDE_CONFIG_DIR stays unset, token env stripped" "ENV cfg=unset browser=$HERE/claude-login-browser.sh acc=iu machine=mini key=unset tok=unset" "$(calls)"
 reset; STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>"$TMP/err"; rc=$?
 assert_eq "failed login: rc 1" 1 "$rc"
 assert_not_contains "failed login: no refresh" "refresh" "$(calls)"
@@ -440,9 +412,37 @@ assert_not_contains "--visible: no --rm, no result file, no watcher call" "--rm"
 assert_not_contains "--visible: no result file in the command" "--result-file" "$c"
 assert_contains "--visible: always ends in a shell" "--in-pane; exec \"\${SHELL:-/bin/zsh}\" -l" "$c"
 assert_eq "--visible: nothing swept, no notification" "0/0" "$(count 'hc\[rm\]')/$(count 'osascript - ')"
-reset; STUB_HC_EXISTING=live bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
-assert_eq "a login terminal for the account still open: refuses (rc 2)" 2 "$rc"
-assert_contains "...says which, and how to close it" "still open on the mini (t5)" "$(cat "$TMP/err")"
+echo "a repeated trigger while the login terminal waits is never a silent refusal"
+mkdir -p "$TMP/state"
+reset; mkdir -p "$TMP/state"; echo "$PASTE" > "$TMP/state/me.relogin-url"
+STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
+c=$(calls)
+assert_eq "waiting login: rc 0, not a refusal" 0 "$rc"
+assert_eq "...its approval page is opened again (same code-paste URL, the account's browser)" "Helium|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_contains "...the owner is notified where the code goes" "paste the code into the tab 'relogin me' (terminal relogin-me, t5) in the Herdr app" "$(cat "$TMP/ssh-stdin")"
+assert_contains "...and the caller is told the same" "already waits in the tab 'relogin me'" "$(cat "$TMP/out")"
+assert_not_contains "...nothing new started, nothing killed" "hc[run]" "$c"
+assert_eq "...the waiting terminal is left alone" 0 "$(count 'hc\[kill\]')"
+reset; mkdir -p "$TMP/state"; : > "$TMP/state/me.relogin-url"
+STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
+assert_eq "login still starting (no URL yet): rc 0" 0 "$rc"
+assert_contains "...the owner is told, not refused" "is starting" "$(cat "$TMP/ssh-stdin")"
+assert_not_contains "...nothing started" "hc[run]" "$(calls)"
+reset; mkdir -p "$TMP/state"; echo "$PASTE" > "$TMP/state/me.relogin-url"
+STUB_OPEN=fail STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
+assert_eq "waiting login whose page cannot be opened: rc 2" 2 "$rc"
+assert_contains "...the URL to open by hand is printed" "$PASTE" "$(cat "$TMP/err")"
+assert_contains "...and the owner is notified" "approval page could not be opened" "$(cat "$TMP/ssh-stdin")"
+reset
+STUB_HC_EXISTING=live STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
+c=$(calls)
+assert_eq "a live terminal whose login is over (no URL file): killed and replaced, rc 0" 0 "$rc"
+assert_contains "...hc kill then hc rm of that terminal" "hc[kill][relogin-me]" "$c"
+assert_contains "...then the new login starts" "hc[run]" "$c"
+assert_eq "...no approval page opened for the dead one" "" "$(cat "$TMP/ssh-open-stdin" 2>/dev/null)"
+reset; STUB_HC_EXISTING=live STUB_HC_STUCK=1 bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
+assert_eq "a dead login's terminal that will not close: refuses (rc 2)" 2 "$rc"
+assert_contains "...says which, and how to close it" "(t5) is open and could not be closed: close it with  hc kill relogin-me" "$(cat "$TMP/err")"
 assert_not_contains "...started nothing" "hc[run]" "$(calls)"
 reset; STUB_HC_EXISTING=finished STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
 assert_contains "a finished one is removed first, then the new login starts" "hc[rm][relogin-me]" "$(calls)"
@@ -557,19 +557,20 @@ c=$(calls)
 assert_eq "Terminal fallback that changed nothing: rc 1, window stays open" "1/0" "$rc/$(count 'osascript:close')"
 assert_contains "...with the unchanged notification" "osascript:notify[-][Claude login me][$UNCH]" "$c"
 
-echo "the login owner kills the tunnel on exit"
-as mini; reset
-export STUB_URL="$URL"
-TMPDIR="$TMP" STUB_CLAUDE_BROWSER=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
-tp=$(cat "$TMP/tunnel.pid" 2>/dev/null)
-sleep 0.2   # the watchdog polls only every second: a dead tunnel this early is the trap's doing
+echo "the approval URL file lives exactly as long as the login"
+as mini; reset; export STUB_URL="$URL"
+STUB_CLAUDE_BROWSER=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
 assert_eq "login finished: rc 0" 0 "$rc"
-[[ -n "$tp" ]] && ! kill -0 "$tp" 2>/dev/null && ok "tunnel gone as soon as the owner returned" || bad "tunnel gone as soon as the owner returned" "pid [$tp]"
-assert_eq "pid file removed" "0" "$(ls "$TMP"/claude-relogin-tunnel.* 2>/dev/null | wc -l | tr -d ' ')"
-reset
-STUB_CLAUDE_BROWSER=1 STUB_LOGIN_RC=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1; rc=$?
-tp=$(cat "$TMP/tunnel.pid" 2>/dev/null); sleep 0.2
-[[ -n "$tp" ]] && ! kill -0 "$tp" 2>/dev/null && ok "failed login: tunnel killed too" || bad "failed login: tunnel killed too" "pid [$tp]"
+assert_eq "...the helper was handed the code-paste flow (URL opened on the MacBook)" "Helium|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_eq "...the URL file is gone" "" "$(ls "$TMP/state" 2>/dev/null)"
+reset; STUB_CLAUDE_BROWSER=1 STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1; rc=$?
+assert_eq "failed login: rc 1" 1 "$rc"
+assert_eq "...the URL file is gone too (a later trigger sees a dead login and replaces it)" "" "$(ls "$TMP/state" 2>/dev/null)"
+reset; STUB_CLAUDE_BROWSER=1 STUB_CLAUDE_HANG=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1 &
+pane=$!; for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$TMP/state/me.relogin-url" ]] && break; sleep 1; done
+assert_eq "while the login waits the file holds the URL" "$PASTE" "$(cat "$TMP/state/me.relogin-url" 2>/dev/null)"
+assert_eq "...and is private (mode 600)" "600" "$(stat -f %Lp "$TMP/state/me.relogin-url" 2>/dev/null)"
+kill "$pane" 2>/dev/null; wait "$pane" 2>/dev/null
 unset STUB_URL
 
 echo "relogin --dry-run (me and iu on the mini) runs nothing"
@@ -578,7 +579,7 @@ for a in me iu; do
   assert_eq "$a: no stub called" "" "$(calls)"
   assert_contains "$a: prints the hc step" "would run: 'hc' 'run'" "$out"
   assert_contains "$a: prints the login command" "'claude' 'auth' 'login' '--claudeai'" "$out"
-  assert_contains "$a: prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
+  assert_contains "$a: prints the code-paste open step" "login_open_on_mac" "$out"
 done
 as macbook; reset; out=$(bash "$RELOGIN" me --machine macbook --dry-run 2>&1)
 assert_eq "macbook dry run: no stub called" "" "$(calls)"

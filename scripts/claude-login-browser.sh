@@ -1,28 +1,27 @@
 #!/usr/bin/env bash
 # claude-login-browser — the BROWSER target of `claude auth login --claudeai` (docs/claude-accounts.md §Re-login).
 # claude-relogin.sh sets BROWSER to this script; the CLI calls it with the authorize URL, whose redirect_uri is
-# http://localhost:<random port>/callback on the machine running the login. It opens that URL in the browser that is
-# signed in to the account (registry field `loginBrowser`, read via CLAUDE_LOGIN_ACCOUNT; no field = the system
+# http://localhost:<random port>/callback on the machine running the login. It opens the approval page in the browser
+# that is signed in to the account (registry field `loginBrowser`, read via CLAUDE_LOGIN_ACCOUNT; no field = the system
 # default, and it says so). A human always approves in their own browser; nothing here drives it.
 #
 #   claude-login-browser.sh [--dry-run] <authorize-url>
 #
-# Where the login runs decides how the browser is reached:
-#   macbook  `open -a <app> <url>` — the callback lands on localhost here.
-#   mini     the browser is on the MacBook: `ssh iumac open-url` (stdin: the app name, then the URL) opens the page
-#            there, and `ssh -N -R <port>:localhost:<port> iumac` would forward the browser's localhost callback
-#            back to the CLI on the mini. The mini's key does not grant that reverse forward today, so the printed
-#            URL plus the pasted code is the normal path; the opener already speaks the `open-url` verb, so the
-#            forward works as soon as it is granted. The tunnel closes when the login process is gone, when the CLI
-#            stops listening (login finished), or after a generous idle window with no connection (CLAUDE_LOGIN_TUNNEL_IDLE_S, default 2700). Not a hard timeout.
-# Any failure (no port in the URL, forward refused, ssh down) prints the URL: the CLI's own prompt still takes a
-# pasted code, which stays the fallback.
+# Where the login runs decides how the approval page is reached:
+#   macbook  `open -a <app> <url>` — the browser's callback lands on localhost here, no code to paste.
+#   mini     the browser is on the MacBook, whose localhost is not the mini's, and the mini's key grants no reverse
+#            forward. So the code-paste path is the designed one: the same URL with its redirect_uri swapped for the
+#            platform's code page (what the CLI itself prints as the manual URL) is opened with `ssh iumac open-url`
+#            (stdin: the app name, then the URL); the page shows a code, the owner pastes it at the CLI's prompt in
+#            the login terminal. The owner is told so on the MacBook (notification via `ssh iumac notify`) and in the
+#            terminal, naming the tab. The URL is also written to CLAUDE_LOGIN_URL_FILE, so a repeated
+#            `claude-relogin` can open the same page again instead of refusing.
+# Any failure (ssh down, open refused) prints the URL: opening it by hand and pasting the code stays the fallback.
 #
 # Environment: CLAUDE_LOGIN_ACCOUNT (registry id), CLAUDE_LOGIN_MACHINE (mini|macbook; default: detected),
-# CLAUDE_LOGIN_OWNER_PID (the login process the tunnel lives and dies with), CLAUDE_LOGIN_TUNNEL_PID_FILE (where the
-# tunnel's pid is written, so the owner can kill it on any exit), CLAUDE_ACCOUNTS_REGISTRY.
-# Test seams: CLAUDE_LOGIN_OPEN, CLAUDE_LOGIN_SSH, CLAUDE_LOGIN_LSOF, CLAUDE_LOGIN_MAC_HOST, CLAUDE_LOGIN_POLL_S,
-# CLAUDE_LOGIN_FORWARD_GRACE_S, CLAUDE_LOGIN_MSG_FILE (default /dev/tty, else stderr).
+# CLAUDE_LOGIN_URL_FILE (where the mini's approval URL is kept while the login waits), CLAUDE_ACCOUNTS_REGISTRY.
+# Test seams: CLAUDE_LOGIN_OPEN, CLAUDE_LOGIN_SSH, CLAUDE_LOGIN_MAC_HOST, CLAUDE_LOGIN_MSG_FILE (default /dev/tty,
+# else stderr).
 set -u
 HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 # shellcheck source=lib/claude-login.sh
@@ -30,13 +29,8 @@ source "$HERE/lib/claude-login.sh"
 
 REGISTRY="${CLAUDE_ACCOUNTS_REGISTRY:-$HERE/../config/claude-accounts.json}"
 OPEN="${CLAUDE_LOGIN_OPEN:-open}"
-SSH="${CLAUDE_LOGIN_SSH:-ssh}"
-LSOF="${CLAUDE_LOGIN_LSOF:-/usr/sbin/lsof}"
 MAC_HOST="${CLAUDE_LOGIN_MAC_HOST:-iumac}"
-POLL_S="${CLAUDE_LOGIN_POLL_S:-2}"
-MAX_IDLE_S="${CLAUDE_LOGIN_TUNNEL_IDLE_S:-2700}"
-GRACE_S="${CLAUDE_LOGIN_FORWARD_GRACE_S:-3}"
-TUNNEL_PID_FILE="${CLAUDE_LOGIN_TUNNEL_PID_FILE-}"
+URL_FILE="${CLAUDE_LOGIN_URL_FILE-}"
 MSG_FILE="${CLAUDE_LOGIN_MSG_FILE:-/dev/tty}"
 
 dry=0
@@ -63,10 +57,11 @@ step() {
   fi
   "$@"
 }
+shown="$url" # the URL a fallback prints: the one that works from where the browser is
 fallback() { # <why>
   say "claude-login: $1"
   say "  open this URL in ${app:-your browser} yourself, approve, then paste the code at the login prompt:"
-  say "  $url"
+  say "  $shown"
 }
 
 account="${CLAUDE_LOGIN_ACCOUNT-}"
@@ -80,72 +75,27 @@ else
   [[ -n "$app" ]] || say "claude-login: no loginBrowser for '$account' in the registry, using the system default browser"
 fi
 
-open_args=("$url")
-[[ -n "$app" ]] && open_args=(-a "$app" "$url")
-
 if [[ "$machine" != mini ]]; then
+  open_args=("$url")
+  [[ -n "$app" ]] && open_args=(-a "$app" "$url")
   say "claude-login: opening the approval page in ${app:-the default browser}"
   step "$OPEN" "${open_args[@]}" || { fallback "could not run open"; exit 1; }
   exit 0
 fi
 
-# ── the mini: the browser lives on the MacBook ─────────────────────────────────────────────────
-port=$(login_url_port "$url") || { fallback "no loopback callback port in the URL, cannot forward it to the MacBook"; exit 1; }
-open_stdin=$(printf '%s\n%s\n' "$app" "$url")
-
-# Own connection (ControlPath=none): the forward must die with this ssh process, never join a shared master.
-tunnel=("$SSH" -N -R "127.0.0.1:$port:localhost:$port" -o BatchMode=yes -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none
-        -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=8 "$MAC_HOST")
-opener=("$SSH" -o BatchMode=yes -o ConnectTimeout=8 "$MAC_HOST" open-url)
-
+# ── the mini: the browser lives on the MacBook, the code is pasted here ─────────────────────────
+shown=$(login_paste_url "$url")
+tab="relogin ${account:-<id>}"
+where="the tab '$tab' (terminal relogin-${account:-<id>}) in the Herdr app"
 if (( dry )); then
-  say "claude-login: dry run, callback port $port, browser ${app:-system default}"
-  step "${tunnel[@]}"
-  step "${opener[@]}"
+  say "claude-login: dry run, code-paste URL, browser ${app:-system default}"
+  printf '%s\n' "would run: login_open_on_mac ${app:-<default>} <code-paste URL> (ssh $MAC_HOST open-url)"
+  printf '%s\n' "would run: login_mac_notify 'Claude login ${account:-?}' <where the code goes> (ssh $MAC_HOST notify)"
   exit 0
 fi
-
-"${tunnel[@]}" </dev/null >/dev/null 2>&1 &
-tunnel_pid=$!
-# the login owner (claude-relogin.sh) reads this file and kills the tunnel on exit, whatever the exit path
-[[ -z "$TUNNEL_PID_FILE" ]] || echo "$tunnel_pid" > "$TUNNEL_PID_FILE"
-# ExitOnForwardFailure ends ssh within a moment of a refused forward: a process still alive after the grace is the forward.
-for ((i = 0; i < GRACE_S; i++)); do
-  sleep 1
-  kill -0 "$tunnel_pid" 2>/dev/null || break
-done
-kill -0 "$tunnel_pid" 2>/dev/null || { fallback "could not forward port $port to $MAC_HOST (is its sshd up? is the port taken there?)"; exit 1; }
-
-if ! printf '%s\n' "$open_stdin" | "${opener[@]}"; then
-  kill "$tunnel_pid" 2>/dev/null
-  fallback "could not open the URL on $MAC_HOST"
-  exit 1
-fi
-say "claude-login: approval page opened in ${app:-the default browser} on $MAC_HOST; the callback reaches this machine through the tunnel"
-
-# Watchdog: closes the tunnel when the login is over (the owner also kills it on exit; this covers an owner that
-# vanished). Detached from the CLI's stdio, which would otherwise hold it open. If the tunnel dies by itself while
-# the login is still waiting, the user is told to fall back to pasting the code.
-(
-  owner="${CLAUDE_LOGIN_OWNER_PID-}"
-  seen=0; idle=0
-  while :; do
-    sleep "$POLL_S"
-    owner_alive=1
-    if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then owner_alive=0; fi
-    listening=0
-    "$LSOF" -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && { listening=1; seen=1; }
-    if ! kill -0 "$tunnel_pid" 2>/dev/null; then
-      if [[ "$owner_alive" == 1 && "$listening" == 1 ]]; then
-        say "claude-login: the tunnel to $MAC_HOST dropped while the login is still waiting: paste the code from the approval page at the login prompt (URL: $url)"
-      fi
-      break
-    fi
-    if "$LSOF" -nP -iTCP:"$port" -sTCP:ESTABLISHED >/dev/null 2>&1; then idle=0; else idle=$((idle + POLL_S)); fi
-    verdict=$(login_tunnel_verdict "$owner_alive" "$listening" "$seen" "$idle" "$MAX_IDLE_S")
-    [[ "$verdict" == keep ]] && continue
-    kill "$tunnel_pid" 2>/dev/null
-    break
-  done
-) </dev/null >/dev/null 2>&1 &
+[[ -z "$URL_FILE" ]] || { ( umask 077; printf '%s\n' "$shown" >"$URL_FILE" ) 2>/dev/null; }
+login_open_on_mac "$app" "$shown" || { fallback "could not open the URL on $MAC_HOST"; exit 1; }
+say "claude-login: approval page opened in ${app:-the default browser} on $MAC_HOST."
+say "  Approve there, copy the code the page shows, and paste it at the prompt below, in THIS terminal."
+login_mac_notify "Claude login ${account:-?}" "Approve in ${app:-your browser}, then paste the code into $where on the mini."
 exit 0
