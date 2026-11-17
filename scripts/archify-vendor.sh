@@ -40,11 +40,27 @@ regen_validators() {
   rm -rf "$tmp"
 }
 
+# One digest of a tree as vendored: the files the patch can touch, without the generated validators
+# and the ref file. `.upstream-ref` line 2 holds the digest of the pristine upstream tree, which is
+# what lets `check` prove that (tree - patch) is exactly upstream, so no edit outside the patch hides.
+tree_digest() { # <dir>
+  local tmp; tmp="$(mktemp -d)"
+  rsync -a "${EXCLUDES[@]}" --exclude /.upstream-ref "$1/" "$tmp/"
+  (cd "$tmp" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do shasum -a 256 "$f"; done | shasum -a 256 | cut -d' ' -f1)
+  rm -rf "$tmp"
+}
+
+write_ref() { # <sha> <pristine digest>
+  printf '%s\n%s\n' "$1" "$2" > "$SKILL/.upstream-ref"
+}
+
 # patch paths are relative to the skill dir (a/…, b/…), applied from the repo root with --directory
 apply_patch() {
   [ -s "$PATCH" ] || die "missing $PATCH"
-  git -C "$ROOT" apply --check --directory=skills/archify "$PATCH" 2>/dev/null \
-    || die "basalt.patch no longer applies to the vendored tree: re-do the change by hand in skills/archify, then 'make archify-patch-save'"
+  local err
+  err="$(git -C "$ROOT" apply --check --directory=skills/archify "$PATCH" 2>&1)" \
+    || die "basalt.patch no longer applies to the vendored tree: re-do the change by hand in skills/archify, then 'make archify-patch-save'
+$err"
   git -C "$ROOT" apply --directory=skills/archify "$PATCH"
   regen_validators
 }
@@ -60,7 +76,7 @@ case "$cmd" in
     tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
     sha="$(fetch_upstream "$tag" "$tmp")"
     rsync -a --delete "${EXCLUDES[@]}" "$tmp/src/archify/" "$SKILL/"
-    echo "$sha" > "$SKILL/.upstream-ref"
+    write_ref "$sha" "$(tree_digest "$SKILL")"
     echo "vendored archify $tag ($sha)"
     apply_patch
     echo "basalt.patch applied"
@@ -70,7 +86,7 @@ case "$cmd" in
     ;;
   save)
     tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-    sha="$(tr -d '[:space:]' < "$SKILL/.upstream-ref")"
+    sha="$(head -n1 "$SKILL/.upstream-ref" | tr -d '[:space:]')"
     git clone -q "$REPO" "$tmp/src" 2>/dev/null || die "cannot clone $REPO"
     git -C "$tmp/src" checkout -q "$sha" || die "ref $sha not found upstream"
     mkdir -p "$tmp/a" "$tmp/b"
@@ -80,16 +96,26 @@ case "$cmd" in
     (cd "$tmp" && git diff --no-index --no-color a b || true) \
       | sed -e 's|^diff --git a/[ab]/|diff --git a/|; s| b/[ab]/| b/|; s|^--- a/a/|--- a/|; s|^+++ b/b/|+++ b/|' > "$PATCH"
     [ -s "$PATCH" ] || die "tree equals upstream: nothing to save"
+    write_ref "$sha" "$(tree_digest "$tmp/a")"
     echo "saved $PATCH ($(wc -l < "$PATCH") lines)"
     ;;
   check)
     [ -s "$PATCH" ] || die "missing $PATCH"
-    git -C "$ROOT" apply --reverse --check --directory=skills/archify "$PATCH" 2>/dev/null \
-      || die "skills/archify does not carry basalt.patch exactly: edit the skill, then 'make archify-patch-save' (or 'make archify-update' after an upstream bump)"
-    echo "archify: basalt.patch matches the vendored tree"
+    want="$(sed -n 2p "$SKILL/.upstream-ref")"
+    [ -n "$want" ] || die "$SKILL/.upstream-ref has no upstream digest on line 2: run 'make archify-patch-save'"
+    tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+    rsync -a "${EXCLUDES[@]}" --exclude /.upstream-ref "$SKILL/" "$tmp/tree/"
+    # tree minus patch must be exactly the pristine upstream tree
+    err="$(cd "$tmp/tree" && git apply --reverse "$PATCH" 2>&1)" \
+      || die "skills/archify does not carry basalt.patch: edit the skill, then 'make archify-patch-save' (or 'make archify-update' after an upstream bump)
+$err"
+    [ "$(tree_digest "$tmp/tree")" = "$want" ] \
+      || die "skills/archify differs from upstream + basalt.patch (an edit outside the patch, or a stale patch): 'make archify-patch-save' records it, 'make archify-update' discards it"
+    echo "archify: the vendored tree is upstream plus basalt.patch, exactly"
     ;;
   test)
     "${BASH_SOURCE[0]}" check
+    export ARCHIFY_UPDATE_CHECK_DISABLED=1 # deliver otherwise asks the network for a newer release
     tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
     for type in architecture workflow; do
       spec="$(ls "$SKILL"/examples/*."$type".json | head -1)"
