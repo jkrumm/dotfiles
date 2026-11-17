@@ -144,6 +144,13 @@ and 17 closed, merged basalt-ui worktrees (about 1.4 GB each). The page came bac
 does not hold the line while three shutterflow leads build at once. The live leads' `target/` dirs are theirs and stay. A repeat: `du -xsh ~/SourceRoot/*/.claude/worktrees`,
 then `du -xsh <worktree>/target` per live lead, and `rm -rf` the `target/` (never the worktree) of a closed Issue whose work is not merged.
 
+Issue 1912 (2026-11-17, 90.8% rising to 92%, +46 GB/h, 77 GiB free at the low) was the same shape: no `.building-*`, no Lima VMs,
+and shutterflow's worktrees at 219 GB by `du`. Two live leads' `target/` dirs read 79 and 70 GB (they grow while the leads compile); three
+closed Issues (1732, 1733, 1750, PRs merged) still held 15-32 GB of `target/` each. `git worktree remove --force` on those three freed 38 GiB
+(92% to 88%), and on 8 closed, merged basalt-ui worktrees a little more. Their `D` status lines (hundreds of deleted tracked files) mean an earlier
+partial cleanup, not unmerged work; check `gh pr list --state merged --head <branch>` before removing. A repeat with the same two leads still
+compiling means shutterflow's leads need a shared `CARGO_TARGET_DIR` or a cleanup step on close, not another manual reap: file it against shutterflow.
+
 ## What goes to the external SSD
 
 **Class `external` in the budget table above:** a row for a volume that is not part of the Data volume. It counts nothing against the
