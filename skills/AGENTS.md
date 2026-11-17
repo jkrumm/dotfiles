@@ -6,7 +6,7 @@ skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:
 
 ## archify (vendored, patched)
 
-`skills/archify` is upstream `tt-a1i/archify` (stable channel; the commit is in `.upstream-ref`, the version in `skill-release.json`), trimmed of the pre-rendered example HTML and the lockfile. **It carries one local patch, `config/archify/basalt.patch`**: the `basalt` visual preset (enum in `schemas/common.schema.json` and `workflow.schema.json`, a `[data-preset="basalt"]` block in `assets/template.html` mapping the diagram variables onto basalt-ui's `--basalt-*` tokens, and `assets/basalt-tokens.css` inlined by the renderer when the preset is basalt, so a standalone export resolves them). `generated-validators.mjs` is rebuilt, not patched.
+`skills/archify` is upstream `tt-a1i/archify` (stable channel; the commit is in `.upstream-ref`, the version in `skill-release.json`), trimmed of the pre-rendered example HTML and the lockfile. **It carries one local patch, `config/archify/basalt.patch`**: the `basalt` visual preset (enum in `schemas/common.schema.json` and `workflow.schema.json`, a `[data-preset="basalt"]` block in `assets/template.html` mapping the diagram variables onto basalt-ui's `--basalt-*` tokens, and `assets/basalt-tokens.css` inlined by the renderer when the preset is basalt, so a standalone export resolves them). The patch also shortens the `SKILL.md` description to the 600-character budget (`make context-load-check`). `generated-validators.mjs` is rebuilt, not patched.
 
 Never edit the skill in place without saving the patch. Everything goes through `scripts/archify-vendor.sh`:
 
