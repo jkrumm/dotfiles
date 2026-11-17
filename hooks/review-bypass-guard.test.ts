@@ -175,6 +175,7 @@ describe("the GitHub config sync (Issue 1886)", () => {
     allowed("bash scripts/github-config.sh --tighten-only");
     allowed("DRY_RUN=1 scripts/github-config.sh --tighten-only");
     allowed("GITHUB_OWNER=jkrumm make github-config");
+    allowed("make -C ~/SourceRoot/dotfiles/.claude/worktrees/x github-config > /tmp/sync.log 2>&1; echo rc=$?");
   });
 
   test("clearing or overriding the factory marker is denied", () => {
@@ -203,6 +204,12 @@ describe("the GitHub config sync (Issue 1886)", () => {
     denied('make -C "$HOME/SourceRoot/dotfiles" github-config');
     denied("make github-config && gh pr comment 1 -b 'done'");
     denied("make github-config FACTORY_SESS\\ION=");
+    denied("make github-config FACTORY_SESS[I]ON=");
+    denied("make github-config FACTORY_SESS?ON=");
+    denied("cd ~/SourceRoot/dotfiles && make github-config");
+    denied("make github-config | tail -5");
+    denied("make github-config GITHUB_OWNER=other");
+    denied("make github-config; make github-config FACTORY_SESS*=");
     denied("env -i bash scripts/github-config.sh");
     denied("FACTORY_SESSION= ~/SourceRoot/dotfiles/scripts/github-config.sh");
     denied("FACTORY_SESSION= bash -c 'make github-config'");
