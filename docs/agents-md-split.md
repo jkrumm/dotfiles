@@ -53,7 +53,7 @@ The root `AGENTS.md` was 55,764 bytes against the 12,000-byte budget of `rules/w
 | 600-605 | 510 | External volume | `docs/external-ssd.md` |
 | 606-608 | 199 | Storage | `docs/storage.md` |
 | 609-622 | 1164 | HomeLab files (hl) | `docs/storage.md` §HomeLab files |
-| 623-628 | 451 | The look | `docs/theme.md` §Commands and rules |
+| 623-628 | 451 | The look | `docs/theme.md` |
 | 629-634 | 408 | Obsidian must keep running | `docs/brain-access.md` §Obsidian on the mini |
 | 635-637 | 238 | Debug logs | `hooks/AGENTS.md` §Debug logs |
 
@@ -76,7 +76,7 @@ Rows add up to 55662 bytes; the headings and blank lines between them are the re
 
 ## Pointers rewritten
 
-Sections the other files name: `AGENTS.md` §Machines & remote dev, §Secrets and §Claude Code launchers stay in the root under their names. `§review-bypass-guard` is now `hooks/AGENTS.md` §review-bypass-guard (`config/global.CLAUDE.md`); `§Codex` is `config/AGENTS.md` §Codex, OpenCode, tailnet (`config/codex/config.toml.tpl`); `§Secrets` in `docs/tcc.md` and `docs/macbook.md` is `scripts/AGENTS.md` §Secrets; the "Condensed reference lives in AGENTS.md" lines of `docs/homebrew.md`, `docs/theme.md`, `docs/collie.md` and `docs/opbackup.md` name their own sections; `docs/global-reference.md` §Launchers names `config/zsh/AGENTS.md`; `skills/remote-dev` names `docs/remote-dev.md` §File shuttle; the Kuma door plist, `README.md`, `docs/devhost-health.md` and four script comments follow.
+Sections the other files name: `AGENTS.md` §Machines & remote dev, §Secrets and §Claude Code launchers stay in the root under their names. `§review-bypass-guard` is now `hooks/AGENTS.md` §review-bypass-guard (`config/global.CLAUDE.md`); `§Codex` is `config/AGENTS.md` §Codex, OpenCode, tailnet (`config/codex/config.toml.tpl`); `§Secrets` in `docs/tcc.md` and `docs/macbook.md` is `scripts/AGENTS.md` §Secrets; the "Condensed reference lives in AGENTS.md" lines of `docs/homebrew.md`, `docs/collie.md` and `docs/opbackup.md` name their own sections; `docs/global-reference.md` §Launchers names `config/zsh/AGENTS.md`; `skills/remote-dev` names `docs/remote-dev.md` §File shuttle; the Kuma door plist, `README.md`, `docs/devhost-health.md` and four script comments follow.
 
 ## Marker proof
 
