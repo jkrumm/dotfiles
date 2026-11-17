@@ -214,11 +214,12 @@ keepalive `unloaded` with 378 failures in a row (issue 1106 owns that).
 
 | Question | Decision |
 |-|-|
-| Shutterflow's RAW root, now that EXT sits on the mini | `HDD/fuji/RAWs` through the share; EXT only mirrors. He repoints Shutterflow himself |
+| Shutterflow's RAW root, now that EXT sits on the mini | `HDD/fuji/RAWs` through the share; EXT only mirrors. **Done 2026-11-17.** Shutterflow's RAW backup class stays unassigned on purpose: `HDD/fuji` is covered by restic and the EXT mirror |
 | Big videos offsite | no |
 | The 2.0 TiB film copy on the HDD's second partition | delete, after file-by-file proof against `HDD/Filme` (homelab row `storage-consolidate`). Jellyfin's library is the copy that stays |
 | Personal folders on EXT | documents to `SSD/Dokumente`, drone and project videos to `HDD/Videos`, the rescued USB stick dropped once its unique files are moved |
-| Immich | retired (homelab issue 1201). It only showed the pre-Shutterflow copy of the finals in `SSD/Bilder/Fuji`; that copy and the old staging folder go once B2 is proven to hold every file |
+| Immich | retired (homelab issue 1201). **Done 2026-11-17:** with B2 proven (Shutterflow sync: 3,918 of 3,918 Finals up to date), `SSD/Bilder/Fuji` (7.9 GiB) and `SSD/Bilder/Staging` (14 GiB) were deleted, each file first matched by content (sha1, or the JPEG image data where only metadata differed) against the Shutterflow library, its trash, or a RAF of the same name in `HDD/fuji/RAWs` |
+| What the cleanup kept, in `HDD/inbox` | `fuji-leftovers-2026-11-16` (919 MB: 47 `.photo-edit` editor documents and 6 JPEGs with no RAW anywhere, single copy apart from restic), and the deleted MacBook checkout's unpushed refs and ignored files (`shutterflow-macbook-local-refs-2026-11-16.bundle`, `shutterflow-macbook-ignored-files-2026-11-16.tgz`). The owner decides; nothing deletes them |
 
 The mini's Photos library (`~/Pictures`, 19 GiB) stays: it is the signed-in iCloud client, with
 1,093 of the originals on disk, and the machine the export reads from. Once Photos holds all originals (**Download Originals**, §iCloud Photos export) it grows by about 75 GiB, then about 15 GiB a year (`docs/disk.md`).
@@ -232,7 +233,7 @@ Content hashes over the SSD share, `HDD/fuji` and the personal folders on EXT.
 | Fuji RAWs and videos on EXT and on the HDD are identical (6,320 and 418 files, name and size) | 280 GiB | wanted: it becomes `EXT/mirror/fuji` by a rename. An owner session that morning made them equal: 4 RAWs and 23 videos copied to the HDD, 1,549 culled RAWs (43 GiB) deleted there; those stay in restic for the retention time |
 | Personal folders on EXT (documents, a rescued USB stick, drone and project videos) exist nowhere else | 22 GiB | **single copy, in no backup**: moves to the HomeLab |
 | Second film copy on the HDD's other partition, frozen since 2025-01 | 2.0 TiB | stale: delete after approval |
-| Old Shutterflow staging folder overlaps the finals folder | 13 GiB of 27 | stale: the library on the MacBook superseded both |
+| Old Shutterflow staging folder overlaps the finals folder | 13 GiB of 27 | deleted 2026-11-17 after a content check (see Immich above) |
 | Byte-identical duplicates elsewhere in the SSD share | under 3 GiB | not worth a pass |
 | iCloud Photos is the only copy of the phone photos from 2021 on. The library on the SSD share ends in 2019, the phone folders in 2020, and none of the mini's local originals exist on the HomeLab | 78 GiB of originals (96 GiB with shared albums) | **one copy, at a sync service**, until the nightly export has caught up with Photos' download: §iCloud Photos export |
 
