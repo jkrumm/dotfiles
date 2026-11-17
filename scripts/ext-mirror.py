@@ -58,7 +58,8 @@ SOURCES = [("ssd", "homelab:ssd"), ("fuji", "homelab:hdd/fuji"), ("videos", "hom
 
 # What the HomeLab's restic run leaves out (homelab repo, restic-excludes.txt), as rclone filter rules. `*.tmp` is NOT
 # among them: it dropped a real 1.3 GiB phone video from the offsite copy (docs/storage.md). `.sgwtmp` is the S3
-# gateway's own scratch folder.
+# gateway's own scratch folder. `.XDG/wayland-N` is a Wayland socket (calibre's container config) stored as a 0-byte
+# object the gateway cannot serve: GetObject is a 500 for ever, which made every night's `ssd` sync red (issue 1850).
 FILTERS = """\
 - .DS_Store
 - ._*
@@ -95,6 +96,7 @@ FILTERS = """\
 - **/immich/postgres/**
 - **/protonmail/bridge-v3/gluon/**
 - **/protonmail/bridge-v3/logs/**
+- **/.XDG/wayland-[0-9]
 """
 
 
@@ -160,7 +162,9 @@ def stream_rclone(argv):
         if isinstance(rec.get("stats"), dict):
             stats = rec["stats"]
         if rec.get("level") == "error" and len(errors) < 10:
-            errors.append(str(rec.get("msg", ""))[:300])
+            # rclone puts the file in `object`, not in the message: without it a red night names no file.
+            obj = f"[{rec['object']}] " if rec.get("object") else ""
+            errors.append(f"{obj}{rec.get('msg', '')}"[:300])
     return p.wait(), stats, errors
 
 

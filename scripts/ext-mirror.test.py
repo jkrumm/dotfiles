@@ -134,10 +134,13 @@ class ExtMirror(unittest.TestCase):
         write(os.path.join(self.lab, "ssd", "Bilder", "immich", "upload", "keep.jpg"))
         write(os.path.join(self.lab, "ssd", "Dokumente", ".DS_Store"))
         write(os.path.join(self.lab, "ssd", "Dokumente", "film.tmp"), "a real file")
+        write(os.path.join(self.lab, "ssd", "Buecher", "calibre", "config", ".XDG", "wayland-1"))
+        write(os.path.join(self.lab, "ssd", "Buecher", "calibre", "config", ".XDG", "wayland-1.lock"))
         rc, out = self.run_job()
         self.assertEqual(rc, 0, out)
         got = tree(os.path.join(self.mirror, "ssd"))
-        self.assertEqual(sorted(got), sorted(["Dokumente/tax.txt", "Bilder/a.jpg", "Bilder/immich/upload/keep.jpg", "Dokumente/film.tmp"]))
+        self.assertEqual(sorted(got), sorted(["Dokumente/tax.txt", "Bilder/a.jpg", "Bilder/immich/upload/keep.jpg", "Dokumente/film.tmp",
+                                              "Buecher/calibre/config/.XDG/wayland-1.lock"]))
 
     def test_a_file_deleted_or_changed_at_the_source_moves_to_deleted(self):
         write(os.path.join(self.lab, "ssd", "test", "gone.txt"), "to be deleted")
@@ -377,6 +380,15 @@ class ExtMirror(unittest.TestCase):
         self.assertFalse(c["ok"])
         self.assertEqual(c["sources"]["ssd"]["differ"], 1)
         self.assertFalse(self.status()["ok"])
+
+    def test_an_error_line_names_the_failing_file(self):
+        spec = importlib.util.spec_from_file_location("ext_mirror", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        line = json.dumps({"level": "error", "msg": "Failed to copy: 500", "object": "calibre/.XDG/wayland-1"})
+        rc, _stats, errors = mod.stream_rclone([sys.executable, "-c", f"print({line!r})"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(errors, ["[calibre/.XDG/wayland-1] Failed to copy: 500"])
 
     def test_the_same_seed_draws_the_same_sample(self):
         spec = importlib.util.spec_from_file_location("ext_mirror", SCRIPT)
