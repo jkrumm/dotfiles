@@ -2080,6 +2080,13 @@ github-config:
 	@chmod +x $(DOTFILES_DIR)/scripts/github-config.sh
 	@$(DOTFILES_DIR)/scripts/github-config.sh
 
+# Writes only what adds or strengthens protection; skips (exit 3) any repo it would loosen.
+# A factory session gets this mode from plain `make github-config` too.
+.PHONY: github-config-tighten
+github-config-tighten:
+	@chmod +x $(DOTFILES_DIR)/scripts/github-config.sh
+	@$(DOTFILES_DIR)/scripts/github-config.sh --tighten-only
+
 .PHONY: github-config-dry
 github-config-dry:
 	@chmod +x $(DOTFILES_DIR)/scripts/github-config.sh
@@ -4003,6 +4010,7 @@ help:
 	@echo "  make verify             Probe the live system (= doctor)"
 	@echo "  make logs               Bounded tail of the dotfiles-owned agent logs"
 	@echo "  make github-config      Apply branch protection + merge settings + shared secrets to all repos"
+	@echo "  make github-config-tighten  Same, writing only what tightens protection (a factory session's mode)"
 	@echo "  make github-config-dry  Preview without applying"
 	@echo ""
 	@echo "  make brew-check         Verify the machine matches the Brewfile (read-only)"

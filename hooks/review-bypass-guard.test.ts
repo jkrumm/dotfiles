@@ -163,6 +163,56 @@ describe("allow", () => {
   });
 });
 
+describe("the GitHub config sync (Issue 1886)", () => {
+  // The script writes rulesets itself; in a factory session it runs tighten-only
+  // (scripts/github-config.sh), so the sync is allowed and only turning that off is denied.
+  test("the sync runs in a factory session", () => {
+    allowed("make -C ~/SourceRoot/dotfiles github-config");
+    allowed("make github-config");
+    allowed("make -C ~/SourceRoot/dotfiles github-config-tighten");
+    allowed("make github-config-dry");
+    allowed("~/SourceRoot/dotfiles/scripts/github-config.sh");
+    allowed("bash scripts/github-config.sh --tighten-only");
+    allowed("env GITHUB_OWNER=jkrumm make github-config");
+    allowed("DRY_RUN=1 scripts/github-config.sh --tighten-only");
+    allowed("GITHUB_OWNER=jkrumm make github-config");
+  });
+
+  test("clearing or overriding the factory marker is denied", () => {
+    denied("FACTORY_SESSION= make github-config");
+    denied("env -u FACTORY_SESSION make -C ~/SourceRoot/dotfiles github-config");
+    denied("unset FACTORY_SESSION; make github-config");
+    denied("TIGHTEN_ONLY=0 make github-config");
+    denied("make github-config TIGHTEN_ONLY=0");
+    denied("make github-config FACTORY_SESSION=");
+    denied("bash scripts/github-config.sh FACTORY_SESSION=");
+    denied("env -i make github-config");
+    denied("env -i bash scripts/github-config.sh");
+    denied("FACTORY_SESSION= ~/SourceRoot/dotfiles/scripts/github-config.sh");
+    denied("FACTORY_SESSION= bash -c 'make github-config'");
+    denied("cd ~/SourceRoot/dotfiles && unset FACTORY_SESSION && make github-config");
+  });
+
+  test("the marker without the sync is no business of this guard", () => {
+    allowed("echo $FACTORY_SESSION");
+    allowed("FACTORY_SESSION=1 make check");
+    allowed(`git commit -m "make github-config stays tighten-only"`);
+  });
+
+  test("a plain ruleset write is still denied", () => {
+    denied("gh api -X POST repos/o/r/rulesets --input ruleset.json");
+    denied("gh api -X PUT repos/jkrumm/software-factory/rulesets/27439448 --input -");
+    denied("gh api -X DELETE repos/o/r/rulesets/9");
+    denied("gh api -X PUT repos/o/r/branches/master/protection --input p.json");
+  });
+
+  test("the denial names the Errand path", () => {
+    const reason = findViolation("TIGHTEN_ONLY=0 make github-config") ?? "";
+    expect(reason).toContain("tighten-only");
+    expect(reason).toContain("factory errand raise");
+  });
+});
+
 describe("deny reason", () => {
   test("says it is the owner's to do by hand", () => {
     const reason = findViolation("gh pr merge 12 -R o/r --admin") ?? "";

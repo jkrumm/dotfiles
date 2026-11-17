@@ -57,10 +57,26 @@
 #   Append to config/github-secrets.json {name, op_ref}. Values read live from
 #   1Password (account: tkrumm); only op:// refs live in git. Re-run.
 #
+# TIGHTEN-ONLY MODE (--tighten-only, TIGHTEN_ONLY=1; always on when FACTORY_SESSION
+# is set, i.e. in every factory session — `make github-config` there IS this mode):
+#   Per repo, compare the wanted ruleset with the one GitHub holds and write only if
+#   every difference adds or strengthens protection (ruleset created, rule added,
+#   approvals raised, enforcement raised, bypass actor removed, refs added). A repo
+#   where anything loosens — a rule or ref dropped, approvals lowered, enforcement
+#   lowered, a bypass actor added — or that cannot be compared (read failure, a rule
+#   parameter this script does not know) is SKIPPED, nothing written for it, and the
+#   run exits 3: that is the owner's `make github-config` by hand (a factory lead
+#   raises an Errand), because dotfiles is direct-to-master and a lead could
+#   otherwise edit the list and remove its own review gate. Merge settings (the
+#   merge method, never a merge commit) are not protection and apply to every repo
+#   not skipped. Shared secrets are skipped. A repo already as wanted is not written.
+#
 # Usage:
 #   ./scripts/github-config.sh              # all repos for jkrumm
 #   GITHUB_OWNER=other ./scripts/github-config.sh
 #   DRY_RUN=1 ./scripts/github-config.sh    # preview tiers without applying
+#   ./scripts/github-config.sh --tighten-only   # `make github-config-tighten`
+#   DRY_RUN=1 ./scripts/github-config.sh --tighten-only   # the verdict per repo, no writes
 #
 # Prerequisites: gh CLI authenticated (gh auth status); jq; op CLI (for secrets)
 
@@ -73,6 +89,12 @@ PR_REQUIRED_FILE="$SCRIPT_DIR/../config/pr-required-repos.json"
 SECRETS_FILE="$SCRIPT_DIR/../config/github-secrets.json"
 OWNER="${GITHUB_OWNER:-jkrumm}"
 DRY_RUN="${DRY_RUN:-0}"
+TIGHTEN_ONLY="${TIGHTEN_ONLY:-0}"
+for arg in "$@"; do
+  [ "$arg" = --tighten-only ] && TIGHTEN_ONLY=1
+done
+# A factory session never runs the loosening sync: no flag turns this off.
+[ -n "${FACTORY_SESSION:-}" ] && TIGHTEN_ONLY=1
 
 for f in "$RULESET_FULL" "$RULESET_LITE" "$PR_REQUIRED_FILE"; do
   if [ ! -f "$f" ]; then
@@ -136,9 +158,79 @@ apply_ruleset() {
   fi
 }
 
+# Is applying the wanted ruleset ($2, a file) to a repo ($1) a tightening? Reads
+# GitHub's current "protect-default-branch" ruleset and echoes "verdict|reasons":
+#   same        nothing to write
+#   tighten     every difference adds or strengthens protection (or no ruleset yet)
+#   loosen      something drops or weakens
+#   undecidable GitHub could not be read, or a difference this does not know how to rank
+# Only `same` and `tighten` may be applied in tighten-only mode; the rest fail closed.
+# A rule parameter GitHub returns beyond the file's (its own defaults) counts as
+# unchanged when it holds that default, since the PUT would reset it to exactly that.
+RULESET_VERDICT='
+def rk: {"active":2,"evaluate":1,"disabled":0}[.] // -1;
+def dflt: {"required_reviewers":[],"allowed_merge_methods":["merge","squash","rebase"],"require_extra_approval_for_unattributed_changes":true};
+def prbool: ["dismiss_stale_reviews_on_push","require_code_owner_review","require_last_push_approval","required_review_thread_resolution"];
+def prknown: prbool + ["required_approving_review_count"];
+def prloose($l; $w):
+  [ if ($w.required_approving_review_count // 0) < ($l.required_approving_review_count // 0) then "required approvals drop" else empty end ]
+  + [ prbool[] as $k | select(($l[$k] // false) and (($w[$k] // false) | not)) | "pull_request.\($k) turned off" ]
+  + [ ($l | keys[]) as $k | select($k | IN(prknown[]) | not) | select($w | has($k) | not)
+      | select($l[$k] != (dflt[$k] // "unknown")) | "pull_request.\($k) would be reset" ]
+  + [ ($l | keys[]) as $k | select($k | IN(prknown[]) | not) | select($w | has($k))
+      | select($l[$k] != $w[$k]) | "pull_request.\($k) differs (cannot compare)" ];
+def proj($x; $w):
+  { enforcement: $x.enforcement, target: $x.target,
+    include: (($x.conditions.ref_name.include // []) | sort),
+    exclude: (($x.conditions.ref_name.exclude // []) | sort),
+    bypass: (($x.bypass_actors // []) | map({actor_id, actor_type, bypass_mode}) | sort_by([.actor_type, .actor_id])),
+    rules: (($x.rules // []) | map(. as $r
+      | {type: $r.type, parameters: (($r.parameters // {}) | with_entries(select(.key as $k
+          | (($w.rules // []) | map(select(.type == $r.type)) | first | .parameters // {} | has($k)))))})
+      | sort_by(.type)) };
+def loosen($l; $w):
+  [ if ($w.enforcement | rk) < ($l.enforcement | rk) then "enforcement \($l.enforcement) -> \($w.enforcement)" else empty end ]
+  + [ if $w.target != $l.target then "target \($l.target) -> \($w.target)" else empty end ]
+  + [ if (($l.conditions // {}) | keys) != ["ref_name"] then "conditions beyond ref_name (cannot compare)" else empty end ]
+  + [ (($l.conditions.ref_name.include // []) - ($w.conditions.ref_name.include // []))[] | "stops protecting \(.)" ]
+  + [ (($w.conditions.ref_name.exclude // []) - ($l.conditions.ref_name.exclude // []))[] | "newly excludes \(.)" ]
+  + [ ($w.bypass_actors // [])[] as $b
+      | (($l.bypass_actors // []) | map(select(.actor_id == $b.actor_id and .actor_type == $b.actor_type)) | first) as $lb
+      | if $lb == null then "adds bypass actor \($b.actor_type) \($b.actor_id)"
+        elif $b.bypass_mode == $lb.bypass_mode or ($b.bypass_mode == "pull_request" and $lb.bypass_mode == "always") then empty
+        else "bypass mode of \($b.actor_type) \($b.actor_id): \($lb.bypass_mode) -> \($b.bypass_mode)" end ]
+  + [ ($l.rules // [])[] as $lr
+      | (($w.rules // []) | map(select(.type == $lr.type)) | first) as $wr
+      | if $wr == null then "rule \($lr.type) removed"
+        elif $lr.type == "pull_request" then prloose($lr.parameters // {}; $wr.parameters // {})[]
+        elif ($lr.parameters // null) != ($wr.parameters // null) then "rule \($lr.type) parameters differ (cannot compare)"
+        else empty end ];
+. as $live | $want[0] as $w
+| if proj($live; $w) == proj($w; $w) then {verdict: "same", reasons: []}
+  else loosen($live; $w) as $loose
+  | if ($loose | length) > 0 then {verdict: "loosen", reasons: $loose}
+    else {verdict: "tighten", reasons: ["adds or strengthens protection"]} end end
+| "\(.verdict)|\(.reasons | join("; "))"
+'
+
+classify_ruleset() {
+  local repo="$1" file="$2" id live
+  if ! id=$(gh api "repos/$OWNER/$repo/rulesets" \
+      --jq '[.[] | select(.name=="protect-default-branch") | .id] | first // empty' 2>/dev/null); then
+    echo "undecidable|could not list the rulesets"; return
+  fi
+  if [ -z "$id" ]; then echo "tighten|create the ruleset"; return; fi
+  if ! live=$(gh api "repos/$OWNER/$repo/rulesets/$id" 2>/dev/null); then
+    echo "undecidable|could not read ruleset $id"; return
+  fi
+  printf '%s' "$live" | jq -r --slurpfile want "$file" "$RULESET_VERDICT" 2>/dev/null \
+    || echo "undecidable|could not compare ruleset $id"
+}
+
 echo ""
 echo "  GitHub Config — $OWNER"
 [ "$DRY_RUN" = "1" ] && echo "  DRY RUN — no changes will be made"
+[ "$TIGHTEN_ONLY" = "1" ] && echo "  TIGHTEN-ONLY — writes only what adds or strengthens protection"
 echo ""
 
 # Resolve shared secrets from 1Password once, up front. The values land in a
@@ -161,7 +253,10 @@ op_read() {  # $1 = op:// ref
 
 SECRETS_TMP=""
 have_secrets=0
-if [ -f "$SECRETS_FILE" ]; then
+if [ "$TIGHTEN_ONLY" = "1" ]; then
+  echo "  Tighten-only: shared secret sync skipped (the owner's full \`make github-config\`)"
+  echo ""
+elif [ -f "$SECRETS_FILE" ]; then
   if ! command -v secrets-run >/dev/null 2>&1 && ! command -v op >/dev/null 2>&1; then
     echo "  ⚠ neither secrets-run nor op found — secret sync skipped"
     echo ""
@@ -204,6 +299,7 @@ echo ""
 
 ok=0
 failed=0
+skipped=0
 
 while IFS=" " read -r repo is_private; do
   if [ "$DRY_RUN" = "1" ]; then
@@ -212,6 +308,12 @@ while IFS=" " read -r repo is_private; do
     else
       sel=$(choose_tier "$repo"); tier="${sel%%|*}"; reason="${sel#*|}"
       echo "  [dry] $OWNER/$repo — $(printf '%s' "$tier" | tr '[:lower:]' '[:upper:]') ($reason)"
+      if [ "$TIGHTEN_ONLY" = "1" ]; then
+        file="$RULESET_LITE"; [ "$tier" = "full" ] && file="$RULESET_FULL"
+        verdict_line=$(classify_ruleset "$repo" "$file")
+        echo "         ${verdict_line%%|*}: ${verdict_line#*|}"
+        case "${verdict_line%%|*}" in same|tighten) ;; *) ((skipped++)) || true ;; esac
+      fi
     fi
     if [ "$have_secrets" = "1" ]; then
       while IFS=$'\t' read -r name _value; do
@@ -231,7 +333,19 @@ while IFS=" " read -r repo is_private; do
     sel=$(choose_tier "$repo"); tier="${sel%%|*}"; reason="${sel#*|}"
     file="$RULESET_LITE"
     [ "$tier" = "full" ] && file="$RULESET_FULL"
-    if apply_ruleset "$repo" "$file"; then
+    verdict="tighten"; verdict_reasons=""
+    if [ "$TIGHTEN_ONLY" = "1" ]; then
+      verdict_line=$(classify_ruleset "$repo" "$file")
+      verdict="${verdict_line%%|*}"; verdict_reasons="${verdict_line#*|}"
+    fi
+    if [ "$verdict" = "same" ]; then
+      echo "    · ${tier} ruleset already as wanted"
+      ((ok++)) || true
+    elif [ "$verdict" != "tighten" ]; then
+      echo "    ✗ SKIPPED — ${verdict}: ${verdict_reasons}" >&2
+      ((skipped++)) || true
+      continue
+    elif apply_ruleset "$repo" "$file"; then
       echo "    ✓ ${tier} ruleset ($reason)"
       ((ok++)) || true
     else
@@ -268,5 +382,16 @@ while IFS=" " read -r repo is_private; do
 done <<< "$repos"
 
 echo ""
-echo "  Done: $ok configured, $failed failed"
+if [ "$TIGHTEN_ONLY" = "1" ]; then
+  echo "  Done: $ok configured, $failed failed, $skipped skipped"
+else
+  echo "  Done: $ok configured, $failed failed"
+fi
 echo ""
+if [ "$skipped" -gt 0 ]; then
+  echo "  $skipped repo(s) skipped: applying the wanted state would loosen protection or cannot be compared." >&2
+  echo "  That is the owner's \`make github-config\` by hand. A factory lead raises an Errand" >&2
+  echo "  (\`factory errand raise … --need hands\`) naming the repos above; it never edits around this." >&2
+  echo "" >&2
+  exit 3
+fi
