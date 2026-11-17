@@ -69,7 +69,7 @@ its own OpenCode server (`packages/opencode-host` in agent-workflows).
 **Telemetry resource attributes (issue 2076).** The same service map carries
 `OTEL_RESOURCE_ATTRIBUTES=service.namespace=opencode,deployment.environment.name=prod,host.name=<mini|macbook>`,
 because the exporter lives in that service, not in the pane. `host.name` comes from the secrets
-backend marker (`cache` = mini, `op` = MacBook) and is omitted when the marker is missing. A value
+backend marker (`cache` = mini, `op` = MacBook) and is omitted when the marker is missing or is neither value. A value
 already in `service.json` is only overwritten by a launch; the service picks it up on its next restart,
 which `opencode-service-env.sh` does when idle. The contract is vps `docs/observability.md`.
 

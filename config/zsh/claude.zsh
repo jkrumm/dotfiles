@@ -183,6 +183,18 @@ cs() {
 # stay for `agw`, OpenCode and Hermes (`oc`) — never for development sessions. `claude_iu`
 # (headless `claude -p` on IU) is gone too: no headless claude (docs/agent-platform.md).
 
+# Telemetry resource attributes for `oc` (contract: vps docs/observability.md). The machine name
+# comes from the secrets backend marker: cache = the mini, op = the MacBook; absent otherwise.
+_oc_resource_attributes() {
+  local marker="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" backend host
+  [[ -r "$marker" ]] && backend=$(<"$marker")
+  case "$backend" in
+    cache) host=mini ;;
+    op) host=macbook ;;
+  esac
+  print -r -- "service.namespace=opencode,deployment.environment.name=prod${host:+,host.name=$host}"
+}
+
 # `oc` — OpenCode, both routes (gateway on the mini, IU direct on the MacBook). The second lane next to `cx`:
 # it reads the same AGENTS.md, ~/.claude/CLAUDE.md and ~/.claude/skills,
 # and gets the always-on rules through `instructions` in config/opencode/opencode.json
@@ -197,18 +209,6 @@ cs() {
 # config: the light/dark re-theme (Herdr app terminals only).
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
 # lines. `oc` evals it, so the key never rides argv or an ssh hop.
-#
-# Telemetry resource attributes (contract: vps docs/observability.md). The machine name
-# comes from the secrets backend marker: cache = the mini, op = the MacBook.
-_oc_resource_attributes() {
-  local marker="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" backend host
-  [[ -r "$marker" ]] && backend=$(<"$marker")
-  case "$backend" in
-    cache) host=mini ;;
-    op) host=macbook ;;
-  esac
-  print -r -- "service.namespace=opencode,deployment.environment.name=prod${host:+,host.name=$host}"
-}
 #
 # Where the mini has a door token for caller `oc`, OpenCode goes through the local
 # inference gateway (same paths as IU, spends Claude credit first, records every
