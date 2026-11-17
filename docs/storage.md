@@ -23,7 +23,7 @@ with one exception: the Shutterflow library, which syncs its finals to B2 itself
 | Class | Home | Local copy | Offsite |
 |-|-|-|-|
 | Documents (tax, finance, studies, CV, sailing) | `SSD/Dokumente` | EXT mirror | restic |
-| Fuji finals | the Shutterflow library on the MacBook | none | B2, by Shutterflow's own sync |
+| Fuji finals | the Shutterflow library on the MacBook | none | B2, by Shutterflow's own sync (proven 2026-11-16: 3,918 of 3,918 finals up to date) |
 | Phone photos since 2021 (20,981 library assets, 78 GiB of originals) | iCloud Photos | nightly export to `SSD/Bilder/iCloud` by `com.jkrumm.icloud-photos-export` (§iCloud Photos export); complete once Photos has downloaded the originals | restic |
 | Other photos: phone archives to 2020, old libraries to 2019 | `SSD/Bilder` | EXT mirror | restic |
 | Books, dev archive, small personal videos, public files | `SSD/{Bücher,Dev,Videos,Public}` | EXT mirror | restic |
