@@ -156,6 +156,9 @@ two live shutterflow leads held 30 and 32 GB of `target/`, and two closed, merge
 brought it to 91%, 89 GiB free. The Photos library (110 GB, still downloading originals) is the other riser; it is not reapable. The detail
 monitor is a disk gauge too: its DOWN means `disk` crossed 93% for three runs, so read the `FAIL:` clause of the last `~/Library/Logs/devhost-health.log` line first.
 
+Issue 2020 (2026-11-17, same monitor, 93% with 70 GiB free after 91% an hour earlier) was a fourth time: live shutterflow leads held 74 GB (1925) and 17 GB (1755) of `target/`,
+and the closed, merged Issue 1934 another 26 GB; `git worktree remove --force` on that one gave 90%, 97 GiB free. The reap-on-close or shared `CARGO_TARGET_DIR` ask is on shutterflow's open issue 1773; until it lands, expect a fifth.
+
 ## What goes to the external SSD
 
 **Class `external` in the budget table above:** a row for a volume that is not part of the Data volume. It counts nothing against the
