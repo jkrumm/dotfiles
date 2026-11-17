@@ -907,6 +907,10 @@ deploy: ## Converge this machine onto the tracked config (wraps setup; nothing t
 		DOTFILES_DIR="$(DOTFILES_DIR)" bash $(DOTFILES_DIR)/scripts/gate-pin-notice.sh || echo "    ! gate-pin-notice failed (non-fatal)"; \
 	fi
 
+.PHONY: host-ready
+host-ready: ## Read-only, sub-second: a launchd-born herdr-core answers (the one prerequisite of a lead; the factory's admission gate, project.yaml `doctor`)
+	@bash $(DOTFILES_DIR)/scripts/lib/core-up.sh
+
 .PHONY: doctor
 doctor: ## Read-only health of this machine (+ the mini when run from the MacBook)
 	@bash $(DOTFILES_DIR)/scripts/doctor.sh

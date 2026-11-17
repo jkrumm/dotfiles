@@ -6,6 +6,9 @@ deploy:
   targets:
     - { name: mini, host: mini, verify: make verify }
   hold: 15m
+# Not `make doctor`: that is the full host audit (minutes, red on drift other leads own) and would stall admission. The
+# one prerequisite a lead needs is a launchd-born herdr-core, which this read-only check answers in well under a second.
+doctor: make host-ready
 ship:
   - { via: push }
 # Not a throttle: the host's memory and load and the `after` edges decide how many run. Rows that restart a shared host
