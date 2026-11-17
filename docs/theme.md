@@ -1,7 +1,5 @@
 # The look — One Zinc terminal, basalt-ui chrome in the Herdr app
 
-The commands and one-line rules are in §Commands and rules at the end; the rest is the full rationale.
-
 Three programs paint one screen and none of them can see the other two. The Herdr app
 paints its **chrome** (sidebar, bars, popups) from a theme file; the outer terminal
 paints **terminal content** from its ANSI palette; starship paints the **prompt**
@@ -61,28 +59,3 @@ and are non-empty.
   `font-jetbrains-mono` cask stays declared because the Nerd Font one does *not*
   register a family named "JetBrains Mono" — dropping it would silently break
   any editor still configured with that name.
-
-## Operating notes (moved from AGENTS.md)
-
-**The look** — `make theme` applies the terminal + prompt layers; the Herdr app's theme is `make herdr-app-setup`. Run both on the
-machines they apply to, since applying one layer is how they drift.
-opencode is the fourth layer and is **file-based, not a make target** — it
-carries both modes in one `one-zinc.json`, so `make theme` has nothing to copy
-and `/theme` flips it live. It follows the appearance through the Claude Code
-push rather than a config file, so leave its `/theme` pick on **Auto** (see `docs/opencode.md`).
-
-Layer table: above.
-
-**Never black, never white** — middle-ground zinc (`#1f1f23` / `#f2f2f5`).
-Font must be **`JetBrainsMono Nerd Font Mono`** — the Mono variant forces
-single-width glyphs so icons can't break alignment. Ghostty validates syntax but
-**silently accepts a bad theme hex**, so `make theme` asserts the theme files exist
-and are non-empty.
-
-## Commands and rules (moved from the root AGENTS.md)
-
-**The look** — `make theme` applies the terminal layer, `make herdr-app-setup` the Herdr app's (run both on each
-machine); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
-on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
-middle-ground zinc (`#1f1f23` / `#f2f2f5`); font is `JetBrainsMono Nerd Font Mono`;
-`make theme` asserts the theme files rather than trusting a config check's exit code.
