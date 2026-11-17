@@ -151,6 +151,11 @@ closed Issues (1732, 1733, 1750, PRs merged) still held 15-32 GB of `target/` ea
 partial cleanup, not unmerged work; check `gh pr list --state merged --head <branch>` before removing. A repeat with the same two leads still
 compiling means shutterflow's leads need a shared `CARGO_TARGET_DIR` or a cleanup step on close, not another manual reap: file it against shutterflow.
 
+Issue 1961 (2026-11-17, `MacMini Dev Host Detail - Push` DOWN, disk 92% to 94% in 22 min, 62 GiB free, over the 93% FAIL line) was the same shape a third time:
+two live shutterflow leads held 30 and 32 GB of `target/`, and two closed, merged Issues (1721, 1745) another 51 GB. `git worktree remove --force` on those two
+brought it to 91%, 89 GiB free. The Photos library (110 GB, still downloading originals) is the other riser; it is not reapable. The detail
+monitor is a disk gauge too: its DOWN means `disk` crossed 93% for three runs, so read the `FAIL:` clause of the last `~/Library/Logs/devhost-health.log` line first.
+
 ## What goes to the external SSD
 
 **Class `external` in the budget table above:** a row for a volume that is not part of the Data volume. It counts nothing against the
