@@ -26,6 +26,7 @@ future).
 |-|-|
 | `diff.patch` | The change (round ≥ 2: only what changed since the last reviewed head) |
 | `stat.txt` | Files and +/- per file |
+| `deleted.txt` | Whole-file deletions: paths only, not in `stat.txt` |
 | `intent.md` | What the change was asked to do: PR title and body, the brief, the plan step |
 | `history.txt` | Recent commits on the touched paths: subject and body |
 | `prior.json` | Earlier findings on these paths and what happened to them (`fixed`, `wrong`, `intentional`, `irrelevant`, `open`) |
@@ -97,7 +98,7 @@ finding if it answers `real: true`; otherwise drop it. Record `votes: "1/1"` or 
 
 ## Reply
 
-Only this JSON, nothing before or after it. `files` is the exact set of paths in `stat.txt`, copied verbatim, reviewed or not: submit refuses any other set and the review runs again. Name a path you did not review in `summary`.
+Only this JSON, nothing before or after it. `files` is every path in `stat.txt`, copied verbatim, reviewed or not; submit refuses a path that is not in `stat.txt` and the review runs again. Whole-file deletions are in `deleted.txt`, not `stat.txt`: list them or leave them out, both are accepted. Never write a placeholder in `files`. Name a path you did not review in `summary`.
 
 ```json
 { "tier": "standard", "round": 1, "intent": "<one line>",
