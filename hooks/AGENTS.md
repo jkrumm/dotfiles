@@ -10,6 +10,10 @@ Hooks are symlinked live into `~/.claude/hooks/`, so a change applies on the nex
 
 `hooks/herdr-core-guard.ts` denies, in every session, restarting, stopping, updating or starting the core (`hc server restart|stop|start`, `hc update`, `hc machine update`, `make herdr-core-update`, `launchctl` on its label), reboot, shutdown and halt, and killing herdr-core and its wrappers at `~/.local/bin/{hc,herdr-core}`. The one update path is `make herdr-core-update`, by the owner by hand (`docs/incident-2026-11-13-mini-panic.md`).
 
+## launchd-env-guard
+
+`hooks/launchd-env-guard.ts` denies `launchctl setenv`: it sets the variable for every job and process of the login session, so a test's dead proxy blacked out every Uptime Kuma heartbeat (2026-11-17). Give the variable to the test's own child (`HTTPS_PROXY=… <cmd>`); `unsetenv` and `getenv` pass.
+
 ## nested-agents
 
 `hooks/nested-agents.ts` hands an agent that edits or writes a file the nested `AGENTS.md` files of that directory (Claude Code loads them only on a Read), once per session and subagent, at most about 9,500 bytes a call; it never blocks.
