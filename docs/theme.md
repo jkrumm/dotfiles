@@ -40,7 +40,7 @@ surfaces.** Two design systems used for what each is good at: basalt-ui's zinc
 ramp is a true neutral (no blue cast like One Dark's `#282c34`, no plum like
 Catppuccin's `#1e1e2e`), while Atom One's hues carry the syntax and ANSI colours.
 Backgrounds are middle-ground on purpose: `#1f1f23` dark (between basalt's zinc-900
-`#18181b` and zinc-800 `#27272a`), `#f2f2f5` light (basalt's own `--vx-surface-bg`).
+`#18181b` and zinc-800 `#27272a`), `#f2f2f5` light (basalt's own `surface-bg` token).
 **Never black, never white**; `#09090b` was tried and lasted one commit. It came from
 believing one cue (a focused row's background) was the only one and driving the
 terminal darker to maximise its contrast; verify with a capture before trading

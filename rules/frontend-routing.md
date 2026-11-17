@@ -24,7 +24,7 @@ Pick the first row that matches the repo or artifact. Rows are mutually exclusiv
 
 - Use the bundled `/dataviz` skill, but with basalt's look so every output reads as one system.
 - Colours and type come from basalt's tokens, not `/dataviz`'s placeholder palette:
-  - `bunx basalt-ui tokens:css` emits the `--vx-*` variables.
+  - `bunx basalt-ui tokens:css` emits the CSS variables: `--vx-*` on 2.x (latest release), `--basalt-*` from 3.0 (on master, unreleased). Read the prefix off the installed version's output.
   - `bunx basalt-ui fonts:css` emits the font faces.
 - Keep basalt's restraint: no decorative gradients, no "bold aesthetic".
 - Every number carries a unit and context.

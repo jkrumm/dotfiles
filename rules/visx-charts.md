@@ -24,7 +24,7 @@ kind-registry is the contract, not optional polish.**
    inside `<svg>` (it mounts in the SVG namespace, throws nothing, and never paints).
 4. **Tokenized axis primitives** — never raw `<AxisLeft>`/`<AxisBottom>` (they miss theme tokens
    and smart ticks).
-5. **Theme-aware colors** via CSS custom properties (`--vx-*` or your own prefix), resolved in pure
+5. **Theme-aware colors** via CSS custom properties (basalt-ui's `--vx-*` on 2.x, `--basalt-*` from 3.0, or your own prefix), resolved in pure
    CSS under the light/dark selector — never a React re-render on scheme toggle, never
    `localStorage.getItem('theme')`, never a raw hex literal in a chart file.
 

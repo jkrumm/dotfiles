@@ -6,7 +6,7 @@
 #
 # BACKGROUND #1f1f23 sits deliberately BETWEEN basalt-ui's two dark steps —
 # zinc-900 #18181b (its BP.black canvas) and zinc-800 #27272a (its
-# --vx-surface-bg). Never black: #09090b was tried and is oppressive.
+# surface-bg token). Never black: #09090b was tried and is oppressive.
 #
 # A focused row (#282C34) that lands on this background separates by only 1.17.
 # That is intentionally subtle and NOT the only focus cue: the row is also bold
