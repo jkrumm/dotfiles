@@ -77,6 +77,7 @@ case "$1" in
       esac
     done ;;
   run)
+    [ -e "$TMP_DIR/state/me.relogin-url" ] && echo marker-present >> "$LOG"
     [ "${STUB_HC_RUN:-ok}" = fail ] && { echo "boom" >&2; exit 1; }
     if [ -n "${STUB_PANE_RESULT:-}" ]; then f=$(printf '%s' "${!#}" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -z "$f" ] || echo "$STUB_PANE_RESULT" > "$f"; fi
     echo "{\"address\":\"${STUB_HC_ADDR:-t9}\",\"name\":\"x\",\"state\":\"live\"}" ;;
@@ -412,6 +413,13 @@ assert_not_contains "--visible: no --rm, no result file, no watcher call" "--rm"
 assert_not_contains "--visible: no result file in the command" "--result-file" "$c"
 assert_contains "--visible: always ends in a shell" "--in-pane; exec \"\${SHELL:-/bin/zsh}\" -l" "$c"
 assert_eq "--visible: nothing swept, no notification" "0/0" "$(count 'hc\[rm\]')/$(count 'osascript - ')"
+echo "the opener marks the login before the terminal exists"
+as mini; reset
+STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
+assert_contains "the URL file is there when hc run is called" "marker-present" "$(calls)"
+reset; STUB_HC_RUN=fail bash "$RELOGIN" me >/dev/null 2>&1
+assert_eq "...and gone again when hc run fails" "" "$(ls "$TMP/state" 2>/dev/null)"
+
 echo "a repeated trigger while the login terminal waits is never a silent refusal"
 mkdir -p "$TMP/state"
 reset; mkdir -p "$TMP/state"; echo "$PASTE" > "$TMP/state/me.relogin-url"

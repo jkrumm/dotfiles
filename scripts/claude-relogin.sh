@@ -618,9 +618,13 @@ if [[ "$machine" == mini ]]; then
   fi
   space=$(hc_space_id) || die "could not read the herdr-app document from the mini's core - refusing to guess the dotfiles space"
   build_hc_args "$space"
-  json=$(bounded hc "${hc_args[@]}" "$hc_cmd") || die "hc run failed: ${json:-no output}"
+  # The URL file marks a login that is starting or waiting. Made here, before the terminal exists, so a second call in
+  # the first seconds (the shell is not up yet) finds the marker instead of mistaking the terminal for a finished login.
+  url_file=$(login_url_file "$id")
+  ( umask 077; mkdir -p "$STATE_DIR" && : >"$url_file" ) || die "cannot create $url_file"
+  json=$(bounded hc "${hc_args[@]}" "$hc_cmd") || { rm -f "$url_file"; die "hc run failed: ${json:-no output}"; }
   addr=$(jq -r '.address // empty' <<<"$json" 2>/dev/null)
-  [[ "$addr" =~ ^t[0-9a-z]+$ ]] || die "hc run gave no terminal address: $json"
+  [[ "$addr" =~ ^t[0-9a-z]+$ ]] || { rm -f "$url_file"; die "hc run gave no terminal address: $json"; }
   wrc=0
   [[ "$visible" == 1 ]] || spawn_worker "$id" --machine mini --watch "hc:$addr" --result-file "$result_file" || wrc=$?
   echo "claude-relogin: login terminal '$tname' ($addr) opened on the mini; approve in ${app:-your browser}"
