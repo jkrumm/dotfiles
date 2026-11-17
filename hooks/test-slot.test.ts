@@ -6,9 +6,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { rewrite, testRunner } from "./test-slot";
+import { rewrite, splitChain, testRunner } from "./test-slot";
 
 const HOOK = `${import.meta.dir}/test-slot.ts`;
 
@@ -113,13 +113,90 @@ describe("the rewrite", () => {
     expect(out.command).toEndWith(`-c 'make check'`);
   });
 
-  test("a cd with shell expansion is wrapped whole, not hoisted", () => {
+  test("a cd with shell expansion stays outside too", () => {
     const out = run('cd "$X" && make check')!;
-    expect(out.command).toStartWith("factory slot run");
+    expect(out.command).toStartWith('cd "$X" && factory slot run');
   });
 
   test("worker caps are at least one", () => {
     expect(run("bun test", { cores: 1 })!.command).toContain(":-1}");
+  });
+});
+
+describe("a chain wraps only its test segment", () => {
+  const parts = (command: string, over: Partial<typeof base> = {}) => run(command, over)!.command;
+
+  test("vite build && bun test x", () => {
+    const out = parts("vite build && bun test x");
+    expect(out).toStartWith("vite build && factory slot run --name 'tmp bun test' -- ");
+    expect(out).toEndWith(`-c 'bun test x'`);
+    expect(out.match(/factory slot run/g)).toHaveLength(1);
+  });
+
+  test("build, shots, then the test, with ; and newlines", () => {
+    const out = parts("vite build; bun shots.ts\nbun test apps/x.test.ts");
+    expect(out).toStartWith("vite build; bun shots.ts\nfactory slot run");
+    expect(out).toEndWith(`-c 'bun test apps/x.test.ts'`);
+  });
+
+  test("the part after the test runs outside it", () => {
+    expect(parts("echo start && bun test && echo done")).toEndWith(`-c 'bun test' && echo done`);
+  });
+
+  test("two test segments take one slot each, one after the other", () => {
+    const out = parts("bun test a && pytest b");
+    expect(out.match(/factory slot run/g)).toHaveLength(2);
+    expect(out).toContain(`-c 'bun test a' && factory slot run --name 'tmp pytest'`);
+  });
+
+  test("a pipe stays inside its segment", () => {
+    const out = parts("make build && bun test x 2>&1 | tee out.log");
+    expect(out).toStartWith("make build && factory slot run");
+    expect(out).toEndWith(`-c 'bun test x 2>&1 | tee out.log'`);
+  });
+
+  test("separators inside quotes and substitutions do not cut", () => {
+    const out = parts(`echo "a && b; c" && echo $(a; b) && bun test`);
+    expect(out).toStartWith(`echo "a && b; c" && echo $(a; b) && factory slot run`);
+  });
+
+  test("the cwd a cd segment sets decides the slot name and the project check", () => {
+    const dir = mkdtempSync(`${tmpdir()}/slot-`);
+    writeFileSync(`${dir}/Makefile`, "check:\n\tagw check\n");
+    expect(run(`cd ${dir} && vite build && make check`)).toBeNull();
+    expect(parts("cd /opt/thing && vite build && bun test")).toContain("--name 'thing bun test'");
+  });
+
+  test("relative cd segments chain from the directory the last one set", () => {
+    const root = mkdtempSync(`${tmpdir()}/slot-`);
+    mkdirSync(`${root}/apps/web`, { recursive: true });
+    writeFileSync(`${root}/apps/web/Makefile`, "check:\n\tagw check\n");
+    expect(run("cd apps && cd web && make check", { cwd: root })).toBeNull();
+    expect(parts("cd apps && cd web && cd .. && bun test", { cwd: root })).toContain("--name 'apps bun test'");
+  });
+
+  test.each([
+    "vite build || echo fail && bun test",
+    "a && b || bun test",
+    "(cd x && vite build) && bun test",
+    "vite build & bun test",
+    "for f in a b; do bun test $f; done",
+    "if true; then bun test; fi",
+    "cat <<EOF\nx\nEOF\nbun test",
+    "vite build # && later\nbun test",
+    "echo 'open && bun test",
+    "PORT=4000; bun test --port $PORT",
+    'ARGS="--bail --silent"; bun test $ARGS',
+    "ARGS=$(cmd x); bun test $ARGS",
+    "set -o pipefail; pytest | tee log",
+  ])("a chain that cannot be cut takes one slot whole: %s", (cmd) => {
+    expect(splitChain(cmd)).toBeNull();
+    const out = run(cmd);
+    if (out) expect(out.command.match(/factory slot run/g)).toHaveLength(1);
+  });
+
+  test("redirections with & are not backgrounding", () => {
+    expect(splitChain("a 2>&1 && b &> out")).toHaveLength(2);
   });
 });
 

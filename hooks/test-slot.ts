@@ -29,11 +29,16 @@
  * the command runs as written. A factory server that is down is handled by `factory slot run`
  * itself: it runs the command anyway with one line on stderr.
  *
- * A leading `cd <dir> &&` stays outside the wrapper so the session's cwd still follows it.
+ * In a chain of `&&` / `;` / newline segments only the segment that runs a test takes the slot
+ * (`vite build && factory slot run … -c 'bun test x'`); the build is not queued behind other tests,
+ * and a `cd <dir>` segment stays outside so the session's cwd still follows it. A chain that cannot
+ * be cut safely (`||`, `&`, subshells, heredocs, `for … do … done`, a segment that leaves shell state
+ * such as `PORT=4000;` or `set -o pipefail;`) takes one slot whole.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
+import { resolve } from "node:path";
 import { splitIntoCommands } from "./docker-makefile.ts";
 
 interface HookInput {
@@ -189,6 +194,10 @@ export function rewrite(
   const runner = simples.map(testRunner).find((r): r is string => r !== null);
   if (!runner) return null;
 
+  const segments = splitChain(command);
+  if (segments && segments.length > 1) return rewriteSegments(segments, opts);
+
+  // One segment, or a chain that cannot be split safely: the whole command takes the slot.
   let prefix = "";
   let body = command.trim();
   let dir = opts.cwd;
@@ -196,21 +205,172 @@ export function rewrite(
   if (cd) {
     prefix = `cd ${cd[1]} && `;
     body = cd[2];
-    const target = cd[1].replace(/^["']|["']$/g, "");
-    dir = target.startsWith("/") ? target : target.startsWith("~") ? (opts.env.HOME ?? "") + target.slice(1) : `${opts.cwd}/${target}`;
+    dir = resolveDir(cd[1], opts.cwd, opts.env);
   }
   if (existsSync(dir) && projectHasSlot(dir)) return null;
+  return { command: prefix + slotWrap(body, dir, runner, opts.cores), runner };
+}
 
-  const workers = Math.max(1, Math.floor(opts.cores / 2));
+/** Where `cd <word>` leads from `base`; `cd -` is unknown, so the directory stays. */
+function resolveDir(word: string, base: string, env: Record<string, string | undefined>): string {
+  const target = word.replace(/^["']|["']$/g, "");
+  if (target === "-") return base;
+  return resolve(base, target.startsWith("~") ? (env.HOME ?? "") + target.slice(1) : target);
+}
+
+function slotWrap(body: string, dir: string, runner: string, cores: number): string {
+  const workers = Math.max(1, Math.floor(cores / 2));
   const caps = [
     `"VITEST_MAX_WORKERS=\${VITEST_MAX_WORKERS:-${workers}}"`,
     `"PYTEST_XDIST_AUTO_NUM_WORKERS=\${PYTEST_XDIST_AUTO_NUM_WORKERS:-${workers}}"`,
   ].join(" ");
   const shell = '"${SHELL:-/bin/sh}"';
-  const wrapped =
-    `${prefix}factory slot run --name ${shQuote(`${repoName(dir)} ${runner}`)} -- ` +
-    `env FACTORY_SLOT_ACTIVE=1 ${caps} ${shell} -c ${shQuote(body)}`;
-  return { command: wrapped, runner };
+  return (
+    `factory slot run --name ${shQuote(`${repoName(dir)} ${runner}`)} -- ` +
+    `env FACTORY_SLOT_ACTIVE=1 ${caps} ${shell} -c ${shQuote(body)}`
+  );
+}
+
+interface Segment {
+  text: string;
+  /** The separator that follows it (`&&`, `;` or a newline), with its surrounding whitespace. */
+  sep: string;
+}
+
+/** Shell keywords that open or continue a compound command: a chain containing one is not split at `;`. */
+const COMPOUND_WORDS = new Set(["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "select", "function", "!", "}"]);
+
+/** Builtins that leave state for the segments after them, which a separate `sh -c` would not see. */
+const STATE_WORDS = new Set(["set", "shopt", "source", ".", "unset", "alias", "declare", "local", "typeset", "read", "shift", "trap", "umask", "ulimit", "eval", "pushd", "popd"]);
+/** Does the segment hold a command made only of variable assignments (`PORT=4000`, `A="x y"`, `V=$(cmd)`)? Those are not exported. */
+function hasBareAssignment(text: string): boolean {
+  return splitIntoCommands(text).some((tokens) => tokens.length > 0 && tokens.every((t) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)));
+}
+
+/**
+ * The command cut at its top-level `&&`, `;` and newlines, or null when that is not provably safe:
+ * `||` (precedence: `a && b || c` is not `a && (b || c)`), `&`, subshells and groups, heredocs,
+ * comments, compound commands (`for … ; do … ; done`), segments that leave shell state behind
+ * (`PORT=4000;`, `set -o pipefail;`) and unbalanced quotes. A pipe stays inside
+ * its segment. Quotes, `$(…)` and backticks hide their separators.
+ */
+export function splitChain(command: string): Segment[] | null {
+  const segments: Segment[] = [];
+  let start = 0;
+  let i = 0;
+  const n = command.length;
+
+  const cut = (end: number, sepEnd: number): void => {
+    const text = command.slice(start, end);
+    if (text.trim()) segments.push({ text, sep: command.slice(end, sepEnd) });
+    else if (segments.length > 0) segments[segments.length - 1].sep += command.slice(end, sepEnd);
+    start = sepEnd;
+    i = sepEnd;
+  };
+  /** Index just past the `close` matching an opener already consumed, or -1. */
+  const skipNested = (from: number, open: string, close: string): number => {
+    let depth = 1;
+    for (let j = from; j < n; j++) {
+      const c = command[j];
+      if (c === "\\") j++;
+      else if (c === "'" && close !== "`") {
+        const e = command.indexOf("'", j + 1);
+        if (e === -1) return -1;
+        j = e;
+      } else if (c === open && open !== close) depth++;
+      else if (c === close && --depth === 0) return j + 1;
+    }
+    return -1;
+  };
+
+  while (i < n) {
+    const c = command[i];
+    const prev = i > 0 ? command[i - 1] : " ";
+    if (c === "\\") {
+      i += 2;
+    } else if (c === "'") {
+      const e = command.indexOf("'", i + 1);
+      if (e === -1) return null;
+      i = e + 1;
+    } else if (c === '"') {
+      let j = i + 1;
+      while (j < n && command[j] !== '"') {
+        if (command[j] === "\\") j += 2;
+        else if (command[j] === "$" && command[j + 1] === "(") {
+          j = skipNested(j + 2, "(", ")");
+          if (j === -1) return null;
+        } else if (command[j] === "`") {
+          j = skipNested(j + 1, "`", "`");
+          if (j === -1) return null;
+        } else j++;
+      }
+      if (j >= n) return null;
+      i = j + 1;
+    } else if (c === "$" && command[i + 1] === "(") {
+      i = skipNested(i + 2, "(", ")");
+      if (i === -1) return null;
+    } else if (c === "`") {
+      i = skipNested(i + 1, "`", "`");
+      if (i === -1) return null;
+    } else if (c === "&" && command[i + 1] === "&") {
+      cut(i, i + 2);
+    } else if (c === ";" && command[i + 1] !== ";") {
+      cut(i, i + 1);
+    } else if (c === "\n") {
+      cut(i, i + 1);
+    } else if (c === "|" && command[i + 1] === "|") {
+      return null;
+    } else if (c === "&") {
+      // `2>&1`, `>&2`, `&>file` are redirections; anything else backgrounds.
+      if (prev !== ">" && prev !== "<" && command[i + 1] !== ">") return null;
+      i++;
+    } else if (c === "(" || c === ")" || c === ";") {
+      return null;
+    } else if (c === "<" && command[i + 1] === "<" && command[i + 2] !== "<") {
+      return null;
+    } else if (c === "#" && /\s/.test(prev)) {
+      return null;
+    } else {
+      i++;
+    }
+  }
+  cut(n, n);
+
+  for (const { text } of segments) {
+    const first = text.trim().split(/\s+/)[0];
+    if (COMPOUND_WORDS.has(first) || STATE_WORDS.has(first) || /^\{/.test(first) || hasBareAssignment(text)) return null;
+  }
+  return segments;
+}
+
+/** `cd <plain word>` alone: it moves the directory the later segments are judged in. */
+const CD_ONLY = /^cd\s+((?:"[^"$`\\]+"|'[^']+'|[\w@%+=:,./~-]+))$/;
+
+/** A chain of `&&`/`;` segments: each test segment takes its own slot, the rest run as written. */
+function rewriteSegments(
+  segments: Segment[],
+  opts: { cwd: string; env: Record<string, string | undefined>; cores: number },
+): Rewrite | null {
+  let dir = opts.cwd;
+  let first: string | null = null;
+  const parts: string[] = [];
+  for (const { text, sep } of segments) {
+    const lead = text.match(/^\s*/)?.[0] ?? "";
+    const trail = text.match(/\s*$/)?.[0] ?? "";
+    const body = text.trim();
+    const cd = CD_ONLY.exec(body);
+    if (cd) dir = resolveDir(cd[1], dir, opts.env);
+    const runner = splitIntoCommands(body)
+      .map(testRunner)
+      .find((r): r is string => r !== null);
+    if (!runner || (existsSync(dir) && projectHasSlot(dir))) {
+      parts.push(text + sep);
+      continue;
+    }
+    first ??= runner;
+    parts.push(lead + slotWrap(body, dir, runner, opts.cores) + trail + sep);
+  }
+  return first ? { command: parts.join(""), runner: first } : null;
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
