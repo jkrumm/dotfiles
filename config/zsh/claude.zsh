@@ -198,6 +198,18 @@ cs() {
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
 # lines. `oc` evals it, so the key never rides argv or an ssh hop.
 #
+# Telemetry resource attributes (contract: vps docs/observability.md). The machine name
+# comes from the secrets backend marker: cache = the mini, op = the MacBook.
+_oc_resource_attributes() {
+  local marker="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" backend host
+  [[ -r "$marker" ]] && backend=$(<"$marker")
+  case "$backend" in
+    cache) host=mini ;;
+    op) host=macbook ;;
+  esac
+  print -r -- "service.namespace=opencode,deployment.environment.name=prod${host:+,host.name=$host}"
+}
+#
 # Where the mini has a door token for caller `oc`, OpenCode goes through the local
 # inference gateway (same paths as IU, spends Claude credit first, records every
 # request); the token is read with zsh builtins only, so it never rides an argv.
@@ -221,8 +233,9 @@ _oc_env() {
     return 1
   fi
   base=${base%/}
-  local openai="${base%/anthropic}/openai/v1"
-  print -r -- "export IU_KEY=${(q)key} IU_ANTHROPIC_BASE=${(q)base} IU_OPENAI_BASE=${(q)openai}"
+  local openai="${base%/anthropic}/openai/v1" otel
+  otel=$(_oc_resource_attributes)
+  print -r -- "export IU_KEY=${(q)key} IU_ANTHROPIC_BASE=${(q)base} IU_OPENAI_BASE=${(q)openai} OTEL_RESOURCE_ATTRIBUTES=${(q)otel}"
   # v2 attaches to ONE shared background service that never saw this shell's env, so the
   # {env:IU_*} placeholders resolve empty there. Hand it the values (env-only, idempotent).
   print -r -- "\"\$HOME/SourceRoot/dotfiles/scripts/opencode-service-env.sh\" || true"

@@ -20,7 +20,7 @@ file="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/service.json"
 [[ -n "${IU_KEY:-}" && -n "${IU_OPENAI_BASE:-}" ]] || exit 0
 [[ -f "$file" ]] || exit 0 # no service configured yet; first start creates it, next call fills it
 
-names=(IU_KEY IU_OPENAI_BASE IU_ANTHROPIC_BASE)
+names=(IU_KEY IU_OPENAI_BASE IU_ANTHROPIC_BASE OTEL_RESOURCE_ATTRIBUTES)
 # Keys earlier versions of the service env carried; dropped on the next render so a rewrite
 # leaves no credential for a retired service behind (RESEARCH_GATEWAY_AUTH: research-gateway).
 retired=(RESEARCH_GATEWAY_AUTH)
