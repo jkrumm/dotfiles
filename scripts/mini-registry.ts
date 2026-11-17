@@ -80,6 +80,8 @@ export type Service = {
   exception: Record<string, string>
   // a root one-shot at boot: no process to budget
   oneshot?: boolean
+  // TCP ports the service listens on (loopback only): a port two services claim fails the check
+  ports: number[]
 }
 
 // A breach that belongs to no service of the registry (a make target that runs docker): recorded in the host file's top-level `debt:` list.
@@ -157,6 +159,12 @@ export function parseRegistry(text: string, source: string, repoDefault?: string
       status: str(raw.status) && expand(str(raw.status)!, home), note: str(raw.note),
       idle_minutes: typeof raw.idle_minutes === "number" ? raw.idle_minutes : undefined,
       debt: ruleMap(raw.debt, "debt", err), exception: ruleMap(raw.exception, "exception", err), oneshot: raw.oneshot === true,
+      ports: [],
+    }
+    if (raw.ports != null) {
+      const ports = Array.isArray(raw.ports) ? raw.ports : [raw.ports]
+      if (ports.every((p) => Number.isInteger(p) && p > 0 && p < 65536)) s.ports = ports as number[]
+      else err("ports must be a list of TCP port numbers")
     }
     if (raw.process_type != null) {
       if (!PROCESS_TYPES.includes(raw.process_type as ProcessType)) err(`process_type must be one of ${PROCESS_TYPES.join(", ")}`)
@@ -178,7 +186,12 @@ export function validate(services: Service[]): string[] {
   const names = new Set<string>()
   const labels = new Map<string, string>()
   const containers = new Map<string, string>()
+  const ports = new Map<number, string>()
   for (const s of services) {
+    for (const p of s.ports) {
+      if (ports.has(p)) errors.push(`port ${p} registered by ${ports.get(p)} and ${s.name}`)
+      ports.set(p, s.name)
+    }
     if (names.has(s.name)) errors.push(`duplicate name ${s.name}`)
     names.add(s.name)
     if (s.label) {

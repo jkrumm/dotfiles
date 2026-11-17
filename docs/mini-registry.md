@@ -48,6 +48,7 @@ services:
 | `door` | The Caddy registry name(s) it serves, as `scripts/lib/caddy-registry.py` yields them |
 | `label` | launchd label. A brew service matches `sh.brew.<n>` and `homebrew.mxcl.<n>`; `daemon: true` for `/Library/LaunchDaemons` (read with `launchctl print system/<label>`, `process:` names its process for the footprint) |
 | `container`, `project`, `vm` | A compose service: the container, its compose project, the Colima profile (`default` if omitted) |
+| `ports` | TCP ports the service listens on (127.0.0.1 only): `ports: [4416, 4417]`. A port two registered services claim fails the check; a port no entry claims is not looked up |
 | `process_type` | `interactive`, for a `core` launchd service others wait on: `make mini-ps` and the check fail while it runs lower (§Process type) |
 | `shared_memory` | Postgres: every process's footprint counts the shared buffers again (below) |
 | `idle_minutes` | A dev server: minutes with no request to its door before the idle stop ends it (default 30) |

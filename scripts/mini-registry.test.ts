@@ -80,6 +80,20 @@ describe("registry parsing", () => {
     expect(e).toContain("b: needs ghost")
   })
 
+  test("a port is a list of TCP ports and two services can not claim one", () => {
+    const rows = parseRegistry(
+      `services:
+  - { name: a, repo: r, kind: launchd, tier: core, label: com.jkrumm.a, ports: [4416, 4417], memory_mib: 1 }
+  - { name: b, repo: r, kind: launchd, tier: core, label: com.jkrumm.b, ports: [4417], memory_mib: 1 }`,
+      "t", undefined, HOME,
+    )
+    expect(rows.errors).toEqual([])
+    expect(rows.services[0].ports).toEqual([4416, 4417])
+    expect(validate(rows.services).join("\n")).toContain("port 4417 registered by a and b")
+    const bad = parseRegistry("services:\n  - { name: x, repo: r, kind: launchd, tier: core, label: l, ports: [http], memory_mib: 1 }", "t", undefined, HOME)
+    expect(bad.errors.join()).toContain("ports must be a list of TCP port numbers")
+  })
+
   test("repo files are read beside the host file, and a repo's job can not take a registered name", () => {
     const dir = mkdtempSync(join(tmpdir(), "mini-reg-"))
     mkdirSync(join(dir, "src", "myrepo"), { recursive: true })
