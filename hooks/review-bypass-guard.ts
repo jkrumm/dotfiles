@@ -23,7 +23,12 @@
  *     `$(…)` in the query);
  *   - `gh api` with a non-GET method on an endpoint a variable completes
  *     (`repos/o/r/$S`), unless its literal text names an unrelated resource
- *     (`…/issues/$N/comments`) or a single `pulls/$N` id slot.
+ *     (`…/issues/$N/comments`) or a single `pulls/$N` id slot;
+ *   - the GitHub config sync (`make github-config`, `scripts/github-config.sh`) in a
+ *     command that names `FACTORY_SESSION` or `TIGHTEN_ONLY`, or clears the environment (`env -i`): the script writes
+ *     rulesets with `gh api` out of the hook's sight, so what keeps a lead from
+ *     loosening protection through it is its own tighten-only mode, which a factory
+ *     session cannot leave unless the marker is cleared. The sync itself is allowed.
  *
  * The tokenizer drops quote types, so `$name` in a single-quoted GraphQL query
  * (`query($o:String!)`) reads as a shell variable and is denied too.
@@ -55,6 +60,13 @@ interface HookInput {
 const OWNER =
   "This bypasses a required review and is the owner's to do by hand, not a factory lead's. " +
   "Leave the PR open for its reviewer, or `factory issue ask` the owner.";
+
+const SYNC_TAMPERING =
+  "`make github-config` runs tighten-only in a factory session: it applies only what adds or strengthens protection " +
+  "(a repo joins config/pr-required-repos.json, a ruleset or rule is added) and skips, with exit 3, a repo it would loosen. " +
+  "A command that names FACTORY_SESSION or TIGHTEN_ONLY would turn that off. " +
+  "A loosening (a repo leaves the list, a rule, approval or check is dropped, enforcement is lowered) is the owner's: " +
+  "raise an Errand (`factory errand raise … --need hands`) for his `make github-config`.";
 
 const NAME_THE_REPO =
   "Name the repo in the command so the hook can check it against the owner's list: " +
@@ -247,6 +259,20 @@ function apiViolation(args: string[]): string | null {
   return null;
 }
 
+// ── The GitHub config sync ───────────────────────────────────────────────────
+
+const SYNC_SCRIPT = /(?:^|\/)github-config\.sh$/;
+/** The variables that make the sync tighten-only, or `env -i` / `env -` which clears them. */
+const SYNC_MARKER = /\b(?:FACTORY_SESSION|TIGHTEN_ONLY)\b|\benv\s+(?:\S+\s+)*?(?:-i|--ignore-environment|-)(?:\s|$)/;
+/** `bash scripts/github-config.sh`: the tokenizer sees a shell without `-c` as nothing to look into. */
+const SYNC_VIA_SHELL = /(?:^|[;&|\n(`]|\$\()\s*(?:\S+\s+)*?(?:bash|sh|zsh|dash|ksh)\s+(?:-\S+\s+)*\S*github-config\.sh\b/;
+
+/** `make … github-config[-tighten]`, `scripts/github-config.sh` or `bash …/github-config.sh`. */
+function runsSync(inv: Invocation): boolean {
+  if (inv.name === "make") return inv.args.some((a) => a === "github-config" || a === "github-config-tighten");
+  return SYNC_SCRIPT.test(inv.name);
+}
+
 // ── Policy ───────────────────────────────────────────────────────────────────
 
 /** Leading words of a gh command, skipping `-R <repo>` / `--repo <repo>` (cobra allows them before the verb). */
@@ -264,7 +290,9 @@ function subcommands(args: string[]): string[] {
 export function findViolation(command: string, ctx: Context = {}): string | null {
   // gh's own `{owner}` / `{repo}` / `{branch}` endpoint placeholders: the tokenizer reads braces as command groups.
   const flattened = command.replace(/\{(owner|repo|branch)\}/g, "$1");
-  for (const inv of collect(flattened) as Invocation[]) {
+  const invocations = collect(flattened) as Invocation[];
+  if ((invocations.some(runsSync) || SYNC_VIA_SHELL.test(flattened)) && SYNC_MARKER.test(flattened)) return SYNC_TAMPERING;
+  for (const inv of invocations) {
     if (inv.name !== "gh") continue;
     const positionals = subcommands(inv.args);
 

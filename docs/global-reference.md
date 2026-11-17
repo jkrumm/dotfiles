@@ -59,7 +59,10 @@ direct-to-master by default. PR-required repos are one list in
 `github-config.sh` — edit the file): `basalt-ui`, `free-planning-poker`,
 `rollhook`, `rollhook-action`, `software-factory`, `weatherorb`. `make github-config` applies two tiers: those repos
 and any with a collaborator get the full ruleset; other public repos get lite (no
-PR rule). Private repos can't be protected for free.
+PR rule). Private repos can't be protected for free. In a factory session it runs
+tighten-only (`make github-config-tighten`): it writes what adds or strengthens
+protection and skips, with exit 3, any repo it would loosen — that one is the owner's
+by hand, so a lead raises an Errand for it.
 
 **GitHub Actions on private repos run on the VPS, never `ubuntu-latest`.** The
 account's free hosted minutes for private repos run out mid-month (2026-10:
