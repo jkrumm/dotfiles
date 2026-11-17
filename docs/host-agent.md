@@ -32,7 +32,8 @@ every sampler on the mini keep running: nothing is removed until the parity tabl
   moves to it in its own later change.
 - **Secrets.** The wrapper reads the endpoint and key through `secrets-run` at start: nothing on disk, nothing in the plist. The MacBook's
   backend is `op`, which a LaunchAgent cannot answer, so `make agent-setup` there reads the two refs once into
-  `~/.config/host-agent/agent.env` (mode 600, refused otherwise) and the wrapper sources it.
+  `~/.config/host-agent/agent.env` (mode 600, refused otherwise, rewritten on every run so a rotated key is picked up); the wrapper reads it as `KEY=value`
+  data, never sources it, so a value is written bare, without quotes.
 - **Run from the main checkout.** The plist points at `agent/` in the checkout that ran `make agent-setup`; the doctor fails a program inside
   `/.claude/worktrees/`.
 
