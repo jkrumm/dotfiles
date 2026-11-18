@@ -11,7 +11,7 @@ every sampler on the mini keep running: nothing is removed until the parity tabl
 | Files | `agent/` (`manifest.yaml`, `config.yaml`, `host-agent-wrapper.sh`, the plist template), `scripts/host-agent-install.sh` |
 | Binary | `~/.local/bin/host-agent`, built here, pinned by `HOST_AGENT_VERSION` and `OCB_VERSION` in the Makefile |
 | Receiver | OTLP on **127.0.0.1:4416** (gRPC) and **127.0.0.1:4417** (HTTP), registered as `ports` in `config/mini/services.yaml`; the on-demand dev ClickStack publishes 4318 and 4319 |
-| Exporter | `otlp_http` to the authed ClickStack endpoint (`op://mini/agent-workflows/OTEL_EXPORTER_OTLP_ENDPOINT`, key `op://vps/argo/HYPERDX_API_KEY_PROD` as the `authorization` header), `sending_queue` on disk under `~/.local/state/host-agent/queue`, retries never give up |
+| Exporter | `otlp_http` to the authed ClickStack endpoint (`op://mini/agent-workflows/OTEL_EXPORTER_OTLP_ENDPOINT`, key `op://vps/argo/HYPERDX_API_KEY_PROD` as the `authorization` header), `sending_queue` on disk under `~/.local/state/host-agent/queue`, retries never give up (every 5xx but 501 counts as retryable, see the patch below) |
 | Logs | `~/Library/Logs/host-agent.{log,err}` (rotated by `log-rotate`, which derives its list from our plists) |
 | Verbs | `make agent-setup` (build if the pin or manifest changed, render + load, then the status) · `make agent-status` (the doctor's host-agent section) · `make agent-uninstall` |
 
@@ -36,6 +36,15 @@ every sampler on the mini keep running: nothing is removed until the parity tabl
   data, never sources it, so a value is written bare, without quotes.
 - **Run from the main checkout.** The plist points at `agent/` in the checkout that ran `make agent-setup`; the doctor fails a program inside
   `/.claude/worktrees/`.
+
+## Retry patch
+
+The stock `otlphttp` exporter retries only 429, 502, 503 and 504; every other status is a permanent error that drops the batch, and no config
+option changes that. A Cloudflare 530 from the tunnel (2026-11-18 04:00Z, 91 and 32 items) was dropped that way and left a gap in ClickStack.
+`scripts/host-agent-install.sh` therefore builds with a copy of the pinned exporter module in which `isRetryableStatusCode` also accepts 500 to
+599 except 501 (a `replaces` entry appended to the manifest at build time; the tracked manifest is unchanged). The build fails loudly if the
+function changed upstream. The `retry-5xx` marker is part of the build stamp. Verified 2026-11-18 against a local server answering 530 twice, then
+200: three requests, no drop. `vps/agent` builds the same exporter and carries the same gap (signal filed).
 
 ## Update
 
