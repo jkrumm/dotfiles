@@ -133,6 +133,16 @@ describe("pick rule v1.4: N accounts", () => {
     const iuOver = sample(10, 70, { wReset: NOW / 1000 + 6.7 * D })
     expect(pick(reg3(), cache3(iuOver, meFull, me2Over), "lead", NOW, last)).toMatchObject({ picked: "me2", reason: "spill" })
   })
+  test("v1.8: an expiring window is drained to the end: no 70 % cap on expiring capacity, ceiling 100 in the last 3 h", () => {
+    const iuLate = sample(10, 90, { wReset: NOW / 1000 + 10 * H })
+    const meBusy = sample(10, 50)
+    expect(pick(reg3(), cache3(iuLate, meBusy, sample(10, 50)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
+    const iuFinal = (w: number) => cache3(sample(10, w, { wReset: NOW / 1000 + 2 * H }), sample(10, 50), sample(10, 50))
+    expect(pick(reg3(), iuFinal(99), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
+    expect(pick(reg3(), iuFinal(100), "bulk", NOW).picked).not.toBe("iu")
+    // 5 h out the ceiling is still 98
+    expect(pick(reg3(), cache3(sample(10, 99, { wReset: NOW / 1000 + 5 * H }), sample(10, 50), sample(10, 50)), "bulk", NOW).picked).not.toBe("iu")
+  })
   test("5h boundary: a bulk lane leaves a sibling at SESSION_SOFT_MAX for iu and returns once a fresh sample shows the new window", () => {
     const calm = (s: number) => cache3(sample(70, 10), sample(10, 96), sample(s, 5)) // me over WEEKLY_MAX; iu's 5h within SESSION_MARGIN of me2, so no session move
     expect(pick(reg3(), calm(SESSION_SOFT_MAX - 1), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
@@ -473,8 +483,8 @@ describe("pick rule v1", () => {
     expect(pick(reg(), cacheOf(a, sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
     expect(pick(reg(), cacheOf(a, sample(10, 10)), "interactive", NOW).reason).toBe("home")
   })
-  test("expiring capacity needs weekly < 70, and a reset still ahead", () => {
-    expect(pick(reg(), cacheOf(sample(10, 75, { wReset: NOW / 1000 + 5 * H }), sample(10, 10)), "bulk", NOW).picked).toBe("me")
+  test("expiring capacity needs a reset still ahead (any weekly% under the ceiling)", () => {
+    expect(pick(reg(), cacheOf(sample(10, 75, { wReset: NOW / 1000 + 5 * H }), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
     expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 - 60 }), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" })
     expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 + 60 }), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
   })

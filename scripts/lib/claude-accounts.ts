@@ -17,6 +17,9 @@ export const SESSION_PRESSURE = 60
 export const WEEKLY_MAX = 95
 /** Weekly ceiling while the window resets within EXPIRING_S: the last points are use-it-or-lose-it, so squeeze them. */
 export const WEEKLY_MAX_EXPIRING = 98
+/** Weekly ceiling in the last FINAL_S before the reset: nothing left to protect, so the window is run to the wall. */
+export const WEEKLY_MAX_FINAL = 100
+export const FINAL_S = 3 * 3600
 export const FRESH_MS = 10 * 60_000
 export const STALE_OK_MS = 6 * 3600_000
 /** a dead login is re-probed (in the background) at most this often */
@@ -28,7 +31,6 @@ export const PACE_MARGIN = 15
 /** Session% points the home account may run ahead of the other before a spawn moves to the emptier 5h window. */
 export const SESSION_MARGIN = 20
 const WEEK_S = 7 * 24 * 3600
-export const EXPIRING_WEEKLY_MAX = 70
 /** How much more a sooner reset weighs than a later one when sharing work (1 = pure spare-per-hour, higher = harder front-loading of the expiring account). */
 export const URGENCY_EXP = 1.5
 
@@ -624,7 +626,11 @@ export function homeIds(reg: Registry, lane: string): string[] {
 /** The pick rests on a sample with a window older than FRESH_MS. */
 export const isStaleOk = (cache: Cache, id: string, nowMs: number) => usable(cache.samples[id], nowMs) && sampleAge(cache.samples[id], nowMs) >= FRESH_MS
 
-const weeklyMax = (x: Sample, nowMs: number) => (x.w_reset !== null && x.w_reset * 1000 - nowMs > 0 && x.w_reset * 1000 - nowMs < EXPIRING_S * 1000 ? WEEKLY_MAX_EXPIRING : WEEKLY_MAX)
+const weeklyMax = (x: Sample, nowMs: number) => {
+  const msLeft = x.w_reset === null ? null : x.w_reset * 1000 - nowMs
+  if (msLeft === null || msLeft <= 0) return WEEKLY_MAX
+  return msLeft < FINAL_S * 1000 ? WEEKLY_MAX_FINAL : msLeft < EXPIRING_S * 1000 ? WEEKLY_MAX_EXPIRING : WEEKLY_MAX
+}
 
 /**
  * The account's 5 h percent when it can be judged: the plan has a session limit and the window is younger than
@@ -717,8 +723,7 @@ function pickRule(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?
       .filter((id) => {
         const x = cache.samples[id]
         const msLeft = x.w_reset === null || !hasW(x) ? null : x.w_reset * 1000 - nowMs
-        return msLeft !== null && msLeft > 0 && msLeft < EXPIRING_S * 1000 && (x.w ?? 0) < EXPIRING_WEEKLY_MAX
-      })
+        return msLeft !== null && msLeft > 0 && msLeft < EXPIRING_S * 1000      })
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
   }

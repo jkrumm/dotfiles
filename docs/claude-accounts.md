@@ -154,7 +154,7 @@ runs `claude-account refresh --ids <default>`). It writes `/tmp/claude_sl/usage_
 old shape the statusline and Tinycast read) plus `usage_accounts.json` (all accounts). Every consumer (the statusline,
 Tinycast and the Herdr app's `jk-status`) now reads subscription data through `claude-account` (`usage`, `health`).
 
-**Rule v1.7** (v1.6 plus the step-5 pace guard, 2026-11-18; v1.6 = v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
+**Rule v1.8** (v1.7 plus the drain-to-the-end change, 2026-11-18: `weeklyMax` is 100 in the last 3 h before the reset and step 1 lost its 70 % cap, so an expiring account keeps taking bulk work up to its ceiling; v1.7 = v1.6 plus the step-5 pace guard; v1.6 = v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
@@ -178,7 +178,7 @@ home(lane)  = share(eligible x whose homeLanes claim the lane)
 coolSet      = eligible accounts with session% < 80 (SESSION_SOFT_MAX), else all eligible   # a hot 5h window is the last choice, not excluded
                  every step below reads coolSet as "eligible"
 pick(lane):
-  1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first (soonest reset)
+  1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h → x   # use expiring capacity first (soonest reset); no weekly% cap since v1.8
   2. eligible(home) ∧ overPace(home) → share(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
   3. eligible(home) → the eligible x ≠ home with (¬overPace(x) ∨ session%(home) ≥ 60) ∧ session%(home) − session%(x) > 20
                       and the lowest session% (ties by weight); a sibling that shares the lane beats an outsider
@@ -206,6 +206,10 @@ proportion to the weights, so a burst spreads instead of landing on one account.
 a new subscription is a registry entry, its reset time and quota come from the sample. With `me` and `me2` at
 similar 5h load the split at the time was about 49/51; the 5h-balance step (3) still moves work to the emptier
 window and keeps overriding the weekly weighting while the 5h loads differ by more than 20 points.
+
+Why v1.8 (2026-11-18): `iu` reached its reset at 90 % (83 % a day earlier). Eligible under the 98 % ceiling, it was never chosen: step 1
+skipped any account above 70 %, the bulk lanes sat on `me`/`me2` at step 4, and 98 % left the last points unspent. Expiring capacity now
+has no weekly cap, and the ceiling is 100 in the last 3 h (a wall hit then costs under 3 h).
 
 Why v1.7 (2026-11-18): `me2` went from 43 % to 86 % weekly in a day at 43 % pace and then sat at its wall for days, while `iu`
 (which already ends its weeks at 90-98 %) took the rest. Homeless lanes (factory `lead`, `headless` overflow) land in step 5, the only
