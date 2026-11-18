@@ -82,7 +82,6 @@ of the volume grew since 2026-10-20 (re-measured the same day, `du -xk`, GiB):
 | Path | GiB | Was | Note |
 |-|-|-|-|
 | `~/.colima/_lima/_disks/colima` | 91 | 78 (whole `~/.colima`) | main docker VM, swept daily |
-| `~/.colima/_lima/_disks/colima-teamchat` | 30 | n/a | teamchat VM data disk, profile stopped 2026-11-15 (Issue 1239); `colima delete -p teamchat` after 2026-11-16 08:35 UTC |
 | `~/.colima/_lima/_disks/colima-athena-poc` | 4.7 | n/a | no `in_use_by`, last written 2026-10-31: orphan PoC disk. Its profile was deleted on 2026-11-14 (issue 1119, nothing referenced it) without `--data`; the disk itself is the owner's call |
 | `~/Library` | 66 | 36 | `Application Support` 20 (Chrome 9.8), `Developer` 18 (CoreSimulator 11, Xcode 6.6), `Caches` 14 |
 | `~/.claude` | 27 | 16 | transcripts (`projects/`) |
