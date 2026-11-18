@@ -753,7 +753,10 @@ function pickRule(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?
     if (emptier) return { picked: emptier, reason: "session" }
     return { picked: home, reason: "home" }
   }
-  const other = choose(ok)
+  // spill: an over-pace account only takes it when every candidate is over pace (v1.7), so a lead or a homeless lane
+  // cannot front-load a Max week that the 5h and weekly walls then freeze for days
+  const calmOk = ok.filter((id) => !overPace(reg, cache, id, nowMs))
+  const other = choose(calmOk.length ? calmOk : ok)
   if (other) return { picked: other, reason: "spill" }
   if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }
   return { picked: SPILL, reason: "no-eligible-account" }

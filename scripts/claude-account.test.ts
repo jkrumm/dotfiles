@@ -123,6 +123,16 @@ describe("pick rule v1.4: N accounts", () => {
     expect(pick(reg3(), cache3(sample(10, 50), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg3(), cache3(sample(10, 70), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "me", reason: "spill" }) // iu (95-70)*2 = 50
   })
+  test("v1.7: a spill draw skips an over-pace account while a calmer one is eligible, and falls back when all are over pace", () => {
+    const D = 24 * H
+    const iuCalm = sample(10, 5, { wReset: NOW / 1000 + 6.7 * D }) // pace 4
+    const meFull = sample(10, 96) // over WEEKLY_MAX: not eligible
+    const me2Over = sample(10, 70, { wReset: NOW / 1000 + 100 * H }) // pace 40: 30 points over
+    const last = () => 0.99 // the draw lands on the last candidate: me2 unless it is filtered out
+    expect(pick(reg3(), cache3(iuCalm, meFull, me2Over), "lead", NOW, last)).toMatchObject({ picked: "iu", reason: "spill" })
+    const iuOver = sample(10, 70, { wReset: NOW / 1000 + 6.7 * D })
+    expect(pick(reg3(), cache3(iuOver, meFull, me2Over), "lead", NOW, last)).toMatchObject({ picked: "me2", reason: "spill" })
+  })
   test("5h boundary: a bulk lane leaves a sibling at SESSION_SOFT_MAX for iu and returns once a fresh sample shows the new window", () => {
     const calm = (s: number) => cache3(sample(70, 10), sample(10, 96), sample(s, 5)) // me over WEEKLY_MAX; iu's 5h within SESSION_MARGIN of me2, so no session move
     expect(pick(reg3(), calm(SESSION_SOFT_MAX - 1), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
