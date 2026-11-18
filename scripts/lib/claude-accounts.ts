@@ -723,7 +723,8 @@ function pickRule(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?
       .filter((id) => {
         const x = cache.samples[id]
         const msLeft = x.w_reset === null || !hasW(x) ? null : x.w_reset * 1000 - nowMs
-        return msLeft !== null && msLeft > 0 && msLeft < EXPIRING_S * 1000      })
+        return msLeft !== null && msLeft > 0 && msLeft < EXPIRING_S * 1000
+      })
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
   }
