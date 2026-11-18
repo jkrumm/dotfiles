@@ -182,7 +182,7 @@ the weatherorb session workflow.
 |-|-|-|
 | `com.jkrumm.linewatch-collector-agent` | linewatch | KeepAlive |
 | `com.jkrumm.linewatch-watchdog` | linewatch | KeepAlive |
-| `com.jkrumm.linewatch-app` | linewatch | KeepAlive (:7731, loopback) — the API, dashboard, Ookla and router poller, native since Issue 1219 (was the Colima container); door `linewatch.test`; `make -C ~/SourceRoot/linewatch app-stop` stops it |
+| `com.jkrumm.linewatch-app` | linewatch | KeepAlive (:7731, loopback) — the API, Ookla and router poller, native since Issue 1219 (was the Colima container); door `linewatch.test`; `make -C ~/SourceRoot/linewatch app-stop` stops it |
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
 | `com.jkrumm.rb` | rb | KeepAlive (127.0.0.1:4050, health `/api/health`) — rb native since Issue 1184 (was the Colima containers), from a release dir `~/.rb/releases/<sha>` through its `scripts/launch.sh`; tier core, always reachable; doors `rb.test` and `tailscale serve` on :7730; its headless Chrome runs only during a fetch run (about 0.4 GiB, stopped after 180 s idle) |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |

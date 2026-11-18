@@ -236,9 +236,9 @@ rb.test {
 	reverse_proxy localhost:4050
 }
 
-# linewatch — uptime + throughput history for this internet line
-# (~/SourceRoot/linewatch). One container serving both the API and the built
-# dashboard; the ping collector runs natively under launchd beside it, because
+# linewatch — the internet line's live API (status, router, events, outages)
+# (~/SourceRoot/linewatch). Native under launchd, no built UI: history is on the
+# Argo Line page. The ping collector also runs natively beside it, because
 # Colima's NAT fabricates ICMP replies inside a container.
 # Deliberately clean-door only — a port door would make Caddy bind 7731 on
 # the tailnet interface, and the container already publishes it on loopback.
@@ -252,10 +252,8 @@ linewatch.test {
 # Tailnet-only by design: the vault carries private health data and there is
 # deliberately no auth layer, so the tailnet ACL is the whole perimeter. The
 # mini's automatic `brain.mini.jkrumm.com` door is how the iPhone reaches it.
-# Port 7733, not 7732: 7732 is already claimed by linewatch/web's Vite dev
-# script (`npx kill-port 7732 && vite --port 7732 --strictPort`) — a genuine
-# double-booking caught 2026-08-08. 7733 is free and inside the tailnet ACL's
-# tcp:7700-7799 grant.
+# Port 7733: inside the tailnet ACL's tcp:7700-7799 grant, and free (7732 was
+# linewatch/web's Vite dev port until Issue 2098 removed it).
 #
 # The reader is only files, so Caddy serves them: no container, no VM (it was
 # nginx:alpine in Colima until 2026-11-14, and a VM restart took the door
