@@ -61,7 +61,7 @@ SSD/                      HDD/                       EXT/
 | restic (`homelab` repo, `docs/backups.md`) | SSD share, `HDD/fuji/RAWs`, `HDD/backups`, service state → B2 | daily 03:30 | Uptime Kuma push monitor, 25 h |
 | EXT mirror (`com.jkrumm.ext-mirror`, dotfiles; §EXT mirror) | SSD share, `HDD/fuji` and `HDD/Videos` → `EXT/mirror/{ssd,fuji,videos}` | nightly 05:00 and hourly to 22:00 while skipped or red, pulled by the mini over S3 (`hl`), behind the volume gate | `jobrun` grade and `EXT/mirror/.status.json` |
 | iCloud Photos export (`com.jkrumm.icloud-photos-export`, dotfiles) | the mini's Photos library → `SSD/Bilder/iCloud/<year>/<month>/` | nightly 01:30, over S3 (`hl`) | `jobrun` grade, `Bilder/iCloud/.status.json` |
-| Shutterflow sync (its own app) | finals on the MacBook → B2 | on demand | the app's pipeline view |
+| Shutterflow sync (its own app) | Final photos on the MacBook → B2; the RAW class stays manual | automatic while the app is open: after a finalize, at start, then hourly (Settings > Storage: off, or every 3, 6, 12 or 24 h) | the app's pipeline view |
 
 The mirror pulls over S3 because the mini's S3 key cannot delete on the HomeLab, and because a
 pull does not depend on an SMB mount being healthy. A file deleted at home moves to
