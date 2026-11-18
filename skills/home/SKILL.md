@@ -1,7 +1,7 @@
 ---
 name: home
 allowed-tools: Bash(home --help *)
-description: Control and diagnose Apple Home (HomeKit) — lights, outlets, sensors, scenes, automations, accessories that show "No Response" — via the home CLI over HomeClaw on the mini. Use when the user mentions Apple Home, HomeKit, Home app, a scene ("Chill", "Gute Nacht"), turning lights on/off, a room (Wohnzimmer, Schlafzimmer, Bad, Flur), motion sensors, Hue, Eve, Meross, the dog-alone lighting, or broken/missing smart-home devices. For the router itself use `router`; for the internet line use linewatch.
+description: Control and diagnose Apple Home (HomeKit) — lights, outlets, sensors, scenes, automations, accessories that show "No Response" — via the home CLI over HomeClaw on the mini. Use when the user mentions Apple Home, HomeKit, Home app, a scene ("Chill", "Gute Nacht"), turning lights on/off, a room (Wohnzimmer, Schlafzimmer, Bad, Flur), motion sensors, Hue, Eve, Meross, the dog-alone lighting, or broken/missing smart-home devices. For the router itself use `router`; for the internet line's history use the Argo Line page.
 ---
 
 # Home — Apple Home via HomeClaw

@@ -1,6 +1,6 @@
 ---
 name: router
-description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel, width, band steering), connected Wi-Fi/wired clients, the G.fast line (sync rates, noise margin, attenuation), firmware, CPU/memory — via the `routerctl` CLI. Use when the user asks about home Wi-Fi, the router, which devices are connected, signal or channel problems, slow LAN/Wi-Fi, or the internet line's physical state. For outage/speed history use linewatch instead.
+description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel, width, band steering), connected Wi-Fi/wired clients, the G.fast line (sync rates, noise margin, attenuation), firmware, CPU/memory — via the `routerctl` CLI. Use when the user asks about home Wi-Fi, the router, which devices are connected, signal or channel problems, slow LAN/Wi-Fi, or the internet line's physical state. For outage/speed history use the Argo Line page instead.
 ---
 
 # Router — TP-Link VX800v
@@ -66,13 +66,14 @@ WAN reconnect and router reboot exist, guarded, in linewatch:
 `make router-reconnect` / `make router-reboot` on the mini (need
 `LINEWATCH_ROUTER_WRITE=1`).
 
-## History lives in linewatch (mini)
+## History: the Argo Line page (mini)
 
-linewatch (`~/SourceRoot/linewatch`, mini only) records uptime (native ICMP),
+linewatch (`~/SourceRoot/linewatch`, mini only) still records uptime (native ICMP),
 hourly Ookla speed tests, and a 10-minute router poll (line samples, interfaces,
-hosts). Its API on `:7731` (`/api/status`, `/api/verdicts`, `/api/outages`,
-`/api/throughput`, `/api/router`, `/api/router/line`, `/api/wifi`) answers "was the line bad last
-week" — `routerctl` answers "what is the router doing right now". linewatch is a
+hosts). Its dashboard and history routes are gone (Issue 2098). History is read on
+the Argo Line page (argo, `GET /api/line/*`, ClickHouse): that answers "was the line bad last
+week". linewatch's API on `:7731` keeps `/api/status`, `/api/router`, `/api/events`,
+`/api/outages` and `/health` for live state. `routerctl` answers "what is the router doing right now". linewatch is a
 public repo: personal tooling belongs here, not there. Its `docs/router-spike.md`
 is the protocol reference for this unit.
 
