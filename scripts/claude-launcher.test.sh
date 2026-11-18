@@ -304,6 +304,20 @@ echo "not-cache" > "$TMP/xdg/secrets/backend"
 reset; out=$(zrun interactive 'claude --foo')
 assert_contains "off the dev host (MacBook): nothing resolved" "ftok=unset" "$out"
 
+echo "oc telemetry resource attributes, per machine"
+mkdir -p "$TMP/home/.agent-workflows/data"
+echo "oc=oc-door-token" > "$TMP/home/.agent-workflows/data/door-tokens"
+echo cache > "$TMP/xdg/secrets/backend"
+out=$(zrun plain '_oc_env')
+assert_contains "oc on the mini: prod, the opencode namespace, host.name=mini" "OTEL_RESOURCE_ATTRIBUTES=service.namespace=opencode,deployment.environment.name=prod,host.name=mini" "$out"
+echo op > "$TMP/xdg/secrets/backend"
+out=$(zrun plain '_oc_env')
+assert_contains "oc on the MacBook: host.name=macbook" "OTEL_RESOURCE_ATTRIBUTES=service.namespace=opencode,deployment.environment.name=prod,host.name=macbook" "$out"
+echo not-cache > "$TMP/xdg/secrets/backend"
+out=$(zrun plain '_oc_env')
+assert_contains "oc with no known machine: prod and the namespace stay" "OTEL_RESOURCE_ATTRIBUTES=service.namespace=opencode,deployment.environment.name=prod" "$out"
+assert_not_contains "oc with no known machine: host.name is omitted" "host.name" "$out"
+
 echo
 if (( fail )); then printf '\033[31m%d failed\033[0m, %d passed\n' "$fail" "$pass"; exit 1; fi
 printf '\033[32mall %d passed\033[0m\n' "$pass"
