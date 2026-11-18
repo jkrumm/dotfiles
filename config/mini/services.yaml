@@ -87,7 +87,6 @@ services:
   - { name: usage-tracker, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker, memory_mib: 50 }
   - { name: usage-tracker-prices, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker-prices, memory_mib: 50 }
   - { name: usage-tracker-report, repo: usage-tracker, kind: launchd, tier: core, label: com.jkrumm.usage-tracker-report, memory_mib: 50 }
-  - { name: vps-pg-backup, repo: vps, kind: launchd, tier: core, label: com.jkrumm.vps-pg-backup, memory_mib: 50 }
   - { name: walkingpad, repo: king-smith-walkingpad-mac, kind: launchd, tier: core, label: com.jkrumm.walkingpad, memory_mib: 50 }
   - { name: weatherorb-v1-doors, repo: weatherorb, kind: static, tier: manual, door: [weatherorb, weatherorb-tiles, weatherorb-map], memory_mib: 0, note: "the Caddy blocks of the frozen V1 services (their LaunchAgents were pruned 2026-11-15); the doors answer 502 until V1 is revived with make launchd-install in weatherorb" }
   - { name: weatherorb-site-record, repo: weatherorb, kind: launchd, tier: manual, label: com.jkrumm.orb.site-record, note: "V2 site record, every 3 h (replaces corpus-extend); installed by `make v2-corpus-install JOB=sites` from the default-branch checkout", memory_mib: 50 }
