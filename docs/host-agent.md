@@ -19,7 +19,7 @@ every sampler on the mini keep running: nothing is removed until the parity tabl
 
 - **Host metrics.** Every 30 s: `cpu` (`system.cpu.utilization`; the raw time series is off), `memory` (with utilization), `load`, `paging`
   (with utilization), `network` (`en*` only), `processes` (counts). Every 60 s: `disk` (`disk*` devices), `filesystem` (with utilization),
-  `system` (uptime). Resource: `host.name`, `deployment.environment.name=prod`, `service.name=host-agent`, `service.namespace=infra`.
+  `system` (uptime). Resource: `host.name`, `deployment.environment.name=prod`, `service.name=host-agent`, `service.namespace=infra`, `service.version` (the collector release, equal to the `HOST_AGENT_VERSION` pin; bump both together).
 - **Filesystems.** `df` on the mini shows eleven mounts. Only two are real: `/System/Volumes/Data` (the user data volume; `/` is the sealed
   system volume and always the same) and the external volume under `/Volumes/`. Left out: the sealed system volume, VM, Preboot, Update,
   xarts, iSCPreboot and Hardware, two CoreSimulator images, and the two `smbfs` HomeLab shares (an unreachable share would stall the scrape).
