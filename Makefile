@@ -875,7 +875,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures (~5 min, dominated by the relogin and human-queue suites).
@@ -1607,11 +1607,9 @@ CLAUDE_MCP_CHECK = $(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default accou
 .PHONY: claude-accounts-setup
 claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to ~/.claude + rendered settings.json)
 	@echo "  Claude accounts..."
-	@chmod +x $(DOTFILES_DIR)/scripts/claude-account.ts
+	@chmod +x $(DOTFILES_DIR)/scripts/claude-account.ts $(DOTFILES_DIR)/scripts/claude-account-sync.sh
 	@mkdir -p "$(HOME)/.local/bin"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/scripts/claude-account.ts" \
-		DST="$(HOME)/.local/bin/claude-account"
+	@$(MAKE) --no-print-directory claude-account-link
 	@chmod +x $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/claude-relogin.sh" \
@@ -1632,6 +1630,43 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 	@bash $(DOTFILES_DIR)/scripts/claude-pretrust.sh "$(HOME)" || echo "    ✗ could not pre-trust $(HOME) in every account's .claude.json"
 	@# ...and so does every other folder the default account already trusts (never loosens; skips accounts not logged in yet).
 	@bash $(DOTFILES_DIR)/scripts/claude-trust-sync.sh || echo "    ✗ could not sync folder trust into every account's .claude.json"
+
+# `claude-account` is the factory's accounts package (docs/claude-accounts.md §Package); scripts/claude-account.ts stays as the
+# rollback until subs-cleanup-dotfiles. Mini: the CLI entry in the live release, so a deploy moves it. MacBook (no factory
+# checkout): a copy of the built file that scripts/claude-account-sync.sh keeps level. The registry is linked to the path the package reads.
+CA_BIN = $(HOME)/.local/bin/claude-account
+CA_CFG = $(HOME)/.config/claude-accounts
+CA_PIN = $(CA_CFG)/rolled-back
+CA_PKG_MINI = $(HOME)/.software-factory/current/packages/accounts/bin/claude-account.ts
+CA_PKG_COPY = $(HOME)/.local/share/claude-account/claude-account
+
+.PHONY: claude-account-forward claude-account-rollback claude-account-link
+claude-account-forward: ## Point claude-account at the factory accounts package (undoes claude-account-rollback)
+	@mkdir -p "$(HOME)/.local/bin" "$(CA_CFG)"
+	@src="$(CA_PKG_MINI)"; \
+	if [ ! -x "$$src" ]; then \
+		bash "$(DOTFILES_DIR)/scripts/claude-account-sync.sh" || { echo "    ✗ no accounts package: no factory release here and the sync from the mini failed"; exit 1; }; \
+		src="$(CA_PKG_COPY)"; \
+	fi; \
+	[ -x "$$src" ] || { echo "    ✗ $$src is not executable"; exit 1; }; \
+	$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/config/claude-accounts.json" DST="$(CA_CFG)/registry.json" && \
+	$(MAKE) --no-print-directory _link SRC="$$src" DST="$(CA_BIN)" && \
+	rm -f "$(CA_PIN)" && \
+	echo "    ↳ $$("$(CA_BIN)" --version) → $$(readlink "$(CA_BIN)")"
+
+claude-account-rollback: ## Point claude-account back at scripts/claude-account.ts (stays until claude-account-forward)
+	@mkdir -p "$(HOME)/.local/bin" "$(CA_CFG)"
+	@$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/config/claude-accounts.json" DST="$(CA_CFG)/registry.json"
+	@$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/scripts/claude-account.ts" DST="$(CA_BIN)"
+	@touch "$(CA_PIN)"
+	@echo "    ↳ rolled back: $$(readlink "$(CA_BIN)") (make claude-account-forward undoes it; make setup keeps it)"
+
+claude-account-link: ## claude-account-forward unless claude-account-rollback pinned it (what setup and the MacBook's dotfiles-sync run)
+	@if [ -e "$(CA_PIN)" ]; then \
+		$(MAKE) --no-print-directory claude-account-rollback; \
+	else \
+		$(MAKE) --no-print-directory claude-account-forward; \
+	fi
 
 # Read-only proof that every launcher/spawner lands on the intended account (also run by `make doctor`).
 .PHONY: claude-accounts-verify claude-accounts-stamp claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown
@@ -3528,6 +3563,10 @@ obsidian-autostart-teardown:
 .PHONY: herdr-app-setup
 herdr-app-setup:
 	@bash $(DOTFILES_DIR)/scripts/herdr-app-setup.sh
+
+.PHONY: claude-account-sync-test
+claude-account-sync-test: ## Hermetic test for claude-account-sync.sh (stub hc, temp dirs)
+	@bash $(DOTFILES_DIR)/scripts/claude-account-sync.test.sh
 
 .PHONY: herdr-glance-sync-test
 herdr-glance-sync-test: ## Hermetic test for herdr-glance-sync.sh (stub hc and herdr-app, temp dirs)

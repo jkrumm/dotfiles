@@ -41,6 +41,8 @@ for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
 if [ ! -d "$GLANCE_SRC" ]; then
   GLANCE_COPY="$HOME/.local/share/herdr-app/jk-glance"
   HERDR_GLANCE_NO_RELOAD=1 "$(dirname "$0")/herdr-glance-sync.sh" | sed 's/^/  /' || true
+  # Same moments, same way: the MacBook's claude-account copy (scripts/claude-account-sync.sh).
+  "$(dirname "$0")/claude-account-sync.sh" | sed 's/^/  /' || true
   [ ! -d "$GLANCE_COPY" ] || GLANCE_SRC="$GLANCE_COPY"
 fi
 if [ -d "$GLANCE_SRC" ]; then

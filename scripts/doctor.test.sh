@@ -65,6 +65,24 @@ out=$(doctor claude_accounts DOTFILES_DIR="$TMP/dot" HC_TERMINAL_ID=x); rc=$?
 assert_eq "a failure row fails the run" 1 "$rc"
 
 
+# claude-account version: both machines on the package and equal is a pass; a different MacBook, a rolled-back mini or a missing gate verb is a warning; an unreachable MacBook is info
+printf 'cache' > "$TMP/cfg/secrets/backend"
+printf '#!/bin/sh\necho "$CA_MINI"\n' > "$TMP/bin/claude-account"; chmod +x "$TMP/bin/claude-account"
+printf '#!/bin/sh\ncase "$*" in *account-version*) [ -n "$SSH_RC" ] && exit "$SSH_RC"; echo "$SSH_OUT" ;; esac\n' > "$TMP/bin/ssh"; chmod +x "$TMP/bin/ssh"
+V='@software-factory/accounts 0.1.0 (4fb2c85f68b3)'
+out=$(doctor claude_account_version CA_MINI="$V" SSH_OUT="$V")
+assert_eq "account version: equal is a pass" "1 passed, 0 info — clean." "$(last "$out")"
+out=$(doctor claude_account_version CA_MINI="$V" SSH_OUT='@software-factory/accounts 0.1.0 (aaaaaaaaaaaa)')
+assert_eq "account version: a different MacBook warns" "0 passed, 1 warnings, 0 info." "$(last "$out")"
+assert_eq "account version: the warning names the fix" 1 "$(printf '%s\n' "$out" | grep -c 'ssh iumac claude-account-sync')"
+out=$(doctor claude_account_version CA_MINI="unknown verb '--version'" SSH_OUT="$V")
+assert_eq "account version: a rolled-back mini warns" 1 "$(printf '%s\n' "$out" | grep -c 'make claude-account-forward')"
+out=$(doctor claude_account_version CA_MINI="$V" SSH_RC=126)
+assert_eq "account version: a gate without the verb warns" 1 "$(printf '%s\n' "$out" | grep -c 'ssh iumac dotfiles-sync')"
+out=$(doctor claude_account_version CA_MINI="$V" SSH_RC=255); rc=$?
+assert_eq "account version: an unreachable MacBook is info, not a failure" "0 passed, 1 info — clean." "$(last "$out")"
+assert_eq "account version: unreachable does not fail the run" 0 "$rc"
+
 # agent notes: the command on PATH and the path to the other machine; an unreachable MacBook is a warning, never a failure
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/agent-note"; chmod +x "$TMP/bin/agent-note"
 printf '#!/bin/sh\ncase "$*" in *term-ls*) [ -n "$SSH_RC" ] && exit "$SSH_RC"; echo "$SSH_OUT" ;; esac\n' > "$TMP/bin/ssh"; chmod +x "$TMP/bin/ssh"

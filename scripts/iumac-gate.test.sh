@@ -57,6 +57,7 @@ mkstub "$SC/claude-account-snapshot.sh" snapshot
 mkstub "$SC/lib/core-up.sh" core-up
 mkstub "$SC/macbook-sync.sh" macbook-sync
 mkstub "$SC/herdr-glance-sync.sh" glance-sync
+mkstub "$SC/claude-account-sync.sh" account-sync
 mkstub "$SC/agent-note.sh" agent-note
 mkstub "$H/.local/bin/claude-account" claude-account
 mkstub "$H/.local/bin/hc" hc
@@ -121,6 +122,8 @@ expect_allowed "account-snapshot" "account-snapshot" "snapshot"
 expect_allowed "account-snapshot-core" "account-snapshot-core" "core-up
 hc|exec|--timeout|30|bash|$SC/claude-account-snapshot.sh"
 expect_allowed "herdr-glance-sync" "herdr-glance-sync" "glance-sync"
+expect_allowed "claude-account-sync" "claude-account-sync" "account-sync"
+expect_allowed "account-version" "account-version" "claude-account|--version"
 expect_allowed "hc-version" "hc-version" "hc|--version"
 expect_allowed "term-ls" "term-ls" "agent-note|ls-local"
 expect_allowed "term-note" "term-note" "agent-note|deliver" $'t7\nmini:t31z\nhello'
@@ -303,6 +306,9 @@ expect_refused "dotfiles-sync branch argument" "dotfiles-sync main"
 expect_refused "dotfiles-sync chained" "dotfiles-sync; id"
 expect_refused "herdr-glance-sync argument" "herdr-glance-sync now"
 expect_refused "herdr-glance-sync chained" "herdr-glance-sync; id"
+expect_refused "claude-account-sync argument" "claude-account-sync now"
+expect_refused "claude-account-sync chained" "claude-account-sync; id"
+expect_refused "account-version argument" "account-version --json"
 expect_refused "term-ls argument" "term-ls --all"
 expect_refused "term-ls chained" "term-ls; id"
 expect_refused "term-note target as argument" "term-note t7"

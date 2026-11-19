@@ -90,10 +90,29 @@ exists, so a new account ships dark (§Adding an account).
   (`claude.zsh:40`) pre-trusts; it loops over the
   registry.
 
+## Package
+
+`~/.local/bin/claude-account` runs the software-factory `packages/accounts` CLI on both machines (program "subscriptions", row
+`subs-switch-dotfiles`); `scripts/claude-account.ts` and `scripts/lib/claude-accounts.ts` stay as the rollback until `subs-cleanup-dotfiles`.
+
+| Machine | `~/.local/bin/claude-account` is a link to | Kept level by |
+|-|-|-|
+| mini | `~/.software-factory/current/packages/accounts/bin/claude-account.ts` (the live release, as `factory` is linked) | the factory's deploy |
+| MacBook (no factory checkout) | `~/.local/share/claude-account/claude-account`, the package's built single file | `scripts/claude-account-sync.sh`: pulls it through the core (`hc exec --on mini cat`), swaps only if it differs and `--version` names the package; runs after every factory deploy (post-deploy hook, gate verb `claude-account-sync`), on `make herdr-app-setup` and on `make claude-account-forward` |
+
+Both machines link `config/claude-accounts.json` to `~/.config/claude-accounts/registry.json`, the path the package reads first. `make setup`
+and `make claude-accounts-setup` run `make claude-account-link`, which forwards unless a rollback pinned it.
+
+- **Rollback, one command:** `make claude-account-rollback` (in the dotfiles checkout, on the machine) points the link back at
+  `scripts/claude-account.ts` and writes `~/.config/claude-accounts/rolled-back`; `make setup` and the MacBook's `dotfiles-sync` then keep it. Check:
+  `claude-account --version` answers "unknown verb" (the old picker has none). `make claude-account-forward` removes the pin and switches back.
+- **Version:** `claude-account --version` prints `@software-factory/accounts <version> (<commit>)`. The mini's `make doctor` row compares it with the MacBook's
+  (`ssh iumac account-version`) and warns when they differ or the mini is rolled back; an off MacBook is info.
+- Callers keep calling the same verbs (`relogin`, the keepalive LaunchAgent, heartbeat, the statusline record, the launchers).
+
 ## The picker
 
-`claude-account` (bun/TS under `scripts/`, symlinked to `~/.local/bin`, the
-same pattern as `jobrun`):
+`claude-account` is the factory's accounts package (§Package); the verbs below are unchanged:
 
 ```
 claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"; no headroom: prints "spill", exit 3
