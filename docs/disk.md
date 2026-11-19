@@ -51,7 +51,7 @@ the Data volume.
 
 ## Alert
 
-One alert, in ClickStack (vps registry): `Infra mini filesystem >= 93% (15m)` on `system.filesystem.utilization` for `/System/Volumes/Data`, 5 min evaluation. `make doctor`'s `disk` check FAILs at 93% too. The 90% line of the retired Beszel rule is gone: the sweeps below run before the alert, so a page now means the sweep did not hold.
+One alert, in ClickStack (vps registry): `Infra mini filesystem >= 93% (15m)` on `system.filesystem.utilization` for `/System/Volumes/Data`, 5 min evaluation. the heartbeat's `disk` check (`check_disk`, `scripts/devhost-health-check.sh`) FAILs at 93% too. The 90% line of the retired Beszel rule is gone: the sweeps below run before the alert, so a page now means the sweep did not hold.
 
 ## Sweeps: what keeps it this way
 
