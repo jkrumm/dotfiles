@@ -5,7 +5,7 @@
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
 # (reachability probe, human-queue dialogs, notifications, claude re-login,
-# account snapshots, a granted catalogue command with no dialog (auto-run), a dotfiles pull with its link targets, the Herdr glance pull, agent notes (term-ls, term-note), a read-only report, a repo fast-forward,
+# account snapshots, a granted catalogue command with no dialog (auto-run), a dotfiles pull with its link targets, the Herdr glance and claude-account pulls, agent notes (term-ls, term-note), a read-only report, a repo fast-forward,
 # usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
 # outbound credential can do what the mini needs and no more.
@@ -321,6 +321,23 @@ end run' | exec osascript - "$title" "$text"
     log "$verb" allow
     export PATH="$H/.local/bin:/opt/homebrew/bin:$PATH"
     exec bash "$H/SourceRoot/dotfiles/scripts/herdr-glance-sync.sh"
+    ;;
+
+  claude-account-sync)
+    # Bring the MacBook's claude-account (a copy of the factory accounts package's built file) level with the live
+    # release on the mini through the core (scripts/claude-account-sync.sh). No arguments; the mini's post-deploy hook is the caller.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    export PATH="$H/.local/bin:/opt/homebrew/bin:$PATH"
+    exec bash "$H/SourceRoot/dotfiles/scripts/claude-account-sync.sh"
+    ;;
+
+  account-version)
+    # `claude-account --version` of this machine, for the mini's doctor row that compares both.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    export PATH="$H/.local/bin:/opt/homebrew/bin:$H/.bun/bin:$PATH"
+    exec "$H/.local/bin/claude-account" --version
     ;;
 
   term-ls)

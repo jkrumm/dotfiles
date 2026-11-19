@@ -357,6 +357,30 @@ section_claude_accounts() {
   fi
 }
 
+# --- claude-account version, both machines (mini) -----------------------------
+# `claude-account` is the factory's accounts package on both machines (docs/claude-accounts.md §Package): the mini runs the
+# live release, the MacBook a copy scripts/claude-account-sync.sh keeps level. A difference is a warning, never a failure:
+# the MacBook is behind for the minutes between a deploy and its sync, or it is off.
+section_claude_account_version() {
+  hdr "claude-account version (mini and MacBook)"
+  local mini mac rc=0
+  mini=$(claude-account --version 2>&1) || mini=""
+  case "$mini" in
+    "@software-factory/accounts "*) ;;
+    *) warn "claude-account (mini)" "not the accounts package (rolled back or not switched yet): make claude-account-forward"; return ;;
+  esac
+  mac=$(ssh -o ConnectTimeout=8 -o BatchMode=yes iumac account-version 2>/dev/null) || rc=$?
+  case "$rc" in
+    0) if [ "$mac" = "$mini" ]; then
+         ok "claude-account version" "$mini on both machines"
+       else
+         warn "claude-account version" "mini $mini, MacBook ${mac:-nothing}: ssh iumac claude-account-sync"
+       fi ;;
+    126) warn "claude-account version" "the MacBook gate has no account-version yet — ssh iumac dotfiles-sync" ;;
+    *) info "claude-account version" "mini $mini; the MacBook did not answer (rc=$rc): off, asleep or off the tailnet" ;;
+  esac
+}
+
 # --- Remote path — MacBook -> mini (MacBook only) -----------------------------
 # Tailscale, ssh, ControlMaster, agent isolation + forwarding (mini-fwd), then the GitHub
 # credential + push rights. The reverse mini->iumac leg is not probed here: it
@@ -626,6 +650,7 @@ if [ "$BACKEND" = "cache" ]; then
   want host_waste && section_host_waste
   want drift && section_drift
   want claude_accounts && section_claude_accounts
+  want claude_account_version && section_claude_account_version
   want devhost_heartbeat && section_devhost_heartbeat
   want agent_notes && section_agent_notes
 elif [ "$BACKEND" = "op" ]; then

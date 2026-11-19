@@ -4,3 +4,4 @@
 # SSH identity (the key carries none).
 config/herdr-app/	herdr-app-setup
 scripts/herdr-app-	herdr-app-setup
+scripts/claude-account-sync	claude-account-link
