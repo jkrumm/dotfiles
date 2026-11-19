@@ -22,8 +22,8 @@ Contract and tests: `docs/claude-accounts.md` §Spawn integration, `make claude-
 `FACTORY_SESSION` or `FACTORY_ROLE` gets `FACTORY_TOKEN` = `op://mini/software-factory/FACTORY_ORCHESTRATOR_TOKEN` (via `secrets-run`,
 `_claude_run` in `claude-auth.zsh`), so its notes, cancels and wakes are `orchestrator` events, not owner touches. The ref is
 listed in dotfiles-private `headless.refs`; absent from the cache the session silently keeps the owner token. The principal
-cannot call the factory's eight owner-only routes (verdicts, worth-asking, Errand done, …): from such a session use the
-Console, or `FACTORY_TOKEN= factory …` (the CLI then resolves the owner token itself).
+cannot call the factory's nine owner-only routes (verdicts, worth-asking, …): from such a session use the
+Console, `factory errand done <id> --confirmed-by "<who confirmed and how>"` to close an Errand its operator confirmed (outcome done only, recorded as the orchestrator), or `FACTORY_TOKEN= factory …` (the CLI then resolves the owner token itself; that call is recorded as the owner).
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills every launcher correctly because the SessionStart
