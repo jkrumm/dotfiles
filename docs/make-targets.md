@@ -39,6 +39,5 @@ logs, missing programs and plaintext credentials.
 | `make mini-apps-setup` / `-restart` / `-teardown` / `-check` / `-test` | The apps page control endpoint (`mini-apps/`, `com.jkrumm.mini-apps`, `127.0.0.1:7797`) and the 120 s idle stop (`com.jkrumm.mini-apps-idle`): start, stop and wake of registry services; `docs/mini-registry.md` §Apps page |
 | `make kuma-door-setup` / `-restart` / `-teardown` / `-gen` / `-check` | The Kuma door (`kuma-door/AGENTS.md`): one tailnet port Kuma pulls service health through; `-gen` writes the monitors from the registry |
 | `make drift-check-setup` / `-teardown` | Retires the old drift agent (run by `make setup`); drift is now a daily bounded side job of the heartbeat |
-| `make beszel-agent-setup` / `-status` / `-teardown` | Push-mode system-metrics agent → the homelab Beszel hub, pinned-release install (not Homebrew) |
 | `make agent-setup` / `agent-status` / `agent-uninstall` | Both machines: build and install the pinned host-agent collector (`agent/`), load `com.jkrumm.host-agent`; status is the doctor's host-agent section. `docs/host-agent.md` |
 | `make doctor` | The on-demand read-only view, including drift without pushing |

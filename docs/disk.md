@@ -49,18 +49,22 @@ the Data volume.
 | Personal media moved to the HomeLab (table below) | 7.6 GiB | copied, verified, then deleted |
 | `$TMPDIR` test leftovers | 4 GiB | 239k leaked tmp dirs (test suites) |
 
+## Alert
+
+One alert, in ClickStack (vps registry): `Infra mini filesystem >= 93% (15m)` on `system.filesystem.utilization` for `/System/Volumes/Data`, 5 min evaluation. `make doctor`'s `disk` check FAILs at 93% too. The 90% line of the retired Beszel rule is gone: the sweeps below run before the alert, so a page now means the sweep did not hold.
+
 ## Sweeps: what keeps it this way
 
 | Job | Cadence | Bounds |
 |-|-|-|
 | `com.jkrumm.disk-sweep` (`scripts/disk-sweep.sh`) | 04:40 daily | Docker build cache LRU-capped at 15 GB and dangling images removed (never tagged images, volumes or containers), `colima ssh -- sudo fstrim -a`, `$TMPDIR` top-level entries > 3 days that nothing holds open, Lima IPSW downloads (`~/Library/Caches/lima/download`) untouched for a day (not while a `limactl create/start/clone` runs), `uv cache prune` (probes the cache lock for 20 s; a lock held by another uv process logs `uv prune skipped: cache lock held by pid N` and is not a failure) and `brew cleanup -s`, npm and bun caches over 3 / 5 GB, unavailable simulators |
-| `com.jkrumm.log-rotate` | every 15 min | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 2 h (one `lsof`, background priority, 4 rm workers, at most 1500 removals or 300 s per run, counted from script start; the lsof is bounded at 90 s). Agents launch ~300-600 Chrome/h; the 24 h gate at 400/h grew the stock to 14k clones (a clone is mostly shared APFS blocks, ~0.5 MB real, so the stock is a load and inode burden more than a disk one; the 16-49 GB/h Beszel page of issue 839 recovered on its own to 86.6% within the hour, consistent with the weatherorb round-build transient of ~22 GB above; the writer was not caught in the act, see "Round-build page" below) |
+| `com.jkrumm.log-rotate` | every 15 min | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 2 h (one `lsof`, background priority, 4 rm workers, at most 1500 removals or 300 s per run, counted from script start; the lsof is bounded at 90 s). Agents launch ~300-600 Chrome/h; the 24 h gate at 400/h grew the stock to 14k clones (a clone is mostly shared APFS blocks, ~0.5 MB real, so the stock is a load and inode burden more than a disk one; the 16-49 GB/h disk page of issue 839 recovered on its own to 86.6% within the hour, consistent with the weatherorb round-build transient of ~22 GB above; the writer was not caught in the act, see "Round-build page" below) |
 
 Each step writes one `free space +N MB` line to `~/Library/Logs/disk-sweep.log`. Run it once
 with `make disk-sweep-run`. That target is also the sanctioned route for the docker prunes,
 because the `docker-makefile` hook blocks raw docker in this repo.
 
-## Round-build page (Beszel "disk filling fast")
+## Round-build page ("disk filling fast")
 
 Caught in the act on 2026-11-12 (issue 864, 87.7%, "+13.9 GB/h"): weatherorb's `worker-round`
 writes the next blend round to `products/weatherorb_blend/.building-<round_id>/` (hidden, so a
@@ -71,8 +75,7 @@ over 0.5 GB/h and ~87-89% used; the peak stays under the 90% line only while the
 volume holds ~110 GiB free. Nothing leaks: confirm with
 `du -xsk ~/SourceRoot/weatherorb/products/weatherorb_blend/.building-*` (grows ~7 MB/s) and the
 `free space` drop after the round commits. Act only when used stays above 90% after a commit
-or `.building-*` outlives its round (> 3 h, a crashed build leaves it). The Beszel rule is
-software-factory's (`config/infra.json`), not this repo's.
+or `.building-*` outlives its round (> 3 h, a crashed build leaves it). The page's rule was Beszel's (retired 2026-11-19); the live alert is ClickStack's, see §Alert.
 
 Issue 909 (2026-11-12, 90.2-90.4% for ~25 min) was the same transient with less headroom: the
 `1300Z` build held 23 GB of ~24 GB, `products/` read 73 GB (three rounds), and the commit at
@@ -91,7 +94,7 @@ A page with `.building-*` present and `products/` near 73 GB needs no action; a 
 same peak means the baseline above, not weatherorb, needs trimming (CoreSimulator runtimes
 and the orphan PoC disk are the cheap first cuts, both owner calls).
 
-## Factory worktree stock (Beszel "disk above 90%", no `.building-*`)
+## Factory worktree stock (disk page at 90%, no `.building-*`)
 
 Issue 1000 (2026-11-13, 90.1% flat for 10 min, 794 GiB used) was the baseline, not a round build:
 `~/SourceRoot/<repo>/.claude/worktrees/factory-N-1` is never removed after the Issue closes
@@ -105,7 +108,7 @@ the closed, merged ones. Keep a closed one whose branch has no merged PR and unm
 Other cheap cuts if it recurs: `~/.local/state/athena-poc` 22 GB (Oct 30 - Nov 2 PoC runs),
 `~/.cache/cloud-wave` 10 GB, `~/.colima/_lima/_disks/colima-athena-poc` 30 GB sparse (owner calls).
 
-## `/private/tmp` stock (Beszel "disk above 90%", 94%, no `.building-*`, worktrees small)
+## `/private/tmp` stock (disk page at 94%, no `.building-*`, worktrees small)
 
 Issue 1026 (2026-11-13, 94% flat for 95+ min, 58 GiB free) was neither a round build (two
 rounds in `weatherorb_blend`) nor worktrees (basalt-ui 13 GiB, the rest under 5). `/private/tmp`
@@ -119,20 +122,20 @@ older than 3 days that nothing holds open. Still on disk, owner calls: `~/.local
 `colima-athena-poc` 4.7 GiB. A sweep step for `/private/tmp` is not added: the root cause
 (which writer leaked 20 GiB there) was not caught before the reboot.
 
-## Lima macOS VMs (Beszel "disk above 90%", 95%, no `.building-*`, worktrees reaped)
+## Lima macOS VMs (disk page at 95%, no `.building-*`, worktrees reaped)
 
 Issue 1123 (2026-11-14, 90.9% then 95%, 46 GiB free at the low) was ntfy-mac's clean-machine install
 matrix (issue 1115), run from `scripts/clean-machine/` in that repo: macOS guests under `~/.lima/cm-*`, each a
 64 GiB sparse disk that reached 26-29 GB after first boot, a `limactl clone` per channel (`cm-26-clt`,
 `cm-26-brew`), and the IPSWs in `~/Library/Caches/lima/download` (19.8 and 16.8 GB, kept after the VM exists).
-About 130 GB across 5 VMs and 2 IPSWs, written within an hour (25.8 GB/h on the Beszel tail), which is why the
+About 130 GB across 5 VMs and 2 IPSWs, written within an hour (25.8 GB/h on the disk page's tail), which is why the
 page read 90% and not the round-build shape. Cut: the macOS 26 IPSW (the VM existed), the closed, merged
 factory worktrees (basalt-ui 14 GB), and the signal to issue 1115 to `limactl delete` each clone after its
 result. `disk-sweep` now carries a `lima-cache` step for the IPSWs. The VM disks themselves are the matrix's:
 `limactl list` and `du -sk ~/.lima/*/disk` name them; a stopped `cm-*` whose result is recorded is safe to
 `limactl delete -f`.
 
-## Rust worktree `target/` dirs (Beszel "disk above 90%", 91-92%, no `.building-*`)
+## Rust worktree `target/` dirs (disk page at 91-92%, no `.building-*`)
 
 Issue 1771 (2026-11-16, 90.9-92.1% for 55+ min, 76 GiB free at the low) was shutterflow's live leads: `~/SourceRoot/shutterflow/.claude/worktrees`
 held 126 GB by `du`, nearly all `target/` (one lead's 61 GB, running `cargo check` for two extra targets; the others 17-30 GB). A `target/`
@@ -162,7 +165,7 @@ Issue 2081 (2026-11-17, same monitor, 94% with 63 GiB free) was the fifth, after
 
 Issue 2163 (2026-11-17 23:00Z, 95% with 48 GiB free) was the sixth. Live shutterflow leads 1892 and 1893 held 28 and 26 GB of `target/`, and closed Issue 1889 (PR 57 closed unmerged, Issue done) another 14 GB; its `target/` went, the worktree stayed. `make disk-sweep-run` freed about nothing: Colima `fstrim` +6 MB, and the uv prune was skipped because another uv process held its lock (pid 69270). Removing `~/Library/Caches/Mozilla.sccache` (9.3 GB, regenerable) together with 1889's `target/` brought it to 93%, 68 GiB free. The next regenerable cuts are sccache (9 GB) and `~/.cache/uv` (8.6 GB); the sweep's uv step is skipped whenever a uv process holds the lock, so the sweep alone will not reach them. The structural fix is still shutterflow's issue 1773 (reap on close or a shared `CARGO_TARGET_DIR`).
 
-Issue 2175 (2026-11-18 02:19Z, `MacMini Dev Host Detail - Push` DOWN; Issue 2174, the vps Beszel page, was the same event) was the seventh: free space fell from 100 to 54 GiB in 50 minutes (89% to 94%, the `disk` FAIL at 93% for three runs) under `rustc` and a shutterflow test binary, then came back to 68 GiB by itself once the build ended. No closed Issue's `target/` was left to reap (live 1896 and 1897 held 16-18 GB each, the main checkout 16 GB). `make disk-sweep-run` did the work this time: Colima `fstrim` +22.7 GiB (the data disk had regrown to 55.7 GiB trimmed), `$TMPDIR` entries older than 3 days +1.7 GiB, package caches +2.6 GiB, 17.9 GiB in all, 93% to 91%, 84 GiB free. The uv prune was skipped again (a uv process, pid 69270, holds the cache lock). Read it as: the sweep returns the Colima disk, and a live build swings the volume by 40-50 GiB inside an hour, so with the ceiling at 93% the monitor will keep flapping until shutterflow bounds a live lead's `target/` (issue 1773). Order for a repeat: `du -xsh ~/SourceRoot/*/.claude/worktrees/*/target` (reap closed, merged only), then `make disk-sweep-run`, then read the `FAIL:` clause of the last `~/Library/Logs/devhost-health.log` line.
+Issue 2175 (2026-11-18 02:19Z, `MacMini Dev Host Detail - Push` DOWN; Issue 2174, the vps disk page, was the same event) was the seventh: free space fell from 100 to 54 GiB in 50 minutes (89% to 94%, the `disk` FAIL at 93% for three runs) under `rustc` and a shutterflow test binary, then came back to 68 GiB by itself once the build ended. No closed Issue's `target/` was left to reap (live 1896 and 1897 held 16-18 GB each, the main checkout 16 GB). `make disk-sweep-run` did the work this time: Colima `fstrim` +22.7 GiB (the data disk had regrown to 55.7 GiB trimmed), `$TMPDIR` entries older than 3 days +1.7 GiB, package caches +2.6 GiB, 17.9 GiB in all, 93% to 91%, 84 GiB free. The uv prune was skipped again (a uv process, pid 69270, holds the cache lock). Read it as: the sweep returns the Colima disk, and a live build swings the volume by 40-50 GiB inside an hour, so with the ceiling at 93% the monitor will keep flapping until shutterflow bounds a live lead's `target/` (issue 1773). Order for a repeat: `du -xsh ~/SourceRoot/*/.claude/worktrees/*/target` (reap closed, merged only), then `make disk-sweep-run`, then read the `FAIL:` clause of the last `~/Library/Logs/devhost-health.log` line.
 
 Issue 2235 (2026-11-18 07:57Z, same monitor, `disk 94% used (max 93%), 56G free`, 83 to 54 GiB free in 30 min) was the eighth, and the first where the lever was not a `target/`: both live shutterflow leads (1920, 1926) held 37 and 19 GB, no closed Issue had one left, and `make disk-sweep-run` returned only 8.5 GiB (Colima `fstrim` +7.8 GiB, `$TMPDIR` +0.9 GiB, 94% still). The cargo seed store `~/cache/shutterflow/seed` held two seeds, 50 and 23 GB by `du`: the Nov 16 one outlived its successor because `cargo-target-seed` prunes only at the end of a seed `build`, and a lock change since (Nov 17 and Nov 18) had not been followed by one. Nothing held it open (`lsof`) and no worktree's key could still match it, so `rm -rf` of that seed dir freed **40 GiB** (94% to 89%, 103 GiB free) and the monitor recovered on the next run. A seed is `cp -c` cloned, so `du` overstates what a live clone shares, but the seed's own unshared blocks are real. Order for a repeat, first step added: `du -xsh ~/cache/*/seed/*` (remove a superseded seed no `lsof` line names), then the worktree `target/` reap, then `make disk-sweep-run`.
 

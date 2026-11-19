@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pinned-release installer for `xcodes` (Xcode version manager) into ~/.local/bin.
 # The Homebrew build of xcodes is broken, so the signed release binary is fetched
-# instead — same discipline as install of beszel-agent: sha256 of the release zip is
+# instead — same discipline as the other pinned-release installers: sha256 of the release zip is
 # checked BEFORE anything touches ~/.local/bin, then the Developer ID signature (team
 # id) is verified on the extracted binary. Bump XCODES_VERSION + XCODES_SHA256 together
 # after reading the release notes. Idempotent: a no-op once the pinned version is installed.

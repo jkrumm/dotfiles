@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and install the host-agent collector (agent/manifest.yaml) into ~/.local/bin, pinned like the Beszel agent:
+# Build and install the host-agent collector (agent/manifest.yaml) into ~/.local/bin, pinned like the other release binaries:
 # the OpenTelemetry release (HOST_AGENT_VERSION) and the ocb release (OCB_VERSION) come from the Makefile, and the
 # binary is rebuilt only when either or the manifest changes. No release binary exists for a custom ocb build, so the
 # build is the install: Go (brew) fetches the pinned modules.

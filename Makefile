@@ -3877,105 +3877,13 @@ drift-check-teardown:
 	echo "    ✓ retired drift-check agent removed (unloaded, plist and jobrun state)"
 
 # ----------------------------------------------------------------------------
-# Beszel agent (dev host only)
-#
-# Push-mode system-metrics agent: dials OUT to a Beszel hub on homelab
-# (https://beszel.jkrumm.com) over WebSocket, so — like devhost-health's push
-# to Uptime Kuma — it needs no inbound port and no ACL grant. Binary is a
-# pinned GitHub release, sha256-verified before install
-# (scripts/beszel-agent-install.sh); the Homebrew tap route
-# (henrygd/beszel/beszel-agent) hung twice in build.rb on pthread_once.
-# ----------------------------------------------------------------------------
-BESZEL_AGENT_VERSION ?= 0.21.1
-BESZEL_AGENT_SHA256  ?= 9246065f680cdb0af2885b7bf5876dc45b754019f2c90eb28550cf45db978eb8
-BESZEL_ENV_FILE      := $(HOME)/.config/beszel/beszel-agent.env
-
-.PHONY: beszel-agent-setup beszel-agent-status beszel-agent-teardown
-beszel-agent-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — beszel-agent-setup skipped"; \
-		exit 0; \
-	fi
-	@BESZEL_AGENT_VERSION="$(BESZEL_AGENT_VERSION)" BESZEL_AGENT_SHA256="$(BESZEL_AGENT_SHA256)" \
-		bash $(DOTFILES_DIR)/scripts/beszel-agent-install.sh
-	@# The token/key are minted per-system by the hub (Add System), so unlike
-	@# the binary there is nothing here to download — refuse with the exact
-	@# steps rather than installing an agent that can only fail, same contract
-	@# as devhost-health-setup's missing-push-URL guard.
-	@if [ ! -f "$(BESZEL_ENV_FILE)" ]; then \
-		echo "  ✗ no env file at $(BESZEL_ENV_FILE)"; \
-		echo "    1. Beszel hub (https://beszel.jkrumm.com) → Add System → name it MacMini,"; \
-		echo "       mode: Agent connects to hub (push) — copy the per-system token + key."; \
-		echo "    2. mkdir -p $(dir $(BESZEL_ENV_FILE)) && write, then chmod 600:"; \
-		echo "       HUB_URL=https://beszel.jkrumm.com"; \
-		echo "       TOKEN=<per-system token>"; \
-		echo "       KEY=<public key>"; \
-		echo "       SYSTEM_NAME=MacMini"; \
-		echo "       DISABLE_SSH=true"; \
-		echo "    3. Re-run: make beszel-agent-setup"; \
-		exit 1; \
-	fi
-	@PERMS=$$(stat -f '%Lp' "$(BESZEL_ENV_FILE)"); \
-	if [ "$$PERMS" != "600" ]; then \
-		echo "  ✗ $(BESZEL_ENV_FILE) is mode $$PERMS, expected 600 — refusing to install with a forgeable credential file"; \
-		exit 1; \
-	fi
-	@mkdir -p "$(HOME)/.cache/beszel"
-	@mkdir -p "$(LAUNCHAGENTS)"
-	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.beszel-agent" PLIST_DIR="$(DOTFILES_DIR)/beszel"
-	@if launchctl list 2>/dev/null | awk '$$3=="com.jkrumm.beszel-agent"{f=1} END{exit !f}'; then \
-		echo "    ✓ com.jkrumm.beszel-agent loaded"; \
-	else \
-		echo "  ✗ com.jkrumm.beszel-agent not loaded — check ~/Library/Logs/beszel-agent.err"; exit 1; \
-	fi
-	@# Warn, don't loop forever: a slow hub or a cold tailnet path can take a
-	@# few seconds, but this must terminate either way (makefile-conventions).
-	@# The agent's slog output lands on stderr, so both streams are checked.
-	@for i in 1 2 3 4; do \
-		if grep -qh "WebSocket connected" "$(HOME)/Library/Logs/beszel-agent.log" "$(HOME)/Library/Logs/beszel-agent.err" 2>/dev/null; then \
-			echo "    ✓ WebSocket connected to hub"; \
-			exit 0; \
-		fi; \
-		sleep 5; \
-	done; \
-	echo "    ! not connected yet after ~20s — check ~/Library/Logs/beszel-agent.{log,err}"
-
-# Read-only.
-beszel-agent-status:
-	@ROW=$$(launchctl list 2>/dev/null | awk '$$3=="com.jkrumm.beszel-agent" {print $$1" "$$2}'); \
-	if [ -z "$$ROW" ]; then \
-		echo "  ✗ not loaded — run: make beszel-agent-setup"; \
-	else \
-		set -- $$ROW; \
-		if [ "$$1" = "-" ]; then \
-			echo "  ✗ loaded but NOT running (last exit $$2) — check ~/Library/Logs/beszel-agent.err"; \
-		else \
-			echo "  ✓ loaded and running (pid $$1, last exit $$2)"; \
-		fi; \
-	fi
-	@LAST=$$(grep -h "WebSocket connected" "$(HOME)/Library/Logs/beszel-agent.log" "$(HOME)/Library/Logs/beszel-agent.err" 2>/dev/null | tail -1); \
-	if [ -n "$$LAST" ]; then \
-		echo "  ✓ $$LAST"; \
-	else \
-		echo "  · no 'WebSocket connected' line yet in ~/Library/Logs/beszel-agent.{log,err}"; \
-	fi
-
-beszel-agent-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.beszel-agent.plist"; \
-	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ beszel-agent torn down (unloaded + plist removed)"; \
-	echo "    · env file + binary left untouched ($(BESZEL_ENV_FILE), ~/.local/bin/beszel-agent)"
-
-# ----------------------------------------------------------------------------
 # host-agent (both machines)
 #
 # A slim OpenTelemetry Collector built with ocb from agent/manifest.yaml (a copy of vps/agent/manifest.yaml):
 # host metrics every 30/60 s plus an OTLP receiver on 127.0.0.1:4416 (gRPC) / :4417 (HTTP), exported to the authed
 # ClickStack endpoint with a disk-backed queue. host.name is mini or macbook, from the machine's secrets backend.
 # The binary is built, not downloaded (scripts/host-agent-install.sh), and rebuilt only when a pin or the manifest
-# changes. Beszel and the heartbeat keep running beside it (docs/host-agent.md).
+# changes. The heartbeat keeps running beside it (docs/host-agent.md).
 # ----------------------------------------------------------------------------
 HOST_AGENT_VERSION ?= 0.165.0
 OCB_VERSION        ?= 0.165.0
@@ -4251,9 +4159,6 @@ help:
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"
 	@echo "  make drift-check-setup          Dev-host only: seed the drift stamps, retire the old drift agent (drift now rides the heartbeat daily)"
 	@echo "  make drift-check-teardown       Unload + remove the retired drift agent"
-	@echo "  make beszel-agent-setup         Dev-host only: pinned-release install + push-mode agent → homelab Beszel hub"
-	@echo "  make beszel-agent-status        LaunchAgent + WebSocket-connected state (read-only)"
-	@echo "  make beszel-agent-teardown      Unload + remove the agent (leaves env file + binary alone)"
 	@echo "  make agent-setup                Both machines: build the pinned host-agent collector, install + load it (host metrics + loopback OTLP → ClickStack)"
 	@echo "  make agent-status               host-agent health (LaunchAgent, receiver, export errors, queue)"
 	@echo "  make agent-uninstall            Unload + remove the host-agent LaunchAgent (leaves binary, queue, env file alone)"
