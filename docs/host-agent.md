@@ -93,11 +93,11 @@ The former Beszel rules, kept as a record of what each one mapped to:
 
 | Former Beszel alert / heartbeat check | ClickStack metric that now carries it | Not covered |
 |-|-|-|
-| Beszel status (agent connection down) | `system.cpu.utilization` etc. stop arriving: the per-host "host silent" alert (vps) | the alert for `host.name=mini` does not exist until vps adds it |
+| Beszel status (agent connection down) | `system.cpu.utilization` etc. stop arriving: the `mini host silent` alert (above) | none |
 | Beszel memory | `system.memory.utilization` (`state` attribute) | Beszel's number counts cache differently from the OS-level state split; compare before moving the threshold |
-| Beszel disk above 90 % | `system.filesystem.utilization` for `/System/Volumes/Data` | none |
-| Beszel CPU 80 % for 10 min | `system.cpu.utilization` | none |
-| Beszel load average 10 | `system.cpu.load_average.{1m,5m,15m}` | the VPS threshold is per core; the mini's is not |
+| Beszel disk above 90 % | `system.filesystem.utilization` for `/System/Volumes/Data`, alert `Infra mini filesystem >= 93 %` (above) | the threshold is 93 %, not 90 % |
+| Beszel CPU 80 % for 10 min | `system.cpu.utilization` | no ClickStack CPU alert exists: this rule is gone with Beszel until one is added |
+| Beszel load average 10 | `system.cpu.load_average.{1m,5m,15m}`, alert `Infra load5 per core >= 8` (above) | the alert is per core; Beszel's 10 was absolute |
 | `check_disk` (93 % used, 20 GiB free) | `system.filesystem.utilization` and `system.filesystem.usage` | `check_disk` reads `df` of `$HOME`, same volume; the free-GiB floor is `usage` with `state=free`, a threshold to write in vps |
 | `check_memory`: kernel memory pressure level (normal, warn, critical) | **not carried** | `host_metrics` has no macOS pressure level; it stays in the heartbeat |
 | `check_memory`: swap in use as a share of RAM | `system.paging.usage` (`state=used`) divided by the RAM total (`system.memory.usage`, all states summed) | `system.paging.utilization` is the share of the swap file's *current* size, which macOS grows and shrinks: the heartbeat deliberately judges against RAM, so a ClickStack alert must too |
