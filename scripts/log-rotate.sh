@@ -40,11 +40,11 @@
 # skipping any that lsof reports open. Only that one root is touched — net.imput.helium.code_sign_clone
 # and every other sibling are out of scope. CHROME_CLONE_ROOT overrides the root (the test suite uses it).
 # BOUNDED: 2026-11-11 the mini held 14k clones (agents' ad-hoc Playwright scripts launch ~300 Chrome/h) and
-# a serial `lsof +D` + `rm -rf` per 2 GB bundle ran 19+ min at load 80-165 (Beszel page, issue 829). So the
+# a serial `lsof +D` + `rm -rf` per 2 GB bundle ran 19+ min at load 80-165 (disk page, issue 829). So the
 # open set is ONE lsof for the whole root, rm runs at background IO/CPU priority (taskpolicy -b), and a run
 # stops after CHROME_CLONE_MAX removals (default 1500) or CHROME_CLONE_BUDGET_S seconds (default 300, since issue 870); the
 # backlog drains over successive runs instead of in one burst.
-# RATE (issue 839, Beszel "disk filling fast"): the sweep first ran hourly, 400 removals,
+# RATE (issue 839, "disk filling fast"): the sweep first ran hourly, 400 removals,
 # age gate 24 h, while ~300-600 clones/h were created (basalt-ui layout tests launch Chrome per test) —
 # the stock only grew, 14k clones (1264 removed in one run freed only ~0.7 GB: mostly shared blocks). The gate is now CHROME_CLONE_MIN_AGE_MIN
 # (default 120; lsof still guards any clone a running Chrome holds), removals run 4 wide, and the plist

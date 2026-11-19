@@ -2,8 +2,8 @@
 
 One small OpenTelemetry Collector per machine sends host metrics to the estate's ClickStack (the VPS) and gives every app on
 the machine a loopback OTLP endpoint. It runs on the Mac mini (`host.name=mini`) and, once `make agent-setup` has run there,
-on the MacBook (`host.name=macbook`). It is the Mac half of vps Issue 2055 (`vps/agent/`, the same ocb manifest). Beszel and
-every sampler on the mini keep running: nothing is removed until the parity table below has been lived with.
+on the MacBook (`host.name=macbook`). It is the Mac half of vps Issue 2055 (`vps/agent/`, the same ocb manifest). Beszel was retired from the mini on 2026-11-19 (Issue 2101), once
+the ClickStack alerts below covered the mini; the heartbeat keeps running beside it.
 
 | | |
 |-|-|
@@ -78,13 +78,20 @@ The registry budget is 45 MiB (1.5 times the footprint, `rules/run-on-mini.md`);
 CPU is not split by component; the network scraper runs `netstat` on every tick, which is the first suspect. If the mini's CPU matters, the
 first lever is the fast interval (30 s to 60 s should about halve it, unmeasured).
 
-## Parity with Beszel and the heartbeat
+## Alerts (Beszel retired 2026-11-19)
 
-The vps alert design maps Beszel's rules to ClickStack (`vps/docs/observability.md` §Against Beszel). Beszel on the mini alerts on: status
-(connection down), memory, disk above 90 %, CPU 80 % for 10 min and load average 10 for 10 min (the last two to the `watchdog` topic, as a
-digest). Nothing is alerted from ClickStack for the mini yet: the dashboards and alerts are the vps repo's (filed as a signal).
+Alerts for the mini, all in ClickStack (vps registry; state OK on 2026-11-19):
 
-| Beszel alert / heartbeat check | ClickStack metric that now carries it | Not covered |
+| Alert | Covers |
+|-|-|
+| `Infra mini filesystem >= 93% (15m)` | disk (`system.filesystem.utilization`, `/System/Volumes/Data`) |
+| `Infra memory >= 90% (15m)` | memory (host-wide tile) |
+| `Infra load5 per core >= 8 (30m)` | load |
+| `mini host silent < 1 sample (10m)` | the agent stopped reporting (status) |
+
+The former Beszel rules, kept as a record of what each one mapped to:
+
+| Former Beszel alert / heartbeat check | ClickStack metric that now carries it | Not covered |
 |-|-|-|
 | Beszel status (agent connection down) | `system.cpu.utilization` etc. stop arriving: the per-host "host silent" alert (vps) | the alert for `host.name=mini` does not exist until vps adds it |
 | Beszel memory | `system.memory.utilization` (`state` attribute) | Beszel's number counts cache differently from the OS-level state split; compare before moving the threshold |

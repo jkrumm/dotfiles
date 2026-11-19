@@ -34,7 +34,6 @@ services:
   - { name: teamchat-vm-watch, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-vm-watch, memory_mib: 50 }
   - { name: tool-checkout-deploy, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.tool-checkout-deploy, memory_mib: 50 }
   - { name: argo, repo: argo, kind: launchd, tier: core, label: com.jkrumm.argo, door: argo-live, memory_mib: 160 }
-  - { name: beszel-agent, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.beszel-agent, memory_mib: 50 }
   - { name: host-agent, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.host-agent, ports: [4416, 4417], memory_mib: 45, note: "OpenTelemetry collector (agent/): host metrics to ClickStack, OTLP receiver on 127.0.0.1:4416 gRPC / :4417 HTTP (the on-demand dev ClickStack publishes 4318 and 4319); footprint 28-30 MiB after an hour, budget 1.5x, docs/host-agent.md" }
   - { name: brain-backup, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-backup, memory_mib: 50 }
   - { name: brain-sync, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-sync, memory_mib: 50 }
