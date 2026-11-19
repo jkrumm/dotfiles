@@ -37,7 +37,7 @@ dotfiles | * master
   without figures). A single account shows `<id> 5h/wk` and no `∑`. The own 5h reset countdown
   ` ↺90m` follows the own entry only while line 1 stays within 130 visible columns (typical
   line: about 105 with it). `⚠ claude.ai login` (fallback fetch failed) stays as its own segment.
-  The routing reason (`CLAUDE_ACCOUNT_REASON`) and any pace hint are not rendered.
+  A mode mark follows the id (`me2↓ 4/0`): drain ↓, reserve ◆, paused ‖; normal shows none. The routing reason (`CLAUDE_ACCOUNT_REASON`) and any pace hint are not rendered.
 
 **Line 2** — Location:
 - CWD (home-shortened, worktree-aware: `WT·SE proj/path` for student-enrolment worktrees)
@@ -49,7 +49,7 @@ The render reads `usage_accounts.json` for the other accounts and the pool, and 
 `fetch_usage.py --accounts` rewrites it in the background, at most once a minute
 (`usage_accounts.stamp`), from `claude-account usage --json`: per account `plan`, and per
 window the fresh `utilization` plus the last known `value`/`value_resets_at_epoch` and
-`age_s`. A window whose reset has passed counts as 0; a missing or unreadable file means no
+`age_s`, and per account `mode` (`kind`, `for`, `until_at`, `expired`) and `forecast` (`weekly_at_reset`, `full_at`, `waste_percent`) from `claude-account status --json` (absent when that read fails; the mark above comes from `mode`). A window whose reset has passed counts as 0; a missing or unreadable file means no
 extras, no error. `CLAUDE_SL_DIR` relocates the render caches (test seam,
 `scripts/statusline.test.sh`, run by `make claude-launcher-test`).
 

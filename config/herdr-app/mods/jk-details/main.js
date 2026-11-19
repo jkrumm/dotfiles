@@ -6,6 +6,27 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props as rawProps, theme, exec, shared, setShared, openOverlay, closeOverlay } from "herdr";
 
+// An account's mode as one mark beside its numbers, from `claude-account status --json` (docs/claude-accounts.md
+// §Displays; the one definition of modes and forecasts is claude-account's, this only maps them to glyphs): drain ↓,
+// reserve ◆, paused ‖; normal, an override past its end and any other kind show none. Same map as scripts/statusline.sh
+// and the heartbeat's quota row.
+const MODE_MARK = { drain: "↓", reserve: "◆", paused: "‖" };
+export const modeMark = (a) => (a?.mode && !a.mode.expired ? (MODE_MARK[a.mode.kind] ?? "") : "");
+
+// The forecast in words, only for an account that will not be full at its reset (status: no `full_at`, some of the week
+// unused). Null otherwise, or when status gave no forecast.
+export function forecastWords(a) {
+  const f = a?.forecast;
+  if (!f || f.full_at != null || !(f.waste_percent > 0) || f.weekly_at_reset == null) return null;
+  return `ends the week at ${Math.round(f.weekly_at_reset)}%, ${Math.round(f.waste_percent)}% unused at reset`;
+}
+// What the mode is, in words ("drain until reset", "reserve for fable").
+export const modeWords = (a) => {
+  const m = a?.mode;
+  if (!m || m.expired || !MODE_MARK[m.kind]) return null;
+  return [m.kind, m.for ? `for ${m.for}` : null, m.until === "reset" ? "until reset" : null].filter(Boolean).join(" ");
+};
+
 // Same as jk-status' popupSpec (mods can't import each other; keep the two in step).
 function popupSpec(props, height) {
   const { anchor, width } = props;
@@ -142,7 +163,9 @@ export default class JkDetails extends View {
         .child(h_flex().gap(8).items_center()
           .child(div().text_size(12.5).font_bold().text_color(a.auth_ok ? t.foreground : t.blocked).child(a.id))
           .child(div().text_size(11).text_color(t.dim).child(PLAN[a.plan] ?? a.plan ?? ""))
+          .when(modeWords(a) != null, (el) => el.child(div().text_size(11).text_color(t.muted).child(`${modeMark(a)} ${modeWords(a)}`)))
           .when((a.age_s ?? 0) > STALE_S, (el) => el.child(div().text_size(11).text_color(t.ansi3).child(`numbers ${Math.round(a.age_s / 3600)} h old`))))
+        .when(forecastWords(a) != null, (el) => el.child(div().text_size(11).text_color(t.ansi3).child(forecastWords(a))))
         .child(row("5h", a.five_hour, a.five_hour_resets_at))
         .child(row("7d", a.seven_day, a.seven_day_resets_at))
         .children(this.issues(t, a.id))))

@@ -1144,12 +1144,21 @@ check_quota() {
   # "iu 5h 8% · 7d 88% | me 5h 3% · 7d 12%". WARN (never FAIL) at QUOTA_5H_WARN_PCT on the account interactive
   # sessions land on (the default one) only: the picker routes bulk lanes around a spent window.
   # Falls back to the host's `agw quota` (default account iu) when the picker is not installed or unreadable.
-  local body five seven text usage
+  # Each account carries its mode mark right after the id (drain ↓, reserve ◆, paused ‖; normal none) and, when it will not be
+  # full at its reset, the forecast in words, both from `claude-account status --json` (the one definition: nothing here
+  # decides a mode or a limit). A failed status read leaves the row as it was.
+  local body five seven text usage status marks
   if [[ -x "$CLAUDE_ACCOUNT_BIN" ]]; then
     usage=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" usage --json 2>/dev/null) || usage=""
+    status=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" status --json 2>/dev/null) || status=""
+    marks=$("$JQ_BIN" -c '[.accounts[] | {key: .id, value: {
+        mark: (if (.mode.expired // false) then "" else ({drain: "↓", reserve: "◆", paused: "‖"}[.mode.kind // ""] // "") end),
+        words: (.forecast as $f | if $f == null or $f.full_at != null or (($f.waste_percent // 0) <= 0) or $f.weekly_at_reset == null then ""
+                else "ends the week at \($f.weekly_at_reset | round)%, \($f.waste_percent | round)% unused at reset" end)}}] | from_entries' <<<"$status" 2>/dev/null) || marks=""
+    [[ -n "$marks" ]] || marks='{}'
     # Only accounts with a five_hour or seven_day sample count (a weekly-only Ultra account has no 5h part); none = unavailable, fall through to the host view.
-    text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled and (.five_hour != null or .seven_day != null)) |
-      "\(.id) \(if .five_hour == null then "" else "5h " + (.five_hour | floor | tostring) + "% · " end)7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)"
+    text=$("$JQ_BIN" -r --argjson m "$marks" '[.accounts[] | select(.enabled and (.five_hour != null or .seven_day != null)) |
+      "\(.id)\($m[.id].mark // "") \(if .five_hour == null then "" else "5h " + (.five_hour | floor | tostring) + "% · " end)7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)\(if ($m[.id].words // "") == "" then "" else " — " + $m[.id].words end)"
       ] | join(" | ")' <<<"$usage" 2>/dev/null) || text=""
     if [[ -n "$text" ]]; then
       if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '.default_account as $d | [.accounts[] | select(.id == $d and .enabled and .five_hour != null and .five_hour >= $t)] | length > 0' <<<"$usage" 2>/dev/null)" == "true" ]]; then

@@ -19,6 +19,10 @@ echo "$cpu $used $(sysctl -n hw.memsize | awk '{printf "%.0f", $1/1073741824}')"
 // samples, imported as source "peer"): no API call, ~20 ms. docs/claude-accounts.md.
 const USAGE = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account usage --json';
 
+// The same accounts' mode and forecast (`status --json` is the whole read model; only `mode` and `forecast` are used
+// here, merged into the usage rows by id). A failed read leaves the rows without them: no marks, nothing else changes.
+const STATUS = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account status --json';
+
 // Login, quota and pending-ask health of this machine and its peer, each problem with its
 // fix command: claude-account's own verdict (docs/claude-accounts.md), the one source the
 // statusline-adjacent tools share. ~1 s (it asks the peer through its herdr-core).
@@ -57,6 +61,27 @@ export function pool(accounts, now = Date.now() / 1000) {
   const known = acc.filter((a) => a.wk != null).map((a) => ({ ...a, w: weighted ? a.mult : 1 }));
   if (!known.length) return null;
   return Math.round(known.reduce((s, a) => s + a.w * a.wk, 0) / known.reduce((s, a) => s + a.w, 0));
+}
+
+// An account's mode as one mark beside its numbers, from `claude-account status --json` (docs/claude-accounts.md
+// §Displays; the one definition of modes and forecasts is claude-account's, this only maps them to glyphs): drain ↓,
+// reserve ◆, paused ‖; normal, an override past its end and any other kind show none. Same map as scripts/statusline.sh
+// and the heartbeat's quota row.
+const MODE_MARK = { drain: "↓", reserve: "◆", paused: "‖" };
+export const modeMark = (a) => (a?.mode && !a.mode.expired ? (MODE_MARK[a.mode.kind] ?? "") : "");
+
+// The forecast in words, only for an account that will not be full at its reset (status: no `full_at`, some of the week
+// unused). Null otherwise, or when status gave no forecast.
+export function forecastWords(a) {
+  const f = a?.forecast;
+  if (!f || f.full_at != null || !(f.waste_percent > 0) || f.weekly_at_reset == null) return null;
+  return `ends the week at ${Math.round(f.weekly_at_reset)}%, ${Math.round(f.waste_percent)}% unused at reset`;
+}
+
+// usage rows + status rows -> usage rows carrying `mode` and `forecast` (unchanged where status has no row).
+export function withStatus(rows, status) {
+  const byId = new Map((status ?? []).map((s) => [s.id, s]));
+  return rows.map((a) => (byId.has(a.id) ? { ...a, mode: byId.get(a.id).mode, forecast: byId.get(a.id).forecast } : a));
 }
 
 const STATS_MS = 5000;
@@ -187,9 +212,10 @@ export default class JkStatus extends View {
 
   refreshUsage(cx) {
     cx.spawn(async (cx) => {
-      const r = await exec("sh", ["-c", USAGE]).catch(() => null);
+      const [r, s] = await Promise.all([exec("sh", ["-c", USAGE]).catch(() => null), exec("sh", ["-c", STATUS]).catch(() => null)]);
       let next = [];
       try { next = (JSON.parse(r?.stdout ?? "").accounts ?? []).filter((a) => a.enabled); } catch {}
+      try { next = withStatus(next, JSON.parse(s?.stdout ?? "").accounts); } catch {}
       setShared("jk.usage", { at: Date.now(), accounts: next, pool: pool(next) });
       if (same(next, this.usage)) return;
       this.usage = next;
@@ -249,14 +275,16 @@ export default class JkStatus extends View {
       .when(!stats, (el) => el.child(div().text_color(t.dim).child("…")));
   }
 
-  // "iu 46" (no five-hour window: weekly only) or "me 2/75": 5-hour / 7-day %, as in the Claude statusline. No quota
+  // "iu 46" (no five-hour window: weekly only) or "me 2/75": 5-hour / 7-day %, as in the Claude statusline; a mode mark
+  // follows the id ("me2↓ 4/0"). No quota
   // color (a full account is the picker's job, not an alarm); red only for a failed login, dim when stale.
   account(t, a) {
     const bad = !a.auth_ok;
     const stale = (a.age_s ?? 0) > STALE_S;
     const color = bad ? t.blocked : stale ? t.dim : t.muted;
     const week = a.seven_day ?? "?";
-    const text = bad ? `${a.id} login` : a.five_hour == null ? `${a.id} ${week}` : `${a.id} ${a.five_hour}/${week}`;
+    const id = `${a.id}${modeMark(a)}`;
+    const text = bad ? `${id} login` : a.five_hour == null ? `${id} ${week}` : `${id} ${a.five_hour}/${week}`;
     return div().text_color(color).child(text);
   }
 
