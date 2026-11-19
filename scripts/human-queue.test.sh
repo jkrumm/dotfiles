@@ -966,6 +966,12 @@ no_tty env HUMAN_QUEUE_TEST_BUTTON=TIMEOUT HUMAN_QUEUE_AUTO_RUN_DIR="$JK" HUMAN_
 assert_eq "consent grant, dialog gave up: refused" "1" "$?"
 no_tty env HUMAN_QUEUE_TEST_BUTTON=Grant HUMAN_QUEUE_AUTO_RUN_DIR="$JK" HUMAN_QUEUE_AUTO_CATALOGUE="$CATA" bash "$HQ" consent grant logs </dev/null >/dev/null 2>&1
 assert_eq "consent grant, dialog Grant: granted" "0" "$?"
+cons revoke logs >/dev/null 2>&1
+printf 'yes\n' >"$TMP/answer"
+HUMAN_QUEUE_TEST_BUTTON=Cancel HUMAN_QUEUE_CONSENT_INPUT="$TMP/answer" cons grant logs --dialog >/dev/null 2>&1
+assert_eq "consent grant --dialog: a typed yes is not consulted, the dialog's Cancel refuses" "1" "$?"
+HUMAN_QUEUE_TEST_BUTTON=Grant HUMAN_QUEUE_CONSENT_INPUT="$TMP/answer" cons grant logs --dialog >/dev/null 2>&1
+assert_eq "consent grant --dialog: the dialog's Grant grants, even where a terminal exists" "0" "$?"
 assert_eq "consent grant: both classes listed, file still 600" "logs secrets-seed 600" "$(sort "$JK/auto-run.consent" | tr '\n' ' ')$(stat -f %Lp "$JK/auto-run.consent")"
 cons revoke secrets-seed >/dev/null 2>&1; assert_eq "consent revoke: rc 0" "0" "$?"
 assert_eq "consent revoke: only that class goes" "logs" "$(cat "$JK/auto-run.consent")"

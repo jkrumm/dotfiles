@@ -647,8 +647,8 @@ write_consent() {
 
 # One typed "yes" on a terminal, or one click in a native dialog when there is none.
 consent_confirm() {
-  local class="$1" body="$2" answer rc
-  if [[ -n "${HUMAN_QUEUE_CONSENT_INPUT:-}" ]] || have_tty; then
+  local class="$1" body="$2" force_dialog="${3:-}" answer rc
+  if [[ -z "$force_dialog" ]] && { [[ -n "${HUMAN_QUEUE_CONSENT_INPUT:-}" ]] || have_tty; }; then
     printf '%s\n\n' "$body" >&2
     printf 'Type yes to let this class run on this MacBook with no dialog: ' >&2
     read -r answer <"${HUMAN_QUEUE_CONSENT_INPUT:-/dev/tty}" || answer=""
@@ -663,8 +663,9 @@ consent_confirm() {
 }
 
 consent_grant() {
-  local class="${1:-}" rows body
-  [[ "$class" =~ $AUTO_CLASS_RE ]] || die "usage: human-queue.sh consent grant <class>"
+  local class="${1:-}" rows body dialog=""
+  [[ "${2:-}" == --dialog ]] && dialog=1
+  [[ "$class" =~ $AUTO_CLASS_RE ]] || die "usage: human-queue.sh consent grant <class> [--dialog]"
   class_in_catalogue "$class" || die "not a catalogue class: $class (see: human-queue.sh consent list)"
   if class_granted "$class"; then echo "  $class is already granted"; return 0; fi
   rows="$(catalogue_rows | awk -F'\t' -v c="$class" '$1 == c { printf "  %s\n", $2 }')"
@@ -675,7 +676,7 @@ The mini may then start exactly these command lines here, with no dialog (<N> = 
 $rows
 
 Revoke with: human-queue.sh consent revoke $class"
-  consent_confirm "$class" "$body" || die "not granted"
+  consent_confirm "$class" "$body" "$dialog" || die "not granted"
   { [[ -f "$AUTO_CONSENT" ]] && cat "$AUTO_CONSENT"; printf '%s\n' "$class"; } | write_consent
   echo "  ✓ $class granted"
 }
@@ -728,9 +729,10 @@ Usage:
   human-queue.sh gui-run        Read one request JSON on stdin, show a native dialog,
                                 execute on click. Called remotely by
                                 `ask-human.sh push` over ssh — not for interactive use.
-  human-queue.sh consent grant|revoke <class>
+  human-queue.sh consent grant <class> [--dialog] | revoke <class>
                                 Let a class of config/macbook-auto-classes.tsv run with no dialog
-                                (grant: typed yes on a terminal, else one dialog click), or stop it
+                                (grant: typed yes on a terminal, else one dialog click; --dialog
+                                always the dialog, for a command that runs in a terminal nobody watches), or stop it
   human-queue.sh consent list|off|on  Classes and their state; off/on = the kill switch
   human-queue.sh resolve <id> [note]  Mark done without running the cmd (already handled)
   human-queue.sh deny <id> [reason]   Deny a request; writes a denied result back
