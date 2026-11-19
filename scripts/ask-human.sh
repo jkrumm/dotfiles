@@ -168,23 +168,30 @@ factory_open_json() {
   jq -c "$filter" <<<"$out" 2>/dev/null || return 1
 }
 
-# Closes an Errand: $1 id, $2 done|not_needed, $3 note. Never fatal.
+# Closes an Errand: $1 id, $2 done|not_needed, $3 note, $4 confirmed-by (done only).
+# A session's agent token may close a done Errand its operator confirmed
+# (`--confirmed-by`, recorded as the orchestrator); that is tried first, so a
+# dialog answer closes its Errand without the owner token. A refusal falls back to
+# the plain call (factory_call then retries with the owner's token). Never fatal.
 close_errand() {
-  local id="$1" outcome="$2" note_text="${3:0:500}" args
+  local id="$1" outcome="$2" note_text="${3:0:500}" confirmed="${4:-}" args
   args=(errand "done" "$id" --note "$note_text" --format json)
   [[ "$outcome" == not_needed ]] && args+=(--outcome not_needed)
+  if [[ -n "$confirmed" && "$outcome" == "done" ]]; then
+    factory_call "${args[@]}" --confirmed-by "${confirmed:0:300}" >/dev/null && return 0
+  fi
   factory_call "${args[@]}" >/dev/null || { note "could not close $id in the factory — it stays open (its check or expiry ends it)"; return 1; }
 }
 
 # The dialog's answer (gui-run's result JSON) closes the Errand it was for.
 errand_answer() {
-  local errand="$1" status="$2" out="$3" tail_text exit_code
+  local errand="$1" status="$2" out="$3" tail_text exit_code by="ask-human: the owner clicked Run in the MacBook dialog"
   tail_text="$(json_field "$out" output_tail 2>/dev/null || true)"
   exit_code="$(json_field "$out" exit 2>/dev/null || true)"
   case "$status" in
     denied) close_errand "$errand" not_needed "denied on the MacBook" || true ;;
-    failed) close_errand "$errand" "done" "ran on the MacBook and failed (exit ${exit_code:-?}): $tail_text" || true ;;
-    *) close_errand "$errand" "done" "answered on the MacBook (exit ${exit_code:-0}): $tail_text" || true ;;
+    failed) close_errand "$errand" "done" "ran on the MacBook and failed (exit ${exit_code:-?}): $tail_text" "$by" || true ;;
+    *) close_errand "$errand" "done" "answered on the MacBook (exit ${exit_code:-0}): $tail_text" "$by" || true ;;
   esac
 }
 

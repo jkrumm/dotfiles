@@ -717,7 +717,10 @@ else
 #!/usr/bin/env bash
 printf '%s | token=%s\n' "$*" "${FACTORY_TOKEN:-}" >> "$FX_DIR/calls"
 [[ -n "${FX_DOWN:-}" ]] && exit 7
-if [[ -n "${FX_AUTH:-}" && -n "${FACTORY_TOKEN:-}" && "$2" != request ]]; then exit 3; fi
+if [[ -n "${FX_AUTH:-}" && -n "${FACTORY_TOKEN:-}" && "$2" != request ]]; then
+  # The agent token may close a done Errand only with --confirmed-by (the factory's orchestrator row).
+  [[ "$2" == done && "$*" == *--confirmed-by* && "$*" != *not_needed* ]] || exit 3
+fi
 [[ "$1" == errand ]] || exit 0
 sub="$2"; shift 2
 case "$sub" in
@@ -794,6 +797,13 @@ STUB
     assert_eq "answer: Run exits 0" "0" "$rc"
     assert_contains "answer: errand done with the result note" "errand done $aid --note answered on the MacBook (exit 0): dialog-ran" "$(cat "$FXDIR/calls")"
     assert_eq "answer: no queue file written" "0" "$(queued_count)"
+    # A dialog whose command fails, asked by a session holding only the agent token: the Errand still closes (--confirmed-by).
+    : > "$FXDIR/calls"
+    PATH="$TMP/fakebin:$PATH" FX_AUTH=1 FACTORY_TOKEN=agent-tok HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Run bash "$AH" ask "fail me" --cmd "exit 127" >"$TMP/ans.out" 2>/dev/null; rc=$?
+    fid="$(head -1 "$TMP/ans.out")"
+    assert_eq "failed dialog: exits with the command's code" "127" "$rc"
+    assert_contains "failed dialog: closed with --confirmed-by on the agent token" "errand done $fid --note ran on the MacBook and failed (exit 127)" "$(grep -- '--confirmed-by' "$FXDIR/calls")"
+    assert_eq "failed dialog: no open errand is left" "0" "$(jq -s --arg id "$fid" '[.[] | select(.id == $id)] | length' "$FXDIR/open.jsonl")"
     : > "$FXDIR/calls"
     PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Deny bash "$AH" ask "deny me" --cmd "echo nope" >"$TMP/ans.out" 2>/dev/null; rc=$?
     assert_eq "answer: Deny exits 1" "1" "$rc"
