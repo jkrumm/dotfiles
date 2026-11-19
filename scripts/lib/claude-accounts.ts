@@ -25,7 +25,10 @@ export const STALE_OK_MS = 6 * 3600_000
 /** a dead login is re-probed (in the background) at most this often */
 export const AUTH_RETRY_MS = 30 * 60_000
 export const REFRESH_MIN_MS = 5 * 60_000
-export const EXPIRING_S = 24 * 3600
+/** Horizon of the expiring-capacity step (earliest reset first): v1.9 widened it from 24 h after the simulation (scripts/claude-account-sim.test.ts). */
+export const EXPIRING_S = 72 * 3600
+/** The 98 % weekly ceiling applies this close to the reset. */
+export const CEILING_EXPIRING_S = 24 * 3600
 /** Weekly% may run this many points ahead of the elapsed share of the 7-day window before an account counts as over pace. */
 export const PACE_MARGIN = 15
 /** Session% points the home account may run ahead of the other before a spawn moves to the emptier 5h window. */
@@ -51,6 +54,12 @@ export interface Registry {
    * other account is eligible), so its weekly room stays for Fable. Absent or null = off (`cf` on the default account).
    */
   fable?: string | null
+  /**
+   * Drain mode: accounts filled first, in every lane, up to a weekly ceiling of 100 (the owner wants them at the wall,
+   * e.g. ahead of a reset he triggers himself). A drain account with a hot 5h window (SESSION_SOFT_MAX) falls back to
+   * the plain rule. Absent or empty = off. Never the Fable account.
+   */
+  drain?: string[] | null
 }
 
 /**
@@ -121,7 +130,11 @@ export function loadRegistry(path = registryPath()): Registry {
   if (!Object.values(raw.accounts).some((a) => (a as Account).dir === null)) throw new Error(`${path}: no account owns the default ~/.claude (dir: null)`)
   const fable = raw.fable ?? null
   if (fable !== null && !(typeof fable === "string" && Object.hasOwn(raw.accounts, fable))) throw new Error(`${path}: fable '${fable}' is not an account id`)
-  return { accounts: raw.accounts, fable }
+  const drain = raw.drain ?? null
+  if (drain !== null && !(Array.isArray(drain) && drain.every((id) => typeof id === "string" && Object.hasOwn(raw.accounts, id))))
+    throw new Error(`${path}: drain must be a list of account ids`)
+  if (drain !== null && fable !== null && drain.includes(fable)) throw new Error(`${path}: '${fable}' cannot be both the fable and a drain account`)
+  return { accounts: raw.accounts, fable, drain }
 }
 
 /**
@@ -626,10 +639,14 @@ export function homeIds(reg: Registry, lane: string): string[] {
 /** The pick rests on a sample with a window older than FRESH_MS. */
 export const isStaleOk = (cache: Cache, id: string, nowMs: number) => usable(cache.samples[id], nowMs) && sampleAge(cache.samples[id], nowMs) >= FRESH_MS
 
-const weeklyMax = (x: Sample, nowMs: number) => {
+/** True for an enabled account the registry names in `drain`. */
+export const isDrain = (reg: Registry, id: string): boolean => !!reg.drain?.includes(id) && !!reg.accounts[id]?.enabled
+
+const weeklyMax = (x: Sample, nowMs: number, drain = false) => {
+  if (drain) return WEEKLY_MAX_FINAL
   const msLeft = x.w_reset === null ? null : x.w_reset * 1000 - nowMs
   if (msLeft === null || msLeft <= 0) return WEEKLY_MAX
-  return msLeft < FINAL_S * 1000 ? WEEKLY_MAX_FINAL : msLeft < EXPIRING_S * 1000 ? WEEKLY_MAX_EXPIRING : WEEKLY_MAX
+  return msLeft < FINAL_S * 1000 ? WEEKLY_MAX_FINAL : msLeft < CEILING_EXPIRING_S * 1000 ? WEEKLY_MAX_EXPIRING : WEEKLY_MAX
 }
 
 /**
@@ -649,7 +666,7 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
   const x = cache.samples[id]
   if (!x || !usable(x, nowMs)) return false
   if ((sessionPct(reg, cache, id, nowMs) ?? 0) >= SESSION_MAX) return false
-  if (hasW(x) && nowMs - (x.w_ts ?? 0) < STALE_OK_MS && x.w! >= weeklyMax(x, nowMs)) return false
+  if (hasW(x) && nowMs - (x.w_ts ?? 0) < STALE_OK_MS && x.w! >= weeklyMax(x, nowMs, isDrain(reg, id))) return false
   const until = cache.exhausted[id]
   if (until && until * 1000 > nowMs) return false
   return true
@@ -685,7 +702,7 @@ export function accountWeight(reg: Registry, cache: Cache, id: string, nowMs: nu
   const hasWeek = !!x && hasW(x)
   // a reset that already passed means the cached % predates the rollover: judge it as a fresh week
   const rolled = hasWeek && x.w_reset !== null && x.w_reset * 1000 <= nowMs
-  const spare = hasWeek && !rolled ? weeklyMax(x, nowMs) - x.w! : WEEKLY_MAX
+  const spare = hasWeek && !rolled ? weeklyMax(x, nowMs, isDrain(reg, id)) - x.w! : WEEKLY_MAX
   const hoursLeft = hasWeek && !rolled && x.w_reset !== null ? Math.max(1, (x.w_reset * 1000 - nowMs) / 3600_000) : WEEK_S / 3600
   return (spare * accountUnits(reg.accounts[id]).weekly) / hoursLeft ** URGENCY_EXP
 }
@@ -703,9 +720,9 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?:
   const reserve = fableReserve(reg)
   if (reserve === null) return pickRule(reg, cache, lane, nowMs, rng)
   // Fable mode: the rule runs without the Fable account first; only when that finds nothing does it get the work
-  const spared = pickRule({ accounts: { ...reg.accounts, [reserve]: { ...reg.accounts[reserve], enabled: false } } }, cache, lane, nowMs, rng)
+  const spared = pickRule({ ...reg, accounts: { ...reg.accounts, [reserve]: { ...reg.accounts[reserve], enabled: false } } }, cache, lane, nowMs, rng)
   if (spared.picked !== SPILL && spared.reason !== "interactive-fallback") return spared
-  const r = pickRule({ accounts: reg.accounts }, cache, lane, nowMs, rng)
+  const r = pickRule(reg, cache, lane, nowMs, rng)
   return r.picked === reserve ? { ...r, reason: "fable-reserve" } : r
 }
 
@@ -718,6 +735,19 @@ function pickRule(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?
   const ok = cool.length ? cool : eligibleIds
   const bulk = lane !== "interactive"
 
+  // Weight = weekly capacity left under the account's own ceiling (scaled by its plan) per hour to its own reset,
+  // sharpened by URGENCY_EXP: the account whose window closes soonest with room left is the one whose points would
+  // otherwise be lost. Everything is read from the registry and the sample, nothing names an account.
+  const weight = (id: string) => accountWeight(reg, cache, id, nowMs)
+  const choose = (cands: string[]): string | undefined => {
+    if (!rng || cands.length < 2) return cands.reduce<string | undefined>((best, id) => (best === undefined || weight(id) > weight(best) ? id : best), undefined)
+    let r = rng() * cands.reduce((sum, id) => sum + weight(id), 0)
+    return cands.find((id) => (r -= weight(id)) < 0) ?? cands[cands.length - 1]
+  }
+  // drain mode: the owner's chosen accounts go first in every lane while their 5h window is cool
+  const draining = cool.filter((id) => isDrain(reg, id))
+  if (draining.length) return { picked: choose(draining)!, reason: "drain" }
+
   if (bulk) {
     const expiring = ok
       .filter((id) => {
@@ -727,15 +757,6 @@ function pickRule(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?
       })
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
-  }
-  // Weight = weekly capacity left under the account's own ceiling (scaled by its plan) per hour to its own reset,
-  // sharpened by URGENCY_EXP: the account whose window closes soonest with room left is the one whose points would
-  // otherwise be lost. Everything is read from the registry and the sample, nothing names an account.
-  const weight = (id: string) => accountWeight(reg, cache, id, nowMs)
-  const choose = (cands: string[]): string | undefined => {
-    if (!rng || cands.length < 2) return cands.reduce<string | undefined>((best, id) => (best === undefined || weight(id) > weight(best) ? id : best), undefined)
-    let r = rng() * cands.reduce((sum, id) => sum + weight(id), 0)
-    return cands.find((id) => (r -= weight(id)) < 0) ?? cands[cands.length - 1]
   }
   const homes = homeIds(reg, lane)
   const home = choose(ok.filter((id) => homes.includes(id)))

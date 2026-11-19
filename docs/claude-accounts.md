@@ -154,7 +154,7 @@ runs `claude-account refresh --ids <default>`). It writes `/tmp/claude_sl/usage_
 old shape the statusline and Tinycast read) plus `usage_accounts.json` (all accounts). Every consumer (the statusline,
 Tinycast and the Herdr app's `jk-status`) now reads subscription data through `claude-account` (`usage`, `health`).
 
-**Rule v1.8** (v1.7 plus the drain-to-the-end change, 2026-11-18: `weeklyMax` is 100 in the last 3 h before the reset and step 1 lost its 70 % cap, so an expiring account keeps taking bulk work up to its ceiling; v1.7 = v1.6 plus the step-5 pace guard; v1.6 = v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
+**Rule v1.9** (v1.8 plus the 72 h expiring horizon, 2026-11-19: step 1 serves the earliest weekly reset first among accounts resetting within 72 h (`EXPIRING_S`), where it looked 24 h ahead; the 98 % ceiling keeps its own 24 h (`CEILING_EXPIRING_S`); v1.8 = v1.7 plus the drain-to-the-end change, 2026-11-18: `weeklyMax` is 100 in the last 3 h before the reset and step 1 lost its 70 % cap, so an expiring account keeps taking bulk work up to its ceiling; v1.7 = v1.6 plus the step-5 pace guard; v1.6 = v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
@@ -178,7 +178,8 @@ home(lane)  = share(eligible x whose homeLanes claim the lane)
 coolSet      = eligible accounts with session% < 80 (SESSION_SOFT_MAX), else all eligible   # a hot 5h window is the last choice, not excluded
                  every step below reads coolSet as "eligible"
 pick(lane):
-  1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h → x   # use expiring capacity first (soonest reset); no weekly% cap since v1.8
+  0. ∃ cool drain account → share(those)   # drain mode (registry `drain`), every lane, weekly ceiling 100
+  1. bulk lane ∧ ∃ eligible x with weekly reset < 72 h → x   # use expiring capacity first (soonest reset); no weekly% cap since v1.8, 72 h since v1.9
   2. eligible(home) ∧ overPace(home) → share(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
   3. eligible(home) → the eligible x ≠ home with (¬overPace(x) ∨ session%(home) ≥ 60) ∧ session%(home) − session%(x) > 20
                       and the lowest session% (ties by weight); a sibling that shares the lane beats an outsider
@@ -206,6 +207,19 @@ proportion to the weights, so a burst spreads instead of landing on one account.
 a new subscription is a registry entry, its reset time and quota come from the sample. With `me` and `me2` at
 similar 5h load the split at the time was about 49/51; the 5h-balance step (3) still moves work to the emptier
 window and keeps overriding the weekly weighting while the 5h loads differ by more than 20 points.
+
+Why v1.9 (2026-11-19): `scripts/claude-account-sim.test.ts` runs the rule for three weeks against sticky sessions, a day/night
+demand curve and the real reset offsets, and judges it by the weekly % each account reaches at its reset. At demand 0.85× the
+pool the 24 h horizon ended iu at 88-92 %, me2 at 88-95 % and me at 64-67 %; 72 h ends iu and me2 at 99-100 % and leaves the slack
+on one account (me, about 40 %). Below the pool's size the slack has to land somewhere, and earliest-reset-first lands it on
+the fewest accounts. At 1.0× and above both horizons fill every window to 91-100 %. 120 h and 168 h added mid-session walls
+(moved sessions) without a better result. The same file models the factory's own choice (`roomLeft`, most room in the tightest
+window): it leaves every account at 75-98 % at its reset, which is what 2026-11-18 showed (me 93 % at its reset). The suite
+asserts these outcomes, so a rule change that wastes quota fails `make check`.
+
+**The factory follows `rank` only as a tie-break** (software-factory `pickAccount` orders by `roomLeft` first) until
+issue_2379 lands, which makes the rank its order. Until then Fable and drain mode steer `c`, `rd` and every `pick`, but
+not which account a new factory lead lands on.
 
 Why v1.8 (2026-11-18): `iu` reached its reset at 90 % (83 % a day earlier). Eligible under the 98 % ceiling, it was never chosen: step 1
 skipped any account above 70 %, the bulk lanes sat on `me`/`me2` at step 4, and 98 % left the last points unspent. Expiring capacity now
@@ -268,6 +282,16 @@ Fable resets refill only Fable usage, so one account is set aside for Fable. The
   so switching the mode off restores the plain rule.
 
 Switch: set `"fable"` to another account id, or to `null` for off, and commit. Read on every call, no restart.
+
+## Drain mode
+
+The registry's top-level `"drain": ["<id>", …]` names accounts the owner wants at the wall fast (an account to empty before
+a reset he controls, or a week he knows will go unused otherwise). Every pick, any lane, takes a drain account first while its
+5h window is under `SESSION_SOFT_MAX` (reason `drain`; several share by weight); its weekly ceiling is 100, not 95/98. A hot
+5h window hands the work to the plain rule until the window cools. A drain account cannot be the Fable account (`loadRegistry`
+refuses it). Drain mode does not end by itself: remove the id once the account is full, or it keeps draining the next week.
+With `"fable": "iu", "drain": ["me2"]` (2026-11-19) the order is me2 (drain), then me, then iu (fable-reserve) in every lane;
+the simulation fills me2 within 3-4 hours and keeps iu under 65 % for the week.
 
 ## Spawn integration
 

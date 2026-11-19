@@ -92,6 +92,51 @@ describe("Fable mode: the fable account is the last resort", () => {
   })
 })
 
+describe("Drain mode: the drain accounts are filled first, to the wall", () => {
+  const D = 24 * H
+  const drain = (): Registry => ({ ...reg3(), drain: ["me2"] })
+  const both = (): Registry => ({ ...reg3(), fable: "iu", drain: ["me2"] })
+  // me2 far over pace (91 % with 3.5 days left), me fresh, iu fresh
+  const c = (me2: Sample) => cache3(sample(10, 12, { wReset: NOW / 1000 + 6.4 * D }), sample(0, 0, { wReset: NOW / 1000 + 7 * D - H }), me2)
+  const me2Over = sample(10, 91, { wReset: NOW / 1000 + 3.5 * D })
+  test("every lane picks the drain account while its 5h window is cool, pace and expiring capacity notwithstanding", () => {
+    for (const lane of ["interactive", "headless", "bulk", "lead"]) expect(pick(drain(), c(me2Over), lane, NOW)).toMatchObject({ picked: "me2", reason: "drain" })
+    const meExpiring = cache3(sample(10, 12), sample(10, 50, { wReset: NOW / 1000 + 5 * H }), me2Over)
+    expect(pick(drain(), meExpiring, "bulk", NOW)).toMatchObject({ picked: "me2", reason: "drain" })
+  })
+  test("its weekly ceiling is 100: 99 % still drains, 100 % is the wall", () => {
+    expect(pick(drain(), c(sample(10, 99, { wReset: NOW / 1000 + 3.5 * D })), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "drain" })
+    expect(pick(drain(), c(sample(10, 100, { wReset: NOW / 1000 + 3.5 * D })), "bulk", NOW).picked).not.toBe("me2")
+    // without drain mode the same 96 % account is over the 95 ceiling
+    expect(pick(reg3(), c(sample(10, 96, { wReset: NOW / 1000 + 3.5 * D })), "bulk", NOW).picked).not.toBe("me2")
+  })
+  test("a hot 5h window hands the work to the plain rule until the window cools", () => {
+    expect(pick(drain(), c(sample(SESSION_SOFT_MAX, 91, { wReset: NOW / 1000 + 3.5 * D })), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" })
+    expect(pick(drain(), c(sample(SESSION_SOFT_MAX - 1, 91, { wReset: NOW / 1000 + 3.5 * D })), "bulk", NOW).reason).toBe("drain")
+  })
+  test("with Fable on iu: drain first, then the rest, iu last", () => {
+    expect(pick(both(), c(me2Over), "interactive", NOW)).toMatchObject({ picked: "me2", reason: "drain" })
+    const walled = c(sample(10, 100, { wReset: NOW / 1000 + 3.5 * D }))
+    expect(pick(both(), walled, "interactive", NOW)).toMatchObject({ picked: "me", reason: "spill" })
+    expect(pick(both(), walled, "lead", NOW).picked).toBe("me")
+    expect(rank({ reg: both(), cache: c(me2Over), lane: "bulk", nowMs: NOW }).map((r) => r.account)).toEqual(["me2", "me", "iu"])
+    const meOut = { ...walled, exhausted: { me: NOW / 1000 + 600 } }
+    expect(pick(both(), meOut, "lead", NOW)).toMatchObject({ picked: "iu", reason: "fable-reserve" })
+  })
+  test("loadRegistry: drain names accounts and never the fable one", () => {
+    const d = tmp(), f = join(d, "r.json")
+    writeFileSync(f, JSON.stringify({ ...reg3(), drain: ["nope"] }))
+    expect(() => loadRegistry(f)).toThrow(/drain/)
+    writeFileSync(f, JSON.stringify({ ...reg3(), drain: "me2" }))
+    expect(() => loadRegistry(f)).toThrow(/drain/)
+    writeFileSync(f, JSON.stringify({ ...reg3(), fable: "me2", drain: ["me2"] }))
+    expect(() => loadRegistry(f)).toThrow(/both/)
+    writeFileSync(f, JSON.stringify(both()))
+    expect(loadRegistry(f)).toMatchObject({ fable: "iu", drain: ["me2"] })
+    rmSync(d, { recursive: true })
+  })
+})
+
 describe("pick rule v1.4: N accounts", () => {
   const D = 24 * H
   const iu = sample(10, 10)
@@ -210,7 +255,7 @@ describe("pick rule v1.5: expiry-weighted sharing", () => {
   })
   test("N accounts: a fourth subscription joins from the registry alone", () => {
     const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["bulk"], enabled: true } } }
-    const c: Cache = { ...cache3(iu, me, me2), samples: { ...cache3(iu, me, me2).samples, me3: sample(10, 30, { wReset: NOW / 1000 + 1.5 * D }) } }
+    const c: Cache = { ...cache3(iu, me, me2), samples: { ...cache3(iu, me, me2).samples, me3: sample(10, 30, { wReset: NOW / 1000 + 4 * D }) } } // outside the 72 h expiring horizon, so the weights share
     expect(pick(r, c, "bulk", NOW)).toMatchObject({ picked: "me3" })
     const seen = new Set(Array.from({ length: 200 }, (_, i) => pick(r, c, "bulk", NOW, () => (i + 0.5) / 200).picked))
     expect(seen).toEqual(new Set(["me", "me2", "me3"]))
@@ -1675,9 +1720,9 @@ describe("rank: the picker's order of every eligible account", () => {
   const iu = sample(10, 80, { wReset: NOW / 1000 + 32 * H })
   const me = sample(4, 54, { wReset: NOW / 1000 + 46 * H })
   const me2 = sample(5, 11, { wReset: NOW / 1000 + 5.5 * D })
-  test("bulk lane mirrors today: me, me2, iu", () => {
+  test("bulk lane: the soonest reset inside the 72 h horizon first (v1.9), then home", () => {
     const r = order(cache3(iu, me, me2), "bulk")
-    expect(r.map((e) => e.account)).toEqual(["me", "me2", "iu"])
+    expect(r.map((e) => e.account)).toEqual(["iu", "me", "me2"])
     expect(r.every((e) => typeof e.weight === "number")).toBe(true)
   })
   test("an ineligible account is absent", () => {
