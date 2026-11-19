@@ -285,9 +285,9 @@ _pct_color() {   # sets _pc from a 0-100 figure: green < 50, yellow < 75, red
 _num() {         # sets _n: a coloured figure ("\033[39m" resets only the colour, so the bold of the own entry survives)
   if [ -n "$1" ]; then _pct_color "$1"; _n="${_pc}$1\033[39m"; else _n="-"; fi
 }
-# $1 id ("" = unknown) $2 5h $3 wk $4 stale(1) $5 login failed(1) $6 own(1): sets _seg
+# $1 id ("" = unknown) $2 5h $3 wk $4 stale(1) $5 login failed(1) $6 own(1) $7 mode mark: sets _seg
 _account_entry() {
-  local label="${1:+$1 }" body
+  local label="${1:+$1$7 }" body
   if [ "$4" = "1" ] || [ "$5" = "1" ]; then
     body="\033[90m${label}${2:--}/${3:--}"
     [ "$5" = "1" ] && body="${body} ✗login"
@@ -323,11 +323,13 @@ if [ "$auth_mode" = "MAX" ]; then
   _own_done=0
   if [ -f "$_USAGE_ACCOUNTS" ]; then
     # First line: the pool (empty below two enabled accounts). Then one line per enabled account:
-    # id, 5h, wk, stale (sample > 1 h old), login failed. A window whose reset has passed counts as 0.
+    # id, 5h, wk, stale (sample > 1 h old), login failed, mode mark. A window whose reset has passed counts as 0.
+    # The mark is the account's mode from the file (claude-account status, written by fetch_usage.py): drain ↓,
+    # reserve ◆, paused ‖, normal or an override past its end none. A fixed map: file text is never rendered.
     # The own weekly figure in the pool is the session's live one.
     {
       IFS= read -r _pool_pct
-      while IFS=$'\x1f' read -r _oid _o5 _ow _ostale _obad; do
+      while IFS=$'\x1f' read -r _oid _o5 _ow _ostale _obad _omark; do
         [[ "$_oid" =~ ^[a-z][a-z0-9-]{0,15}$ ]] || continue
         _own=0
         if [ "$_oid" = "$_own_id" ]; then
@@ -335,7 +337,7 @@ if [ "$auth_mode" = "MAX" ]; then
           if [ "$_own_live" = "1" ]; then _o5="$_5h_pct"; _ow="$_wk_pct"; _ostale=0; _obad=0; _own_done=1; fi
         fi
         if [ -z "$_o5$_ow" ] && [ "$_obad" != "1" ]; then continue; fi
-        _account_entry "$_oid" "$_o5" "$_ow" "$_ostale" "$_obad" "$_own"
+        _account_entry "$_oid" "$_o5" "$_ow" "$_ostale" "$_obad" "$_own" "$_omark"
         accounts_part="${accounts_part:+$accounts_part · }${_seg}"
       done
     } < <(jq -r --argjson now "$_now_s" --arg own "$_own_id" --arg ownwk "$_wk_pct" '
@@ -349,12 +351,14 @@ if [ "$auth_mode" = "MAX" ]; then
                    | if $p == "ultra" then 20 elif $p == "max" then 5
                      else ([$p | scan("([0-9]+)x")[0] | tonumber] | .[0]) end),
             stale: (($v.sampled_at // 0) < ($now - 3600)),
-            bad: ($v.auth_ok == false) } ] as $acc
+            bad: ($v.auth_ok == false),
+            mark: (if ($v.mode.expired // false) then ""
+                   else ({drain: "↓", reserve: "◆", paused: "‖"}[$v.mode.kind // ""] // "") end) } ] as $acc
       | ($acc | all(.mult != null)) as $weighted
       | ($acc | map(select(.wk != null) | . + {w: (if $weighted then .mult else 1 end)})) as $known
       | (if ($acc | length) < 2 or ($known | length) == 0 then ""
          else (($known | map(.w * .wk) | add) / ($known | map(.w) | add) | round | tostring) end),
-        ($acc[] | [.id, (.five // "" | tostring), (.wk // "" | tostring), (if .stale then "1" else "0" end), (if .bad then "1" else "0" end)]
+        ($acc[] | [.id, (.five // "" | tostring), (.wk // "" | tostring), (if .stale then "1" else "0" end), (if .bad then "1" else "0" end), .mark]
           | join("\u001f"))' "$_USAGE_ACCOUNTS" 2>/dev/null)
     if [ -n "$_pool_pct" ]; then
       _pct_color "$_pool_pct"

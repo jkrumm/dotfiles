@@ -11,7 +11,9 @@ its own rate-limit budget and claim) and reads again. Still stale afterwards: th
 login error is written when claude-account says the login is rejected.
 All accounts are also written to /tmp/claude_sl/usage_accounts.json (per account: plan, and per window the
 fresh `utilization` plus the last known `value`/`value_resets_at_epoch` with its `age_s` — the statusline's
-other-account and pool segments read those). `--accounts` writes only that file: no API call, no host
+other-account and pool segments read those), plus each account's `mode` and `forecast` from `claude-account status
+--json` (the mark beside its numbers; absent when status is unavailable, the rest of the file is unchanged).
+`--accounts` writes only that file: no API call, no host
 report (the statusline's own 60 s refresh while a session already has rate_limits).
 
 Run via: uv run ~/.claude/fetch_usage.py [--accounts]
@@ -102,6 +104,24 @@ def _claude_account_usage() -> dict:
     return json.loads(result.stdout)
 
 
+def _claude_account_status() -> dict:
+    """`claude-account status --json` reduced to {id: {mode, forecast}}; {} on any failure (the fields are additive)."""
+    try:
+        exe = shutil.which(CLAUDE_ACCOUNT_BIN) or str(Path.home() / ".local" / "bin" / CLAUDE_ACCOUNT_BIN)
+        result = subprocess.run([exe, "status", "--json"], capture_output=True, text=True, check=True, timeout=5)  # well under the statusline's 20 s cap on the whole run
+        out = {}
+        for a in json.loads(result.stdout)["accounts"]:
+            mode, fc = a.get("mode") or {}, a.get("forecast")
+            out[a["id"]] = {
+                "mode": {"kind": mode.get("kind"), "for": mode.get("for"), "until_at": mode.get("until_at"), "expired": bool(mode.get("expired"))},
+                "forecast": None if not fc else {k: fc.get(k) for k in ("weekly_at_reset", "full_at", "waste_percent")},
+            }
+        return out
+    except Exception as e:
+        log_event("fetch_usage", "status_error", "warning", {"error": str(e), "type": type(e).__name__})
+        return {}
+
+
 def _window(row: dict, key: str, now: float) -> dict:
     """One window, only when its own sample is fresh enough; otherwise null (never a carried-over value)."""
     age = row.get(f"{key}_age_s")
@@ -116,6 +136,7 @@ def _window(row: dict, key: str, now: float) -> dict:
 
 
 def write_accounts_file(data: dict, now: float) -> None:
+    status = _claude_account_status()
     _write_json(ACCOUNTS_FILE, {
         "default_account": data.get("default_account"),
         "accounts": {
@@ -128,6 +149,7 @@ def write_accounts_file(data: dict, now: float) -> None:
                 "enabled": r.get("enabled"),
                 "auth_ok": r.get("auth_ok"),
                 "exhausted_until": r.get("exhausted_until"),
+                **status.get(r["id"], {}),
             }
             for r in data["accounts"]
         },

@@ -211,6 +211,38 @@ composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log")
 assert_contains "dead login, dead token: push is down" "status=down" "$composite"
 assert_contains "dead login: message" "billing API credits" "$composite"
 
+echo "check_quota: each account's mode mark and, when it will not be full at its reset, the forecast in words (fixture status output)"
+cat > "$TMP/ca-quota" <<'STUB'
+#!/bin/sh
+case "$1" in
+  usage) cat <<'JSON'
+{"default_account":"iu","accounts":[
+ {"id":"iu","enabled":true,"five_hour":null,"seven_day":20,"age_s":30},
+ {"id":"me","enabled":true,"five_hour":25,"seven_day":3,"age_s":30},
+ {"id":"me2","enabled":true,"five_hour":4,"seven_day":0,"age_s":30}]}
+JSON
+  ;;
+  status) [ "${STUB_STATUS_FAIL:-0}" = 1 ] && exit 1; cat <<'JSON'
+{"accounts":[
+ {"id":"iu","mode":{"kind":"reserve","for":"fable","expired":false},"forecast":{"weekly_at_reset":20,"full_at":null,"waste_percent":80}},
+ {"id":"me","mode":{"kind":"normal","expired":false},"forecast":{"weekly_at_reset":100,"full_at":"2026-11-24T04:03:36.978Z","waste_percent":0}},
+ {"id":"me2","mode":{"kind":"drain","until":"reset","expired":false},"forecast":{"weekly_at_reset":0,"full_at":null,"waste_percent":100}}]}
+JSON
+  ;;
+esac
+STUB
+chmod +x "$TMP/ca-quota"
+quota_run() { run_script DEVHOST_COMPONENTS="check_quota" DEVHOST_CLAUDE_ACCOUNT_BIN="$TMP/ca-quota" "$@"; composite=$(/usr/bin/grep 'push/detail' "$TMP/curl.log"); }
+quota_run
+assert_contains "drain and reserve show their marks beside the id" "me2↓ 5h 4% · 7d 0%" "$composite"
+assert_contains "reserve mark" "iu◆ 7d 20%" "$composite"
+assert_contains "a normal account has no mark" "me 5h 25% · 7d 3%" "$composite"
+assert_contains "forecast in words for an account that will not be full" "ends the week at 0%, 100% unused at reset" "$composite"
+assert_contains "forecast for the reserve account" "ends the week at 20%, 80% unused at reset" "$composite"
+assert_eq "no forecast for an account that fills" 2 "$(printf '%s' "$composite" | /usr/bin/grep -o 'ends the week' | wc -l | tr -d ' ')"
+quota_run STUB_STATUS_FAIL=1
+assert_contains "status unreadable: the row is as before" "iu 7d 20% | me 5h 25% · 7d 3% | me2 5h 4% · 7d 0%" "$composite"
+
 echo "check_memory: parked swap is a WARN, only a leak-sized share FAILs; fseventsd over the limit is named"
 cat > "$TMP/sysctl" <<'STUB'
 #!/bin/sh

@@ -110,6 +110,31 @@ assert_contains "no figures: own entry alone, pool falls back to the own account
 accounts_file "$FRESH_IU" "$(acct max5x 21 19 30 true true | jq -c '.five_hour.value_resets_at_epoch = 1 | .seven_day.value_resets_at_epoch = 1')"
 assert_contains "elapsed windows count as 0" "me 0/0" "$(line1 | plain)"
 
+echo "mode marks: drain ↓, reserve ◆, paused ‖; normal, an ended override and an unknown kind show none"
+mode() { jq -c --arg k "$1" --argjson e "${2:-false}" '. + {mode: {kind: $k, for: null, until_at: null, expired: $e}}'; }
+accounts_file "$(mode reserve <<<"$FRESH_IU")" "$(mode drain <<<"$FRESH_ME")"
+raw=$(line1); out=$(plain <<<"$raw")
+assert_contains "reserve and drain: one mark each beside the id, numbers untouched" "| iu◆ 43/17 ↺90m · me↓ 21/19 · ∑17%" "$out"
+assert_contains "own entry stays bold with its mark" "${BOLD}iu◆ " "$raw"
+accounts_file "$(mode normal <<<"$FRESH_IU")" "$(mode paused <<<"$FRESH_ME")"
+assert_contains "paused mark; normal none" "| iu 43/17 ↺90m · me‖ 21/19" "$(line1 | plain)"
+accounts_file "$(mode drain true <<<"$FRESH_IU")" "$(mode 'x\033[31mZQ' <<<"$FRESH_ME")"
+out=$(line1 | plain)
+assert_contains "an expired override shows no mark" "| iu 43/17" "$out"
+assert_contains "an unknown mode kind shows no mark, and none of its text" "me 21/19" "$out"
+accounts_file "$(mode drain <<<"$(acct max5x 21 19 7200 true true)")" "$(mode reserve <<<"$(acct max5x 21 19 30 false true)")"
+out=$(OWN=zz BADGE=ZZ line1 | plain)
+assert_contains "mark survives a stale sample and a failed login" "iu↓ 21/19" "$out"
+assert_contains "mark survives a failed login" "me◆ 21/19 ✗login" "$out"
+
+echo "the render reads files only: with the fixtures in place it never runs claude-account (status included)"
+SPY="$TMP/spy.log"; rm -f "$SPY"; mkdir -p "$TMP/home/.local/bin"
+printf '#!/bin/sh\necho "$*" >> "%s"\n' "$SPY" > "$TMP/home/.local/bin/claude-account"; chmod +x "$TMP/home/.local/bin/claude-account"
+accounts_file "$(mode reserve <<<"$FRESH_IU")" "$(mode drain <<<"$FRESH_ME")"
+render >/dev/null; sleep 1
+[[ ! -e "$SPY" ]] && ok "no claude-account spawned by a render that shows marks" || bad "a render spawned claude-account" "$(cat "$SPY")"
+rm -f "$TMP/home/.local/bin/claude-account"
+
 echo "single account / missing data"
 accounts_file "$FRESH_IU" "$(acct max5x 21 19 30 true false)"
 out=$(BADGE='' line1 | plain)
