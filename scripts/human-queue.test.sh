@@ -820,6 +820,16 @@ STUB
     assert_eq "push issue errand: Run exits 0" "0" "$rc"
     assert_contains "push issue errand: closed with the result note" "errand done errand_issue-1 --note answered on the MacBook (exit 0): issue-ran" "$(cat "$FXDIR/calls")"
     assert_eq "push issue errand: no queue file written" "0" "$(queued_count)"
+    # An auto-run answer (a granted class ran with no dialog) closes the Errand too, saying so, on the agent token.
+    mkdir -p "$TMP/autoerr"
+    printf '%s\n' '#!/usr/bin/env bash' 'req="$(cat)"; id="$(printf %s "$req" | jq -r .id)"' 'printf '"'"'{"id":"%s","status":"done","exit":0,"ran_at":"x","output_tail":"seeded","via":"auto-run","class":"secrets-seed"}\n'"'"' "$id"' >"$TMP/autoerr/ssh"
+    chmod +x "$TMP/autoerr/ssh"
+    jq -nc '{id:"errand_auto-1", issueId:"issue_9", summary:"seed", command:"echo seeded", requestKey:null,
+      check:null, expiresAt:null, host:"macbook", source:null, raisedAt:"2026-11-13T09:00:00.000Z", doneAt:null}' >> "$FXDIR/open.jsonl"
+    : > "$FXDIR/calls"
+    out="$(PATH="$TMP/autoerr:$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=macbook-x bash "$AH" push errand_auto-1 2>&1)"; rc=$?
+    assert_eq "push errand, auto-run: exits 0" "0" "$rc"
+    assert_contains "push errand, auto-run: closed with a note that says so, on the agent token" "errand done errand_auto-1 --note ran by itself on the MacBook (auto-run secrets-seed, exit 0): seeded" "$(grep -- '--confirmed-by' "$FXDIR/calls")"
     out="$(bash "$AH" push errand_nope-1 2>&1)"; rc=$?
     assert_eq "push unknown errand: rc 1" "1" "$rc"
     assert_contains "push unknown errand: names the id" "no open errand: errand_nope-1" "$out"
@@ -920,6 +930,113 @@ STUB
   pass=$((pass + $(grep -c '\[32mok' "$TMP/errands.out")))
   fail=$((fail + $(grep -c 'FAIL' "$TMP/errands.out")))
 fi
+
+echo "human-queue.sh consent — grant, revoke, list, the kill switch"
+JK="$TMP/jk"
+CATA="$TMP/auto-classes.tsv"
+printf '# test catalogue\nsecrets-seed\tcd ~/x && hc run --timeout <N> '"'make secrets-seed'"'\tbiometric\t1200\nsecrets-seed\tgit pull; cd ~/x\tbiometric\t1200\nlogs\techo logs\tnone\t60\n' >"$CATA"
+cons() { HUMAN_QUEUE_AUTO_RUN_DIR="$JK" HUMAN_QUEUE_AUTO_CATALOGUE="$CATA" bash "$HQ" consent "$@"; }
+no_tty() { python3 -I -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"; }
+out="$(cons list 2>&1)"
+assert_contains "consent list: on by default" "auto-run: on" "$out"
+assert_contains "consent list: a catalogue class is inert before a grant" "secrets-seed         inert     needs biometric" "$out"
+assert_eq "consent list: one line per class, not per row" "1" "$(grep -c 'secrets-seed' <<<"$out")"
+out="$(cons grant nope 2>&1)"; rc=$?
+assert_eq "consent grant: not a catalogue class is refused" "1" "$rc"
+assert_contains "consent grant: says so" "not a catalogue class" "$out"
+cons grant 'bad name' >/dev/null 2>&1; assert_eq "consent grant: malformed class refused" "1" "$?"
+printf 'no\n' >"$TMP/answer"
+HUMAN_QUEUE_CONSENT_INPUT="$TMP/answer" cons grant secrets-seed >/dev/null 2>&1; assert_eq "consent grant: anything but yes is refused" "1" "$?"
+assert_eq "consent grant: nothing written on a refusal" "no" "$([[ -e "$JK/auto-run.consent" ]] && echo yes || echo no)"
+printf 'yes\n' >"$TMP/answer"
+out="$(HUMAN_QUEUE_CONSENT_INPUT="$TMP/answer" cons grant secrets-seed 2>&1)"; rc=$?
+assert_eq "consent grant: typed yes grants" "0" "$rc"
+assert_contains "consent grant: the prompt shows the exact templates" "cd ~/x && hc run --timeout <N> 'make secrets-seed'" "$out"
+assert_contains "consent grant: the prompt shows every variant" "git pull; cd ~/x" "$out"
+assert_eq "consent grant: the file lists the class" "secrets-seed" "$(cat "$JK/auto-run.consent")"
+assert_eq "consent grant: file mode 600" "600" "$(stat -f %Lp "$JK/auto-run.consent")"
+assert_eq "consent grant: dir mode 700" "700" "$(stat -f %Lp "$JK")"
+assert_contains "consent list: granted" "secrets-seed         granted" "$(cons list)"
+out="$(cons grant secrets-seed 2>&1)"; assert_contains "consent grant: twice is a no-op" "already granted" "$out"
+# no terminal: one click in a native dialog
+no_tty env HUMAN_QUEUE_TEST_BUTTON=Cancel HUMAN_QUEUE_AUTO_RUN_DIR="$JK" HUMAN_QUEUE_AUTO_CATALOGUE="$CATA" bash "$HQ" consent grant logs </dev/null >/dev/null 2>&1
+assert_eq "consent grant, dialog Cancel: refused" "1" "$?"
+assert_not_contains "consent grant, dialog Cancel: not written" "logs" "$(cat "$JK/auto-run.consent")"
+no_tty env HUMAN_QUEUE_TEST_BUTTON=TIMEOUT HUMAN_QUEUE_AUTO_RUN_DIR="$JK" HUMAN_QUEUE_AUTO_CATALOGUE="$CATA" bash "$HQ" consent grant logs </dev/null >/dev/null 2>&1
+assert_eq "consent grant, dialog gave up: refused" "1" "$?"
+no_tty env HUMAN_QUEUE_TEST_BUTTON=Grant HUMAN_QUEUE_AUTO_RUN_DIR="$JK" HUMAN_QUEUE_AUTO_CATALOGUE="$CATA" bash "$HQ" consent grant logs </dev/null >/dev/null 2>&1
+assert_eq "consent grant, dialog Grant: granted" "0" "$?"
+assert_eq "consent grant: both classes listed, file still 600" "logs secrets-seed 600" "$(sort "$JK/auto-run.consent" | tr '\n' ' ')$(stat -f %Lp "$JK/auto-run.consent")"
+cons revoke secrets-seed >/dev/null 2>&1; assert_eq "consent revoke: rc 0" "0" "$?"
+assert_eq "consent revoke: only that class goes" "logs" "$(cat "$JK/auto-run.consent")"
+assert_eq "consent revoke: file mode stays 600" "600" "$(stat -f %Lp "$JK/auto-run.consent")"
+assert_contains "consent revoke: not granted is said, not an error" "was not granted" "$(cons revoke secrets-seed 2>&1)"
+cons off >/dev/null 2>&1
+assert_eq "consent off: kill switch file" "yes" "$([[ -e "$JK/auto-run.off" ]] && echo yes || echo no)"
+assert_eq "consent off: file mode 600" "600" "$(stat -f %Lp "$JK/auto-run.off")"
+assert_contains "consent list: shows off" "auto-run: OFF" "$(cons list)"
+assert_eq "consent off: grants kept" "logs" "$(cat "$JK/auto-run.consent")"
+cons on >/dev/null 2>&1
+assert_eq "consent on: kill switch removed" "no" "$([[ -e "$JK/auto-run.off" ]] && echo yes || echo no)"
+cons bogus >/dev/null 2>&1; assert_eq "consent: unknown subcommand refused" "1" "$?"
+out="$(HUMAN_QUEUE_AUTO_RUN_DIR="$TMP/jk-none" bash "$HQ" consent list 2>&1 </dev/null)"
+assert_contains "consent list: the shipped catalogue has secrets-seed, inert" "secrets-seed         inert" "$out"
+no_tty env HUMAN_QUEUE_TEST_BUTTON=Cancel HUMAN_QUEUE_AUTO_RUN_DIR="$TMP/jk-none" bash "$HQ" consent grant secrets-seed </dev/null >/dev/null 2>&1
+assert_eq "consent: a refused grant on the shipped catalogue writes nothing" "no" "$([[ -e "$TMP/jk-none/auto-run.consent" ]] && echo yes || echo no)"
+
+echo "ask-human.sh push — auto-run first, the dialog on 75/77 only where no biometric is pending"
+AUTOBIN="$TMP/autobin"; mkdir -p "$AUTOBIN"
+SSH_CALLS="$TMP/ssh-calls"; export SSH_CALLS
+cat >"$AUTOBIN/ssh" <<'STUB'
+#!/usr/bin/env bash
+for verb; do :; done
+req="$(cat)"
+echo "$verb" >>"$SSH_CALLS"
+id="$(printf '%s' "$req" | jq -r .id)"
+case "$verb" in
+  auto-run)
+    [[ "$AUTO_RC" == 0 ]] && printf '{"id":"%s","status":"done","exit":0,"ran_at":"x","output_tail":"by-auto-run","via":"auto-run","class":"secrets-seed"}\n' "$id"
+    exit "$AUTO_RC" ;;
+  gui-run) printf '{"id":"%s","status":"done","exit":0,"ran_at":"x","output_tail":"by-dialog"}\n' "$id" ;;
+esac
+STUB
+chmod +x "$AUTOBIN/ssh"
+ASTATE="$TMP/state-auto"; mkdir -p "$ASTATE"
+aha() { XDG_STATE_HOME="$ASTATE" PATH="$AUTOBIN:$PATH" HUMAN_QUEUE_MAC_HOST=macbook-x bash "$AH" "$@"; }
+AQ="$ASTATE/human-queue"
+ask_id() { XDG_STATE_HOME="$ASTATE" bash "$AH" ask "$@"; }
+# push_case <auto rc> <ask args...>; sets PRC, CALLS_SEEN and PID
+push_case() {
+  AUTO_RC="$1"; shift
+  export AUTO_RC; : >"$SSH_CALLS"
+  PID="$(ask_id "$@")"
+  PRC=0; aha push "$PID" >"$TMP/push.out" 2>"$TMP/push.err" || PRC=$?
+  CALLS_SEEN="$(tr '\n' ' ' <"$SSH_CALLS")"
+}
+push_case 0 "seed" --cmd "echo x"
+assert_eq "push, auto-run ran it: rc 0" "0" "$PRC"
+assert_eq "push, auto-run ran it: no dialog verb sent" "auto-run " "$CALLS_SEEN"
+assert_contains "push, auto-run ran it: result persisted" "by-auto-run" "$(cat "$AQ/$PID.res")"
+assert_eq "push, auto-run ran it: the persisted result carries via and class" "auto-run secrets-seed" "$(jq -r '.via + " " + .class' "$AQ/$PID.res")"
+push_case 77 "seed" --cmd "echo x"
+assert_eq "push, auto-run 77: falls back to the dialog" "auto-run gui-run " "$CALLS_SEEN"
+assert_contains "push, auto-run 77: the dialog's result is the answer" "by-dialog" "$(cat "$AQ/$PID.res")"
+assert_eq "push, the fallback dialog's result carries neither via nor class" "null null" "$(jq -r '"\(.via) \(.class)"' "$AQ/$PID.res")"
+push_case 126 "seed" --cmd "echo x"
+assert_eq "push, a gate without the verb (126): falls back to the dialog" "auto-run gui-run " "$CALLS_SEEN"
+assert_eq "push, a gate without the verb: rc 0 from the dialog" "0" "$PRC"
+push_case 75 "seed" --cmd "echo x"
+assert_eq "push, locked screen (75): rc 75" "75" "$PRC"
+assert_eq "push, locked screen: no dialog verb sent" "auto-run " "$CALLS_SEEN"
+assert_eq "push, locked screen: request stays pending (no result)" "no" "$([[ -e "$AQ/$PID.res" ]] && echo yes || echo no)"
+assert_eq "push, locked screen: not marked unreachable" "no" "$([[ -e "$AQ/$PID.queued" ]] && echo yes || echo no)"
+assert_contains "push, locked screen: says what happens next" "screen is locked" "$(cat "$TMP/push.err")"
+push_case 255 "seed" --cmd "echo x"
+assert_eq "push, ssh failure on auto-run: 69" "69" "$PRC"
+assert_eq "push, ssh failure: no second connection" "auto-run " "$CALLS_SEEN"
+assert_eq "push, ssh failure: marked queued" "yes" "$([[ -e "$AQ/$PID.queued" ]] && echo yes || echo no)"
+push_case 0 "just a question"
+assert_eq "push, a request with no command: dialog only" "gui-run " "$CALLS_SEEN"
 
 wait "$keys_pid"
 cat "$TMP/keys.out"

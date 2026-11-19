@@ -112,3 +112,41 @@ printable() {
 validate_id() {
   [[ "$1" =~ ^[0-9]{8}T[0-9]{6}-[0-9]+$ ]] || die "invalid request id: $1"
 }
+
+# The result payload shape, shared by write_result (ssh'd back to the mini
+# after an interactive `run`), gui-run's and auto-run's own stdout (read by ask-human.sh's
+# `push`, running ON the mini, which persists it locally with no extra hop).
+# Both callers already validate the id before reaching here.
+build_result_json() {
+  local id="$1" status="$2" exit_code="$3" ran_at="$4" output_tail="$5" terminal="${6:-}" via="${7:-}" class="${8:-}"
+  local exit_json="null"
+  [[ -n "$exit_code" ]] && exit_json="$exit_code"
+  printf '{'
+  printf '"id":%s,' "$(json_escape "$id")"
+  printf '"status":%s,' "$(json_escape "$status")"
+  printf '"exit":%s,' "$exit_json"
+  [[ -n "$terminal" ]] && printf '"terminal":%s,' "$(json_escape "$terminal")"
+  # An auto-run answer says so, for the factory to count and label: {"via":"auto-run","class":"<class>"}. A dialog's carries neither.
+  [[ -n "$via" ]] && printf '"via":%s,' "$(json_escape "$via")"
+  [[ -n "$class" ]] && printf '"class":%s,' "$(json_escape "$class")"
+  printf '"ran_at":%s,' "$(json_escape "$ran_at")"
+  printf '"output_tail":%s' "$(json_escape "$output_tail")"
+  printf '}\n'
+}
+
+# The first 20 and last 20 lines of a file (all of it when it is no longer), each
+# line cut at 400 chars and carriage returns dropped: what the result carries back.
+head_tail_lines() {
+  local file="$1" total
+  total="$(wc -l < "$file" | tr -d ' ')"
+  if (( total <= 40 )); then
+    tr -d '\r' < "$file" | cut -c1-400
+    return
+  fi
+  {
+    head -n 20 "$file"
+    printf '... (%d lines omitted) ...\n' "$(( total - 40 ))"
+    tail -n 20 "$file"
+  } | tr -d '\r' | cut -c1-400
+}
+

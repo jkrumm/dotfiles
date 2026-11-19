@@ -1,0 +1,12 @@
+# The closed list behind `ssh iumac auto-run` (scripts/iumac-gate.sh, run on the MacBook): command lines that run with no dialog
+# once the owner has granted their class there (`human-queue.sh consent grant <class>`; a row is inert until then).
+# One row per command line: <class><TAB><command template><TAB><needs: none|biometric><TAB><time limit, seconds>.
+# A request's command must equal a template byte for byte; the only variable part is the slot <N> (1 to 4 digits).
+# `biometric` = the command raises a 1Password prompt, so the gate runs it only on an unlocked screen (exit 75 otherwise,
+# the request stays pending). Several rows may share a class (variants of one shape). Add a row only for a shape that
+# repeats with no refusal; never sudo, a restart, the deploy gate's release, a recursive delete, hc server/hc update.
+# The factory mirrors the class names in domains/checkpoints/triage.ts: add them in both. A row reaches the MacBook with
+# the next `dotfiles-sync`.
+secrets-seed	cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'	biometric	1200
+secrets-seed	git -C ~/SourceRoot/dotfiles-private pull --ff-only && cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'	biometric	1200
+secrets-seed	git -C ~/SourceRoot/dotfiles-private pull -q --ff-only; cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'	biometric	1200

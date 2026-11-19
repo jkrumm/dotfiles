@@ -381,6 +381,7 @@ macOS ships no Tailscale SSH server.
   |-|-|
   | `true` | probe |
   | `gui-run` | stdin = request JSON; `human-queue.sh gui-run` (native dialog, runs only on a click) |
+  | `auto-run` | stdin = request JSON; runs its `cmd` with **no dialog** when it is byte-equal to a template of `config/macbook-auto-classes.tsv` and the owner granted that class on the MacBook (*Auto-run*, below). Result line as `gui-run`'s plus `"via":"auto-run"` and `"class"`. Exit 77: not a class, not granted or switched off (the caller falls back to the dialog); 75: a `biometric` class on a locked screen (nothing runs, no dialog, the request stays pending) |
   | `notify` | stdin: title line, then text; native notification |
   | `open-url` | stdin: app name (or empty), then an https URL; `open` |
   | `relogin <id> [--visible]` | `claude-relogin.sh <id> --machine macbook [--visible]` |
@@ -438,6 +439,18 @@ macOS ships no Tailscale SSH server.
 - **Also the transport for `ask-human.sh … --push`** (see *human-queue*, below):
   it sends the `gui-run` verb, which shows the exact string in a human dialog
   and runs it only on a click.
+
+
+### Auto-run — a granted command class runs with no dialog
+
+Most MacBook commands from an Errand or `ask-human.sh` are one-offs a lead wrote, and keep the `gui-run` dialog. A *repeating* shape the owner has approved runs by itself: `ask-human.sh push` sends the request to the `auto-run` verb first and falls back to the dialog on 77 (and on any other failure of the verb, e.g. a MacBook not yet synced). The mini is the gate's adversary, so only command **shapes** can run unattended, never free text:
+
+1. **Catalogue** `config/macbook-auto-classes.tsv` (reaches the MacBook with `dotfiles-sync`; the factory mirrors the class names in `domains/checkpoints/triage.ts`): `<class>\t<command template>\t<needs none|biometric>\t<time limit s>`. The one variable part is the slot `<N>` (1 to 4 digits); several rows may share a class (variants of one shape). Day one: `secrets-seed`, the three byte-exact shapes that repeat in the queue history (`cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'`, with an optional `git -C ~/SourceRoot/dotfiles-private pull --ff-only && ` or `pull -q --ff-only; ` before it). A row is inert until granted. Never a class: sudo, restart/power-off, the deploy gate's release, a recursive delete, `hc server`/`hc update`, yes/no questions, device steps.
+2. **Consent** `~/.config/jk/auto-run.consent` (mode 600, never in git): one class name per line, written only by `human-queue.sh consent grant <class>` (a typed `yes` on a terminal, else one click in a dialog that shows the templates) and `consent revoke <class>`. `consent list` shows each class granted or inert and whether the switch is on; `consent off` creates `~/.config/jk/auto-run.off` (the kill switch, checked on every call: every class falls back to the dialog), `consent on` removes it. No gate verb and no factory route writes either file; the gate also ignores a consent file that is not owned by the user or is group/world-writable.
+3. **Gate checks, in order**: kill switch absent; `cmd` has no control character and equals one template (anchored regex built from the template, `<N>` = `[0-9]{1,4}`; a near-miss, an appended command or a metacharacter outside the template matches nothing); class granted; for `needs biometric` the screen is unlocked (`CGSSessionScreenIsLocked` from `ioreg -n Root -d1 -a`; an unreadable state counts as locked). Pass: the command runs with `bash -c` under the template's time limit (output to a temp file, `[hc]` notes dropped, a terminal still running at `hc run`'s timeout is `pending` as in `gui-run`), one result JSON line goes to stdout, the log gets verb, class and exit (never arguments) and a notification says `ran <class> for <request text>`. A `needs none` class runs whenever the MacBook answers; a locked screen on a biometric class returns 75 and `push` leaves the request pending, so the next desk pass retries and no dialog shows. The 1Password Touch ID prompt is the gate for `secrets-seed`.
+4. **The edge, stated.** A granted class runs code from the MacBook's dotfiles checkout and the mini can push to dotfiles; `dotfiles-sync` already does the same unattended. The class does not widen it. Rollback: `human-queue.sh consent off`, or revoke the class.
+
+Tests: `scripts/iumac-gate.test.sh` (verb, refusals, screen, no consent writes), `scripts/human-queue.test.sh` (consent verbs, push fallback).
 
 ### Agent notes — agent to agent, both ways
 
@@ -662,7 +675,8 @@ tries). The Herdr sidebar's human-queue rows carry ✓ (done) and × (drop), whi
   (no extra ssh hop back — `ask-human.sh` already has the result from the same
   round trip) and exit with the command's own exit code; `denied` writes `.res`
   and exits 1; `unanswered` (dialog timed out, or the command was too long to
-  show) leaves the request pending, unchanged, for `make human-queue`, exit 75;
+  show) leaves the request pending, unchanged, for `make human-queue`, exit 75 (a biometric
+  *auto-run* class on a locked screen also exits 75, with no dialog: *Auto-run*, above);
   an ssh failure or an unparseable response also leaves it pending, exit 69.
   `push` refuses an id that already has a `.res`.
 - **An approved command runs in an `hc` terminal of the MacBook's core**, not in the
