@@ -185,9 +185,20 @@ close_errand() {
 
 # The dialog's answer (gui-run's result JSON) closes the Errand it was for.
 errand_answer() {
-  local errand="$1" status="$2" out="$3" tail_text exit_code by="ask-human: the owner clicked Run in the MacBook dialog"
+  local errand="$1" status="$2" out="$3" tail_text exit_code via class by="ask-human: the owner clicked Run in the MacBook dialog"
   tail_text="$(json_field "$out" output_tail 2>/dev/null || true)"
   exit_code="$(json_field "$out" exit 2>/dev/null || true)"
+  via="$(json_field "$out" via 2>/dev/null || true)"
+  class="$(json_field "$out" class 2>/dev/null | tr -cd 'a-z0-9-' || true)"
+  # An auto-run answer says so in the closing note, for the factory to count and label.
+  if [[ "$via" == auto-run ]]; then
+    by="ask-human: auto-run class $class, granted by the owner on the MacBook, ran it with no dialog"
+    case "$status" in
+      failed) close_errand "$errand" "done" "ran by itself on the MacBook (auto-run $class) and failed (exit ${exit_code:-?}): $tail_text" "$by" || true ;;
+      *) close_errand "$errand" "done" "ran by itself on the MacBook (auto-run $class, exit ${exit_code:-0}): $tail_text" "$by" || true ;;
+    esac
+    return
+  fi
   case "$status" in
     denied) close_errand "$errand" not_needed "denied on the MacBook" || true ;;
     failed) close_errand "$errand" "done" "ran on the MacBook and failed (exit ${exit_code:-?}): $tail_text" "$by" || true ;;
@@ -525,7 +536,9 @@ pending_where() {
   if [[ -n "$1" ]]; then echo "answer it in the factory Console (Needs you) or push $1 again"; else echo "run 'make human-queue' on the MacBook"; fi
 }
 
-# Triggers the approval itself: ssh to the MacBook (its own dedicated key,
+# Triggers the approval itself. A request with a command goes to the gate's `auto-run` verb first (a granted catalogue
+# class runs with no dialog, see docs/remote-dev.md → Auto-run): 77 falls back to the dialog, 75 (a biometric class on a
+# locked screen) leaves the request pending with no dialog. Otherwise: ssh to the MacBook (its own dedicated key,
 # which runs only fixed verbs — see docs/remote-dev.md → *mini → iumac*; no
 # agent forwarding, so this borrows no other credential) and send the `gui-run`
 # verb, which runs `human-queue.sh gui-run` there, piping the request's OWN .req file to it over stdin — never
@@ -557,8 +570,30 @@ push_request() {
   # ssh would end the script right there, with ssh's 255 instead of the documented
   # 69 and the request's state unexplained. Only the LAST line is the result — a
   # login shell on the MacBook may print before the command runs.
-  local out rc=0
-  if [[ "$MAC_HOST" == local ]]; then
+  local out rc=0 auto=0
+  if [[ "$MAC_HOST" != local && -n "$(json_field "$(cat "$req_file")" cmd)" ]]; then
+    # A command goes to `auto-run` first: when it is a granted catalogue class the MacBook runs it with no dialog and
+    # answers with the same result line. 77 = not a class, not granted or switched off: the dialog below, as before.
+    # 75 = a biometric class on a locked screen: no dialog, the request stays pending for the next desk pass.
+    # shellcheck disable=SC2029
+    out="$(ssh "${PUSH_SSH_OPTS[@]}" "$MAC_HOST" auto-run < "$req_file" 2>/dev/null | tail -n 1)" || rc=$?
+    case "$rc" in
+      0) [[ -z "$out" ]] || auto=1 ;;
+      75)
+        rm -f "$QUEUE_DIR/$id.queued"
+        note "push $id: the MacBook screen is locked and this class needs 1Password — request stays pending, the next desk pass runs it ($(pending_where "$errand"))"
+        return 75
+        ;;
+      255) ;; # unreachable: the handling below reports it, no second connect attempt
+      *) rc=0 ;;
+    esac
+  fi
+
+  if (( auto )); then
+    :
+  elif (( rc == 255 )); then
+    out=""
+  elif [[ "$MAC_HOST" == local ]]; then
     # Already on the MacBook (the MacBook's own keepalive asking for a re-login): no ssh self-loop, run the same
     # gui-run here. human-queue.sh refuses on the mini, which surfaces below as the usual "no response" (69).
     out="$(bash "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/human-queue.sh" gui-run < "$req_file" 2>/dev/null | tail -n 1)" || rc=$?

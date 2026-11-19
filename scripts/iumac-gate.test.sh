@@ -342,6 +342,157 @@ expect_refused "rsync extra option after path" "rsync --server --sender -logDtpr
 expect_refused "rsync glob source" "rsync --server --sender -logDtpr . .claude/*"
 
 echo "== decision log"
+echo "== auto-run"
+mkdir -p "$H/SourceRoot/dotfiles/config" "$H/.config"
+ln -sf "$HERE/lib/human-queue-json.sh" "$SC/lib/human-queue-json.sh"
+mkstub "$H/.local/bin/git" git
+CAT="$H/SourceRoot/dotfiles/config/macbook-auto-classes.tsv"
+cp "$HERE/../config/macbook-auto-classes.tsv" "$CAT"
+printf '%s\t%s\t%s\t%s\n' \
+  "echo-class" "echo ran-<N>" "none" "5" \
+  "bad-slot" "echo <X>" "none" "5" \
+  "bad-needs" "echo needs" "maybe" "5" >>"$CAT"
+CONSENT="$H/.config/jk/auto-run.consent"
+OFFSW="$H/.config/jk/auto-run.off"
+IOREG_UNLOCKED="$BIN/ioreg-unlocked"
+IOREG_LOCKED="$BIN/ioreg-locked"
+IOREG_BROKEN="$BIN/ioreg-broken"
+printf '#!/bin/sh\necho "<dict><key>CGSSessionScreenIsLocked</key><false/><key>kCGSSessionOnConsoleKey</key><true/></dict>"\n' >"$IOREG_UNLOCKED"
+printf '#!/bin/sh\necho "<dict><key>CGSSessionScreenIsLocked</key>\n\t<true/></dict>"\n' >"$IOREG_LOCKED"
+printf '#!/bin/sh\nexit 1\n' >"$IOREG_BROKEN"
+chmod +x "$IOREG_UNLOCKED" "$IOREG_LOCKED" "$IOREG_BROKEN"
+grant() { mkdir -p "$H/.config/jk"; printf '%s\n' "$@" >"$CONSENT"; chmod 600 "$CONSENT"; rm -f "$OFFSW"; }
+
+AUTO_OUT=""
+# run_auto <command> [ioreg stub] — the request JSON on stdin; AUTO_OUT = stdout, RC = exit code
+run_auto() {
+  local req
+  req="$(jq -cn --arg id "20261119T000000-1" --arg text "unseal the vault" --arg cmd "$1" '{id: $id, text: $text, cmd: $cmd}')"
+  reset
+  AUTO_OUT="$(printf '%s' "$req" | SSH_ORIGINAL_COMMAND=auto-run IUMAC_GATE_HOME="$H" IUMAC_GATE_IOREG="${2:-$IOREG_UNLOCKED}" \
+    PATH="$BIN:$PATH" /bin/bash "$GATE" 2>"$TMP/auto.err")"
+  RC=$?
+}
+expect_auto_refused() { # <label> <expected rc> <command> [ioreg stub]
+  run_auto "$3" "${4:-}"
+  assert_eq "auto-run $1: rc $2" "$2" "$RC"
+  assert_eq "auto-run $1: no stdout" "" "$AUTO_OUT"
+  if [[ ! -e "$REC/calls" && ! -e "$MARK" ]]; then ok "auto-run $1: nothing executed"; else bad "auto-run $1: nothing executed" "calls=[$(calls)]"; fi
+}
+ran() { calls | grep -v '^osascript'; }
+
+SEED="cd ~/SourceRoot/dotfiles && hc run --timeout 900 'make secrets-seed'"
+rm -rf "$H/.config/jk"
+expect_auto_refused "no consent file" 77 "$SEED"
+assert_eq "auto-run: a refusal never creates the consent file" "no" "$([[ -e "$CONSENT" ]] && echo yes || echo no)"
+
+grant secrets-seed
+run_auto "$SEED"
+assert_eq "auto-run granted: rc 0" "0" "$RC"
+assert_eq "auto-run granted: the command ran" "hc|run|--timeout|900|make secrets-seed" "$(ran)"
+assert_eq "auto-run granted: one result line" "1" "$(printf '%s\n' "$AUTO_OUT" | wc -l | tr -d ' ')"
+assert_eq "auto-run granted: status" "done" "$(jq -r .status <<<"$AUTO_OUT")"
+assert_eq "auto-run granted: id echoed" "20261119T000000-1" "$(jq -r .id <<<"$AUTO_OUT")"
+assert_eq "auto-run granted: exit 0" "0" "$(jq -r .exit <<<"$AUTO_OUT")"
+assert_eq "auto-run granted: result carries via" "auto-run" "$(jq -r .via <<<"$AUTO_OUT")"
+assert_eq "auto-run granted: result carries the class" "secrets-seed" "$(jq -r .class <<<"$AUTO_OUT")"
+assert_eq "auto-run granted: notification names class and request" "osascript|-|iumac auto-run|ran secrets-seed for unseal the vault" "$(grep '^osascript' "$REC/calls" 2>/dev/null)"
+run_auto "git -C ~/SourceRoot/dotfiles-private pull --ff-only && $SEED"
+assert_eq "auto-run pull && variant: runs" "git|-C|$H/SourceRoot/dotfiles-private|pull|--ff-only
+hc|run|--timeout|900|make secrets-seed" "$(ran)"
+run_auto "git -C ~/SourceRoot/dotfiles-private pull -q --ff-only; $SEED"
+assert_eq "auto-run pull ; variant: runs" "git|-C|$H/SourceRoot/dotfiles-private|pull|-q|--ff-only
+hc|run|--timeout|900|make secrets-seed" "$(ran)"
+run_auto "${SEED/900/30}"
+assert_eq "auto-run: another <N> runs" "hc|run|--timeout|30|make secrets-seed" "$(ran)"
+STUB_RC=3 run_auto "$SEED"
+assert_eq "auto-run failing command: gate still exits 0" "0" "$RC"
+assert_eq "auto-run failing command: status failed" "failed" "$(jq -r .status <<<"$AUTO_OUT")"
+assert_eq "auto-run failing command: its own exit" "3" "$(jq -r .exit <<<"$AUTO_OUT")"
+assert_eq "auto-run failing command: result carries via and class" "auto-run secrets-seed" "$(jq -r '.via + " " + .class' <<<"$AUTO_OUT")"
+# a terminal still running at hc's timeout is pending, not failed
+cat >"$H/.local/bin/hc" <<'STUB'
+#!/bin/bash
+echo "Password:"
+echo "[hc] still running as t9zz: hc wait t9zz" >&2
+exit 124
+STUB
+run_auto "$SEED"
+assert_eq "auto-run still running: status pending" "pending" "$(jq -r .status <<<"$AUTO_OUT")"
+assert_eq "auto-run still running: terminal id" "t9zz" "$(jq -r .terminal <<<"$AUTO_OUT")"
+assert_eq "auto-run still running: result carries via and class" "auto-run secrets-seed" "$(jq -r '.via + " " + .class' <<<"$AUTO_OUT")"
+assert_eq "auto-run still running: hc's own note is not output" "Password:" "$(jq -r .output_tail <<<"$AUTO_OUT" | tr -d '\n')"
+mkstub "$H/.local/bin/hc" hc
+
+echo "== auto-run refusals: nothing runs"
+touch "$OFFSW"
+expect_auto_refused "kill switch" 77 "$SEED"
+rm -f "$OFFSW"
+grant echo-class
+expect_auto_refused "ungranted class" 77 "$SEED"
+grant secrets-seed
+expect_auto_refused "one byte more (trailing space)" 77 "$SEED "
+expect_auto_refused "one byte less" 77 "${SEED%?}"
+expect_auto_refused "one byte different (seeds)" 77 "${SEED/secrets-seed/secrets-seeds}"
+expect_auto_refused "other directory" 77 "${SEED/dotfiles/dotfile}"
+expect_auto_refused "five digits" 77 "${SEED/900/90000}"
+expect_auto_refused "empty slot" 77 "${SEED/900/}"
+expect_auto_refused "letters in the slot" 77 "${SEED/900/9a0}"
+expect_auto_refused "negative slot" 77 "${SEED/900/-9}"
+expect_auto_refused "command appended with ;" 77 "$SEED; touch $MARK"
+expect_auto_refused "command appended with &&" 77 "$SEED && touch $MARK"
+expect_auto_refused "command substitution" 77 "${SEED/900/\$(touch $MARK)}"
+expect_auto_refused "backticks in the slot" 77 "${SEED/900/`touch $MARK`}"
+expect_auto_refused "newline appended" 77 "$SEED"$'\n'"touch $MARK"
+expect_auto_refused "newline inside" 77 "${SEED/ && /&&$'\n'}"
+expect_auto_refused "carriage return" 77 "$SEED"$'\r'
+expect_auto_refused "escape byte" 77 "${SEED/make/ma$'\033'ke}"
+expect_auto_refused "pipe prefix" 77 "true | $SEED"
+expect_auto_refused "metacharacter in the slot" 77 "${SEED/900/9;9}"
+expect_auto_refused "a different command" 77 "id"
+expect_auto_refused "a class name is not a command" 77 "secrets-seed"
+expect_auto_refused "row with an unknown slot is inert" 77 "echo <X>"
+expect_auto_refused "row with an unknown needs is inert" 77 "echo needs"
+grant bad-slot bad-needs
+expect_auto_refused "granted but inert rows" 77 "echo needs"
+grant secrets-seed
+run_auto ""
+assert_eq "auto-run: no command (informational): rc 77" "77" "$RC"
+assert_eq "auto-run: no command: nothing executed" "no" "$([[ -e "$REC/calls" ]] && echo yes || echo no)"
+reset; printf 'not json' | SSH_ORIGINAL_COMMAND=auto-run IUMAC_GATE_HOME="$H" PATH="$BIN:$PATH" /bin/bash "$GATE" >/dev/null 2>&1; assert_eq "auto-run: malformed stdin: rc 77" "77" "$?"
+chmod 660 "$CONSENT"
+expect_auto_refused "group-writable consent file" 77 "$SEED"
+chmod 666 "$CONSENT"
+expect_auto_refused "world-writable consent file" 77 "$SEED"
+chmod 600 "$CONSENT"
+expect_refused "auto-run with an argument" "auto-run now"
+expect_refused "auto-run chained" "auto-run; id"
+
+echo "== auto-run: the screen"
+expect_auto_refused "locked screen, biometric class" 75 "$SEED" "$IOREG_LOCKED"
+assert_contains "auto-run locked: stderr says so" "locked" "$(cat "$TMP/auto.err")"
+expect_auto_refused "unreadable screen state, biometric class" 75 "$SEED" "$IOREG_BROKEN"
+expect_auto_refused "needs none, not granted" 77 "echo ran-7" "$IOREG_LOCKED"
+grant secrets-seed echo-class
+run_auto "echo ran-7" "$IOREG_LOCKED"
+assert_eq "auto-run needs none, locked screen: still runs" "0" "$RC"
+assert_eq "auto-run needs none: output carried back" "ran-7" "$(jq -r .output_tail <<<"$AUTO_OUT")"
+run_auto "$SEED" "$IOREG_LOCKED"
+LOGTXT="$(cat "$H/Library/Logs/iumac-gate.log")"
+assert_contains "auto-run log: the ran line has class and exit" "auto-run ran:echo-class exit=0" "$LOGTXT"
+assert_contains "auto-run log: refusals have a reason word" "auto-run refuse:locked" "$LOGTXT"
+case "$LOGTXT" in *"make secrets"*|*unseal*|*20261119T000000*) bad "auto-run log: never the command, text or id" ;; *) ok "auto-run log: never the command, text or id" ;; esac
+
+echo "== auto-run: no gate verb writes consent"
+grant secrets-seed
+CK0="$(cksum <"$CONSENT") $(stat -f %m "$CONSENT")"
+for c in "$SEED" "echo ran-1" "id"; do run_auto "$c"; done
+touch "$OFFSW"; run_auto "$SEED"; rm -f "$OFFSW"
+for v in true gui-run notify report auto-run dotfiles-sync "report smb-mounts"; do run_gate "$v" "x"; done
+assert_eq "consent file unchanged by every gate verb" "$CK0" "$(cksum <"$CONSENT") $(stat -f %m "$CONSENT")"
+assert_eq "kill switch not created or lifted by a verb" "no" "$([[ -e "$OFFSW" ]] && echo yes || echo no)"
+rm -rf "$H/.config" "$H/SourceRoot/dotfiles/config/macbook-auto-classes.tsv"
+
 LOGF="$H/Library/Logs/iumac-gate.log"
 run_gate "true"
 run_gate "gui-run topsecret-id-123"

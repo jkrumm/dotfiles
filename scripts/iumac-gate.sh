@@ -5,7 +5,7 @@
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
 # (reachability probe, human-queue dialogs, notifications, claude re-login,
-# account snapshots, a dotfiles pull with its link targets, the Herdr glance pull, agent notes (term-ls, term-note), a read-only report, a repo fast-forward,
+# account snapshots, a granted catalogue command with no dialog (auto-run), a dotfiles pull with its link targets, the Herdr glance pull, agent notes (term-ls, term-note), a read-only report, a repo fast-forward,
 # usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
 # outbound credential can do what the mini needs and no more.
@@ -22,7 +22,7 @@
 #
 # Test seams (tests only; sshd never sets them): IUMAC_GATE_HOME replaces $HOME
 # for every path below so a temp tree of stub scripts can stand in for the real
-# repo; IUMAC_GATE_RSYNC / IUMAC_GATE_GIT replace the rsync and git binaries; IUMAC_GATE_REPORT_TIMEOUT /
+# repo; IUMAC_GATE_RSYNC / IUMAC_GATE_GIT replace the rsync and git binaries; IUMAC_GATE_IOREG replaces ioreg (the auto-run lock probe); IUMAC_GATE_REPORT_TIMEOUT /
 # IUMAC_GATE_PULL_TIMEOUT replace the `report` (60 s) and `repo-pull` (300 s) limits.
 #
 # Runs on the MacBook under /bin/bash 3.2: no associative arrays, no mapfile.
@@ -133,6 +133,96 @@ argc=${#words[@]}
 
 [ -n "$verb" ] || refuse ""
 
+# --- auto-run ----------------------------------------------------------------------------------------------
+# `auto-run`: one request JSON on stdin (the same file `gui-run` gets); when its command is byte-equal to a template of
+# config/macbook-auto-classes.tsv, the template's class is granted on THIS MacBook (~/.config/jk/auto-run.consent, written
+# only by `human-queue.sh consent grant`, never by a gate verb) and the kill switch (~/.config/jk/auto-run.off) is absent,
+# the command runs with no dialog. Stdout carries exactly one result JSON line, like gui-run, plus "via":"auto-run" and
+# "class":"<class>" (a dialog's line has neither; the factory counts and labels the run by them). Exit 77: not a class, not
+# granted or switched off (the caller falls back to the dialog); 75: a biometric class on a locked screen (nothing runs, the
+# request stays pending). The log gets the verb, a fixed reason word or the class and the exit, never the command.
+AUTO_DIR="$H/.config/jk"
+
+auto_refuse() { # <exit> <reason word>
+  log auto-run "refuse:$2"
+  printf 'auto-run refused: %s\n' "$2" >&2
+  exit "$1"
+}
+
+# 0 = the screen is locked, or cannot be read (a biometric prompt would only time out).
+auto_screen_locked() {
+  local out
+  out="$("${IUMAC_GATE_IOREG:-/usr/sbin/ioreg}" -n Root -d1 -a 2>/dev/null)" || return 0
+  [ -n "$out" ] || return 0
+  printf '%s' "$out" | tr -d '\n\t ' | grep -q '<key>CGSSessionScreenIsLocked</key><true/>'
+}
+
+# A template as an anchored ERE: the literal text escaped, the one slot <N> = 1 to 4 digits; rc 1 on any other <slot>.
+auto_template_regex() {
+  local t="$1" esc slot='[0-9]{1,4}'
+  case "${t//<N>/}" in *'<'* | *'>'*) return 1 ;; esac
+  esc="$(printf '%s' "$t" | sed 's/[][\\.*^$+?(){}|]/\\&/g')"
+  printf '^%s$' "${esc//<N>/$slot}"
+}
+
+auto_run() {
+  local req id text cmd tsv class="" needs="" limit="" c t n l re consent mode
+  [ -e "$AUTO_DIR/auto-run.off" ] && auto_refuse 77 killswitch
+  req="$(head -c 20000)"
+  die() { auto_refuse 77 input; }
+  # shellcheck source=lib/human-queue-json.sh
+  [ -r "$H/SourceRoot/dotfiles/scripts/lib/human-queue-json.sh" ] || auto_refuse 77 nolib
+  source "$H/SourceRoot/dotfiles/scripts/lib/human-queue-json.sh"
+  id="$(json_field "$req" id)"
+  validate_id "$id"
+  cmd="$(json_field "$req" cmd)"
+  [ -n "$cmd" ] || auto_refuse 77 nocmd
+  [ "$(printf '%s' "$cmd" | LC_ALL=C tr -d '\000-\037\177')" = "$cmd" ] || auto_refuse 77 control
+  tsv="$H/SourceRoot/dotfiles/config/macbook-auto-classes.tsv"
+  [ -r "$tsv" ] || auto_refuse 77 nocatalogue
+  while IFS=$'\t' read -r c t n l _; do
+    case "$c" in '' | '#'*) continue ;; esac
+    [[ "$c" =~ ^[a-z0-9][a-z0-9-]*$ ]] || continue
+    case "$n" in none | biometric) ;; *) continue ;; esac
+    [[ "$l" =~ ^[0-9]{1,4}$ ]] || continue
+    re="$(auto_template_regex "$t")" || continue
+    if [[ "$cmd" =~ $re ]]; then class="$c" needs="$n" limit="$l"; break; fi
+  done <"$tsv"
+  [ -n "$class" ] || auto_refuse 77 nomatch
+  consent="$AUTO_DIR/auto-run.consent"
+  mode="$(stat -f %Lp "$consent" 2>/dev/null)"
+  # Granted: listed, owned by this user, and writable by nobody else.
+  { [ -f "$consent" ] && [ -O "$consent" ] && ! case "$mode" in ?[2367]? | ??[2367]) true ;; *) false ;; esac && grep -qxF -- "$class" "$consent"; } || auto_refuse 77 notgranted
+  if [ "$needs" = biometric ] && auto_screen_locked; then auto_refuse 75 locked; fi
+
+  local tmp tmp2 rc terminal="" st ran_at output_tail
+  ran_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  text="$(json_field "$req" text)"
+  export PATH="$H/.local/bin:/opt/homebrew/bin:/usr/local/bin:$H/.bun/bin:$PATH"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/iumac-auto.XXXXXX")" || auto_refuse 77 tmp
+  tmp2="$tmp.f"
+  run_limited "$limit" env HOME="$H" /bin/bash -c "$cmd" >"$tmp"
+  rc="$LIMITED_RC"
+  log auto-run "ran:$class exit=$rc"
+  # hc leaves a command running past its --timeout (exit 124, "still running as <id>"): pending, not failed.
+  if [ "$rc" -eq 124 ] && [[ "$(cat "$tmp")" =~ still\ running\ as\ (t[0-9a-z]+) ]]; then terminal="${BASH_REMATCH[1]}"; fi
+  grep -v '^\[hc\] ' "$tmp" >"$tmp2" || true
+  output_tail="$(head_tail_lines "$tmp2")"
+  rm -f "$tmp" "$tmp2"
+  text="$(printable "$text" | tr '\n' ' ' | cut -c1-120)"
+  printf '%s\n' 'on run argv
+  display notification (item 2 of argv) with title (item 1 of argv)
+end run' | osascript - "iumac auto-run" "ran $class for ${text:-a request}" >/dev/null 2>&1 || true
+  if [ -n "$terminal" ]; then
+    build_result_json "$id" pending "" "$ran_at" "$output_tail" "$terminal" auto-run "$class"
+  else
+    st="done"
+    [ "$rc" -eq 0 ] || st=failed
+    build_result_json "$id" "$st" "$rc" "$ran_at" "$output_tail" "" auto-run "$class"
+  fi
+  exit 0
+}
+
 RELOGIN_ID_RE='^[a-z0-9_-]+$'
 
 case "$verb" in
@@ -147,6 +237,12 @@ case "$verb" in
     log "$verb" allow
     export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
     exec bash "$H/SourceRoot/dotfiles/scripts/human-queue.sh" gui-run
+    ;;
+
+  auto-run)
+    # A catalogue command a granted class may run with no dialog (see auto_run above). Needs the request JSON on stdin.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    auto_run
     ;;
 
   notify)

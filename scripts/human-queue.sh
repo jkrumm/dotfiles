@@ -217,24 +217,6 @@ cmd_show() {
   print_req "$req_json"
 }
 
-# The result payload shape, shared by write_result (ssh'd back to the mini
-# after an interactive `run`) and gui-run's own stdout (read by ask-human.sh's
-# `push`, running ON the mini, which persists it locally with no extra hop).
-# Both callers already validate the id before reaching here.
-build_result_json() {
-  local id="$1" status="$2" exit_code="$3" ran_at="$4" output_tail="$5" terminal="${6:-}"
-  local exit_json="null"
-  [[ -n "$exit_code" ]] && exit_json="$exit_code"
-  printf '{'
-  printf '"id":%s,' "$(json_escape "$id")"
-  printf '"status":%s,' "$(json_escape "$status")"
-  printf '"exit":%s,' "$exit_json"
-  [[ -n "$terminal" ]] && printf '"terminal":%s,' "$(json_escape "$terminal")"
-  printf '"ran_at":%s,' "$(json_escape "$ran_at")"
-  printf '"output_tail":%s' "$(json_escape "$output_tail")"
-  printf '}\n'
-}
-
 # Pipes the JSON body to `ssh … 'cat > …'` over stdin — content never touches
 # the remote command STRING, which is the whole point: a request's own
 # output_tail can contain arbitrary bytes from a command an agent proposed, and
@@ -466,22 +448,6 @@ $cmd_disp
   build_result_json "$id" "$status" "$exit_code" "$ran_at" "$output_tail"
 }
 
-# The first 20 and last 20 lines of a file (all of it when it is no longer), each
-# line cut at 400 chars and carriage returns dropped: what the result carries back.
-head_tail_lines() {
-  local file="$1" total
-  total="$(wc -l < "$file" | tr -d ' ')"
-  if (( total <= 40 )); then
-    tr -d '\r' < "$file" | cut -c1-400
-    return
-  fi
-  {
-    head -n 20 "$file"
-    printf '... (%d lines omitted) ...\n' "$(( total - 40 ))"
-    tail -n 20 "$file"
-  } | tr -d '\r' | cut -c1-400
-}
-
 hc_bin() {
   [[ -n "${HUMAN_QUEUE_HC:-}" ]] && { printf '%s' "$HUMAN_QUEUE_HC"; return; }
   command -v hc 2>/dev/null || printf '%s' "$HOME/.local/bin/hc"
@@ -648,6 +614,103 @@ cmd_deny() {
   echo "  ✓ $id marked denied: $reason"
 }
 
+# --- auto-run consent ----------------------------------------------------------------------------------------
+# The MacBook half of `iumac-gate.sh auto-run` (config/macbook-auto-classes.tsv): a catalogue class runs with no dialog
+# only after the owner grants it HERE. The consent file is written by these subcommands and nothing else — no gate verb,
+# no factory route, nothing from the mini — and a catalogue row is inert until its class is listed in it. `off` is the
+# kill switch: one file the gate checks on every call.
+AUTO_DIR="${HUMAN_QUEUE_AUTO_RUN_DIR:-$HOME/.config/jk}"
+AUTO_CONSENT="$AUTO_DIR/auto-run.consent"
+AUTO_OFF="$AUTO_DIR/auto-run.off"
+AUTO_CATALOGUE="${HUMAN_QUEUE_AUTO_CATALOGUE:-$(dirname "${BASH_SOURCE[0]}")/../config/macbook-auto-classes.tsv}"
+AUTO_CLASS_RE='^[a-z0-9][a-z0-9-]*$'
+
+# Catalogue rows as "<class>\t<template>\t<needs>\t<limit>", comments and blanks dropped.
+catalogue_rows() {
+  [[ -r "$AUTO_CATALOGUE" ]] || die "no catalogue at $AUTO_CATALOGUE"
+  grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$AUTO_CATALOGUE" || true
+}
+
+class_in_catalogue() { catalogue_rows | cut -f1 | grep -qxF -- "$1"; }
+
+class_granted() { [[ -f "$AUTO_CONSENT" ]] && grep -qxF -- "$1" "$AUTO_CONSENT"; }
+
+# Rewrites the consent file (mode 600) from stdin, atomically.
+write_consent() {
+  local tmp
+  mkdir -p "$AUTO_DIR" && chmod 700 "$AUTO_DIR"
+  tmp="$(umask 077 && mktemp "$AUTO_DIR/.auto-run.consent.XXXXXX")" || die "could not write $AUTO_CONSENT"
+  cat >"$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$AUTO_CONSENT"
+}
+
+# One typed "yes" on a terminal, or one click in a native dialog when there is none.
+consent_confirm() {
+  local class="$1" body="$2" answer rc
+  if [[ -n "${HUMAN_QUEUE_CONSENT_INPUT:-}" ]] || have_tty; then
+    printf '%s\n\n' "$body" >&2
+    printf 'Type yes to let this class run on this MacBook with no dialog: ' >&2
+    read -r answer <"${HUMAN_QUEUE_CONSENT_INPUT:-/dev/tty}" || answer=""
+    [[ "$answer" == yes ]]
+    return
+  fi
+  set +e
+  answer="$(gui_dialog "human-queue: grant auto-run" "$body" "Cancel" "Grant" "${HUMAN_QUEUE_DIALOG_SECONDS:-600}")"
+  rc=$?
+  set -e
+  (( rc == 0 )) && [[ "$answer" == *"button returned:Grant"* && "$answer" != *"gave up:true"* ]]
+}
+
+consent_grant() {
+  local class="${1:-}" rows body
+  [[ "$class" =~ $AUTO_CLASS_RE ]] || die "usage: human-queue.sh consent grant <class>"
+  class_in_catalogue "$class" || die "not a catalogue class: $class (see: human-queue.sh consent list)"
+  if class_granted "$class"; then echo "  $class is already granted"; return 0; fi
+  rows="$(catalogue_rows | awk -F'\t' -v c="$class" '$1 == c { printf "  %s\n", $2 }')"
+  body="Class: $class
+Needs: $(catalogue_rows | awk -F'\t' -v c="$class" '$1 == c { print $3; exit }')
+
+The mini may then start exactly these command lines here, with no dialog (<N> = a number):
+$rows
+
+Revoke with: human-queue.sh consent revoke $class"
+  consent_confirm "$class" "$body" || die "not granted"
+  { [[ -f "$AUTO_CONSENT" ]] && cat "$AUTO_CONSENT"; printf '%s\n' "$class"; } | write_consent
+  echo "  ✓ $class granted"
+}
+
+consent_revoke() {
+  local class="${1:-}"
+  [[ "$class" =~ $AUTO_CLASS_RE ]] || die "usage: human-queue.sh consent revoke <class>"
+  if ! class_granted "$class"; then echo "  $class was not granted"; return 0; fi
+  grep -vxF -- "$class" "$AUTO_CONSENT" | write_consent || true
+  echo "  ✓ $class revoked"
+}
+
+consent_list() {
+  local class needs state
+  if [[ -e "$AUTO_OFF" ]]; then echo "auto-run: OFF (kill switch: $AUTO_OFF; human-queue.sh consent on)"; else echo "auto-run: on"; fi
+  catalogue_rows | awk -F'\t' '!seen[$1]++ { print $1 "\t" $3 }' | while IFS=$'\t' read -r class needs; do
+    state=inert
+    class_granted "$class" && state=granted
+    printf '  %-20s %-9s needs %s\n' "$class" "$state" "$needs"
+  done
+}
+
+cmd_consent() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    grant) consent_grant "$@" ;;
+    revoke) consent_revoke "$@" ;;
+    list) consent_list ;;
+    off) mkdir -p "$AUTO_DIR" && chmod 700 "$AUTO_DIR" && (umask 077 && : >"$AUTO_OFF") && echo "  ✓ auto-run is off: every class falls back to the dialog" ;;
+    on) rm -f "$AUTO_OFF" && echo "  ✓ auto-run is on (granted classes only)" ;;
+    *) die "usage: human-queue.sh consent grant|revoke <class> | list | off | on" ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 human-queue.sh — MacBook-side drain of the mini's present-human request queue
@@ -665,6 +728,10 @@ Usage:
   human-queue.sh gui-run        Read one request JSON on stdin, show a native dialog,
                                 execute on click. Called remotely by
                                 `ask-human.sh push` over ssh — not for interactive use.
+  human-queue.sh consent grant|revoke <class>
+                                Let a class of config/macbook-auto-classes.tsv run with no dialog
+                                (grant: typed yes on a terminal, else one dialog click), or stop it
+  human-queue.sh consent list|off|on  Classes and their state; off/on = the kill switch
   human-queue.sh resolve <id> [note]  Mark done without running the cmd (already handled)
   human-queue.sh deny <id> [reason]   Deny a request; writes a denied result back
   human-queue.sh help           This message.
@@ -685,6 +752,7 @@ main() {
     show) shift; cmd_show "$@" ;;
     run) shift; cmd_run "$@" ;;
     gui-run) shift; cmd_gui_run "$@" ;;
+    consent) shift; cmd_consent "$@" ;;
     resolve) shift; cmd_resolve "$@" ;;
     deny) shift; cmd_deny "$@" ;;
     help|-h|--help) usage ;;
