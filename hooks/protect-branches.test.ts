@@ -131,6 +131,10 @@ describe("repoDirectories — the target repo, not the session's", () => {
     expect(dirs).not.toContain(session);
   });
 
+  test("a cd that is not the first command still moves the target", () => {
+    expect(repoDirectories(`echo start && cd ${HOME}/SourceRoot && git push origin master`, session)).toEqual([`${HOME}/SourceRoot`]);
+  });
+
   test("git -C names the target without moving the shell", () => {
     const dirs = repoDirectories(`git -C ${HOME}/SourceRoot push origin master`, session);
     expect(dirs).toEqual([`${HOME}/SourceRoot`]);
@@ -237,6 +241,7 @@ describe("decision path — the hook as a subprocess", () => {
   const prRepo = join(home, "SourceRoot", "pr-app");
   const directRepo = join(home, "SourceRoot", "direct-app");
   const scratch = join(home, "scratch");
+  const wtRepo = join(home, "SourceRoot", "pr-app-wt");
 
   const git = (cwd: string, ...args: string[]) => {
     const r = Bun.spawnSync(
@@ -263,6 +268,7 @@ describe("decision path — the hook as a subprocess", () => {
     );
     initRepo(prRepo, "pr-app", "master");
     initRepo(directRepo, "direct-app", "master");
+    git(prRepo, "worktree", "add", "-q", "-b", "docs/wt", wtRepo);
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -299,6 +305,13 @@ describe("decision path — the hook as a subprocess", () => {
     } finally {
       git(prRepo, "checkout", "-q", "master");
     }
+  });
+
+  test("a cd that is not the first command moves the push to its checkout", () => {
+    // The session stands on master in prRepo; the push runs from a feature worktree.
+    expect(denied(`git status >/dev/null && cd ${wtRepo} && git push -q`, prRepo)).toBe(false);
+    expect(denied(`git status >/dev/null && git push -q`, prRepo)).toBe(true);
+    expect(denied(`git status >/dev/null && cd ${prRepo} && git push -q`, wtRepo)).toBe(true);
   });
 
   test("a direct-to-master repo may push master", () => {

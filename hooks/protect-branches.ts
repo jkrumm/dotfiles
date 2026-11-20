@@ -308,18 +308,36 @@ function isDynamic(value: string): boolean {
 /**
  * The repo directories this command actually touches, most specific first.
  *
- * An explicit target (`git -C <dir>`, a leading `cd <dir> &&`) replaces the
- * session cwd; the session cwd is the fallback only when nothing explicit
- * resolves to a real directory.
+ * An explicit target (`git -C <dir>`, a `cd <dir> &&` anywhere in the command)
+ * replaces the session cwd; the session cwd is the fallback only when nothing
+ * explicit resolves to a real directory.
  */
 export function repoDirectories(command: string, sessionCwd: string): string[] {
-  const cwd = effectiveCwd(command, sessionCwd);
-
-  const explicit = splitIntoCommands(command).flatMap((tokens) => explicitDirs(tokens, cwd));
-  if (cwd !== sessionCwd) explicit.push(cwd);
+  const explicit: string[] = [];
+  let cwd = sessionCwd;
+  for (const tokens of splitIntoCommands(command)) {
+    const moved = cdTarget(tokens, cwd);
+    if (moved !== null) {
+      cwd = moved;
+      continue;
+    }
+    explicit.push(...explicitDirs(tokens, cwd));
+    if (cwd !== sessionCwd) explicit.push(cwd);
+  }
 
   const resolved = [...new Set(explicit)].filter(isDirectory);
   return resolved.length > 0 ? resolved : [sessionCwd];
+}
+
+/**
+ * The directory a `cd <dir>` leaves the shell in, or null when this command is
+ * not a cd that moves it. Read wherever the cd sits: `git status && cd <dir> &&
+ * git push` pushes from `<dir>`, and the first-command-only reader missed it.
+ */
+function cdTarget(tokens: string[], cwd: string): string | null {
+  if (tokens[0] !== "cd" || tokens.length !== 2 || tokens[1].startsWith("-")) return null;
+  const dir = expandPath(tokens[1], cwd);
+  return isDirectory(dir) ? dir : null;
 }
 
 /** Directories one command names itself: `git -C <dir>`, `--git-dir`, `GIT_DIR`. */
