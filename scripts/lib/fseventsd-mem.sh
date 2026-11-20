@@ -31,5 +31,5 @@ fseventsd_leak_note() {
   [[ -n "$pm" ]] || return 0
   mem_mb=${pm#* }
   (( mem_mb > ${FSEVENTSD_MAX_MB:-10240} )) || return 0
-  echo "fseventsd holds $(( mem_mb / 1024 ))G (leak; restart: sudo killall fseventsd, launchctl kickstart is refused by SIP; the daily com.jkrumm.fseventsd-watch job restarts it past 1.5G)"
+  echo "fseventsd holds $(( mem_mb / 1024 ))G (leak; restart: sudo killall fseventsd, launchctl kickstart is refused by SIP; the hourly com.jkrumm.fseventsd-watch job restarts it past 1.5G)"
 }

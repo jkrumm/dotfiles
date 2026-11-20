@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fseventsd-watch — restart the macOS file-events daemon when it leaks. Daily, via com.jkrumm.fseventsd-watch.
+# fseventsd-watch — restart the macOS file-events daemon when it leaks. Hourly, via com.jkrumm.fseventsd-watch.
 #
 # WHY. fseventsd grows without bound on this host (agents churn worktrees, node_modules and Chrome clones): 61 GiB on
 # 2026-11-06 (filled the swap, held the dev host DOWN), 2.1 GB at 260 % CPU after 5 days on 2026-11-12 (swapouts 5 GB per
