@@ -4156,6 +4156,7 @@ help:
 	@echo "  make ext-mirror-setup           Load the 05:00 mirror of the HomeLab onto the external volume (mini; -run, -status, -test, -teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
+	@echo "  make disk-sweep-fstrim-teardown Unload + remove the 4-hourly fstrim agent"
 	@echo "  make storage-status             Shares, mounts, free space, mirror and backup age (ARGS=--json; docs/storage.md §Status)"
 	@echo "  make external-volume-check      Read-only state of the external volume (mini; silent while attached=false)"
 	@echo "  make external-volume-unlock-setup / -teardown  Load or remove the unlock agent (installed when the volume is adopted)"
