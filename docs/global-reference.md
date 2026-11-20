@@ -97,9 +97,11 @@ Workflow facts per repo:
 branches and commits, all repos require PRs against `main` (exceptions are
 `directToMain` in `pr-required-repos.json`, currently `prometheus-feuer-agent`).
 Stack: DDD, NestJS backends, Vue frontends, a micro-frontend SPA orchestrator.
-Main repos: `epos.student-enrolment` (own CLAUDE.md), `epos_fe.{academic-profile,
-booking,spa-orchestrator}`, `prometheus-scripts`. Rarely touched:
-`epos.{crm-bridge,dam,exam,finance-bridge,iam,study-progress}`,
+Main repos (GitHub `IU-Group-Engineering`): `epos-studentenrolment-{backend,frontend}`
+(the frontend merges the former booking and academic-profile applets),
+`epos-{orchestrator,customers,grades}-frontend`, `epos-studyprogress-backend`,
+`epos-dam-backend`, `epos-tool-athena`. Rarely touched (GitLab):
+`epos.{crm-bridge,exam,finance-bridge,iam}`,
 `crm-bridge-retry-tool`, `cfn-kafka`, `terraform-monitoring`. `~/Obsidian/Vault/`
 is a cold backup only — the live vault is `~/SourceRoot/brain`. Tasks: TickTick.
 
