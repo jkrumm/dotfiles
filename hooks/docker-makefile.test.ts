@@ -25,8 +25,42 @@ import {
   projectDirectories,
   shouldBlock,
   splitIntoCommands,
+  splitWithContext,
   unwrapWrappers,
 } from "./docker-makefile";
+
+describe("splitWithContext — how each command is sequenced", () => {
+  const view = (input: string) =>
+    splitWithContext(input).map((c) => [c.tokens.join(" "), c.sep, c.next, c.grouped, c.nested]);
+
+  test("records the operator on each side", () => {
+    expect(view("a && b || c; d | e & f")).toEqual([
+      ["a", "start", "and", false, false],
+      ["b", "and", "or", false, false],
+      ["c", "or", "seq", false, false],
+      ["d", "seq", "pipe", false, false],
+      ["e", "pipe", "bg", false, false],
+      ["f", "bg", "end", false, false],
+    ]);
+  });
+
+  test("marks group members, and unmarks them after the group", () => {
+    expect(view("(a && b); c")).toEqual([
+      ["a", "start", "and", true, false],
+      ["b", "and", "group", true, false],
+      ["c", "seq", "end", false, false],
+    ]);
+  });
+
+  test("marks commands from substitutions and shell strings as nested", () => {
+    const nested = splitWithContext("x=$(a); bash -c 'b'").filter((c) => c.nested);
+    expect(nested.map((c) => c.tokens.join(" "))).toEqual(["a", "b"]);
+  });
+
+  test("a newline is a sequence point", () => {
+    expect(view("a\nb").map((r) => r[1])).toEqual(["start", "seq"]);
+  });
+});
 
 describe("splitIntoCommands", () => {
   test("splits on unquoted operators", () => {

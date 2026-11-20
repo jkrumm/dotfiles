@@ -46,7 +46,10 @@
  * weatherorb, basalt-ui-obsidian and two image repos) and burned a session
  * rediscovering why.
  *
- * `repoDirectories()` now reads the target out of the command. An explicit
+ * `repoDirectories()` now reads the target out of the command: `git -C`, and a
+ * `cd` wherever it sits, followed by `stepsWithCwds()` with the shell's
+ * sequencing in mind (a `cd` that may not have run, or ran in a subshell, widens
+ * the set of directories the push is judged in instead of moving it). An explicit
  * target REPLACES the session cwd rather than adding to it — a union would
  * re-create the bug, since the session cwd is exactly the repo the operator
  * navigated away from. When nothing explicit resolves to a real directory the
@@ -59,7 +62,7 @@
  * which is how writing this very file got blocked once.
  */
 
-import { deny, effectiveCwd, expandPath, isDirectory, splitIntoCommands } from "./docker-makefile";
+import { deny, expandPath, isDirectory, splitIntoCommands, splitWithContext, type ShellCommand } from "./docker-makefile";
 
 interface HookInput {
   tool_name: string;
@@ -305,20 +308,84 @@ function isDynamic(value: string): boolean {
 
 // ── Which directory the command acts on ──────────────────────────────────────
 
+/** One command of the line and every directory the shell may be standing in when it runs. */
+interface Step {
+  tokens: string[];
+  cwds: string[];
+}
+
+/**
+ * Follow `cd` through the command line, command by command.
+ *
+ * A `cd` that certainly ran in the shell that runs the rest (it starts the line
+ * or follows `;`/newline, and no `|`, `&`, group or substitution wraps it)
+ * REPLACES the directory. One that may not have run, or ran in a subshell
+ * (after `||`, `|`, `&`; inside `( )`/`{ }`; inside `bash -c` or a
+ * substitution; before `|`/`&`) ADDS its target and never takes one away: the
+ * command is then judged in every directory it could run in, so ambiguity
+ * fails closed. A `cd` after `&&` runs only if the commands before it
+ * succeeded, so a following `;` may land back in the earlier directories.
+ *
+ * A target that is not a plain existing directory (`cd -`, `cd $X`, a missing
+ * path) moves nothing.
+ */
+export function stepsWithCwds(command: string, sessionCwd: string): Step[] {
+  let cwds = [sessionCwd];
+  let skipped: string[] = [];
+  return splitWithContext(command).map((cmd) => {
+    if (cmd.sep === "seq") cwds = union(cwds, skipped);
+    if (cmd.sep === "seq") skipped = [];
+    const step = { tokens: cmd.tokens, cwds };
+    const target = cdTarget(cmd.tokens, cwds[0]);
+    if (target === null) return step;
+    if (!runsInThisShell(cmd)) cwds = union(cwds, [target]);
+    else if (cmd.sep === "and") {
+      skipped = union(skipped, cwds);
+      cwds = [target];
+    } else {
+      skipped = [];
+      cwds = [target];
+    }
+    return step;
+  });
+}
+
+function union(a: string[], b: string[]): string[] {
+  return [...new Set([...a, ...b])];
+}
+
+/** True when a `cd` here moves the shell the following commands run in, if it runs at all. */
+function runsInThisShell(cmd: ShellCommand): boolean {
+  if (cmd.nested || cmd.grouped) return false;
+  if (cmd.sep === "or" || cmd.sep === "pipe" || cmd.sep === "bg") return false;
+  return cmd.next !== "pipe" && cmd.next !== "bg";
+}
+
+/** The existing directory a `cd <dir>` names, or null for anything else. */
+function cdTarget(tokens: string[], cwd: string): string | null {
+  if (tokens[0] !== "cd" || tokens.length !== 2 || tokens[1].startsWith("-")) return null;
+  const dir = expandPath(tokens[1], cwd);
+  return isDirectory(dir) ? dir : null;
+}
+
 /**
  * The repo directories this command actually touches, most specific first.
  *
- * An explicit target (`git -C <dir>`, a leading `cd <dir> &&`) replaces the
- * session cwd; the session cwd is the fallback only when nothing explicit
- * resolves to a real directory.
+ * An explicit target (`git -C <dir>`, `--git-dir`) replaces the directory the
+ * shell stands in; a push without one is judged in every directory the shell
+ * may be standing in when it runs (see `stepsWithCwds`). The session cwd is
+ * the fallback only when nothing resolves to a real directory.
  */
 export function repoDirectories(command: string, sessionCwd: string): string[] {
-  const cwd = effectiveCwd(command, sessionCwd);
+  const dirs = stepsWithCwds(command, sessionCwd).flatMap(({ tokens, cwds }) => {
+    const own = cwds.flatMap((cwd) => explicitDirs(tokens, cwd));
+    if (inspectGit(tokens)?.subcommand !== "push") return own;
+    // The shell's own directory is a target too, unless it is just the session's and `-C` named another.
+    const moved = cwds.length !== 1 || cwds[0] !== sessionCwd;
+    return own.length === 0 || moved ? [...own, ...cwds] : own;
+  });
 
-  const explicit = splitIntoCommands(command).flatMap((tokens) => explicitDirs(tokens, cwd));
-  if (cwd !== sessionCwd) explicit.push(cwd);
-
-  const resolved = [...new Set(explicit)].filter(isDirectory);
+  const resolved = [...new Set(dirs)].filter(isDirectory);
   return resolved.length > 0 ? resolved : [sessionCwd];
 }
 
@@ -343,9 +410,8 @@ function repoOfGitDir(dir: string): string {
  * will use is then unknown, so a push must be denied rather than guessed.
  */
 export function hasUnresolvableGitDir(command: string, sessionCwd: string): boolean {
-  const cwd = effectiveCwd(command, sessionCwd);
-  return splitIntoCommands(command).some((tokens) =>
-    gitDirsOf(tokens).some((dir) => isDynamic(dir) || !isDirectory(expandPath(dir, cwd)))
+  return stepsWithCwds(command, sessionCwd).some(({ tokens, cwds }) =>
+    gitDirsOf(tokens).some((dir) => isDynamic(dir) || !cwds.some((cwd) => isDirectory(expandPath(dir, cwd))))
   );
 }
 
@@ -526,9 +592,8 @@ if (import.meta.main) {
   }
 
   const config = await loadRepoConfig();
-  const enforceDir = repoDirectories(command, cwd).find((dir) =>
-    requiresPR(dir, config)
-  );
+  const enforced = repoDirectories(command, cwd).filter((dir) => requiresPR(dir, config));
+  const enforceDir = enforced[0];
   if (!enforceDir) process.exit(0);
 
   if (push.kind === "hard-force") {
@@ -569,11 +634,14 @@ if (import.meta.main) {
     );
   }
 
-  const current = getCurrentBranch(enforceDir);
-  if (current && PROTECTED.includes(current)) {
+  const onProtected = enforced
+    .map((dir) => ({ dir, branch: getCurrentBranch(dir) }))
+    .find(({ branch }) => branch !== null && PROTECTED.includes(branch));
+  if (onProtected) {
+    const { dir, branch: current } = onProtected;
     deny(
       [
-        `Pushing to protected branch '${current}' is blocked in Claude Code — ${enforceDir} requires a PR.`,
+        `Pushing to protected branch '${current}' is blocked in Claude Code — ${dir} requires a PR.`,
         "",
         `You are on '${current}'. Create a feature branch instead:`,
         "  git checkout -b feat/your-change",

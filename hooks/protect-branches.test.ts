@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { inspectGit, inspectPush, loadRepoConfig, repoDirectories } from "./protect-branches";
+import { inspectGit, inspectPush, loadRepoConfig, repoDirectories, stepsWithCwds } from "./protect-branches";
 
 const HOOK = join(import.meta.dir, "protect-branches.ts");
 const REAL_CONFIG = join(import.meta.dir, "..", "config", "pr-required-repos.json");
@@ -131,6 +131,15 @@ describe("repoDirectories — the target repo, not the session's", () => {
     expect(dirs).not.toContain(session);
   });
 
+  test("a cd that is not the first command still moves the target", () => {
+    expect(repoDirectories(`echo start && cd ${HOME}/SourceRoot && git push origin master`, session)).toEqual([`${HOME}/SourceRoot`]);
+    expect(repoDirectories(`echo start; cd ${HOME}/SourceRoot; git push origin master`, session)).toEqual([`${HOME}/SourceRoot`]);
+  });
+
+  test("a push before the cd is judged where it ran", () => {
+    expect(repoDirectories(`git push origin master && cd ${HOME}/SourceRoot && echo ok`, session)).toEqual([session]);
+  });
+
   test("git -C names the target without moving the shell", () => {
     const dirs = repoDirectories(`git -C ${HOME}/SourceRoot push origin master`, session);
     expect(dirs).toEqual([`${HOME}/SourceRoot`]);
@@ -227,6 +236,44 @@ describe("inspectPush — bypasses that used to classify as allowed", () => {
   });
 });
 
+describe("stepsWithCwds — where the shell stands, command by command", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "pb-steps-")));
+  const session = join(root, "session");
+  const dir = join(root, "target");
+  beforeAll(() => {
+    mkdirSync(session);
+    mkdirSync(dir);
+  });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const cwdsOfLast = (command: string) => stepsWithCwds(command, session).at(-1)?.cwds;
+
+  test("a certain cd replaces the directory", () => {
+    expect(cwdsOfLast(`cd ${dir} && git push`)).toEqual([dir]);
+    expect(cwdsOfLast(`cd ${dir}; git push`)).toEqual([dir]);
+    expect(cwdsOfLast(`cd ${dir}\ngit push`)).toEqual([dir]);
+    expect(cwdsOfLast(`echo a && cd ${dir} && git push`)).toEqual([dir]);
+  });
+
+  test.each([
+    ["after ||", `true || cd ${dir} && git push`],
+    ["before |", `cd ${dir} | cat; git push`],
+    ["before &", `cd ${dir} & git push`],
+    ["in a subshell", `(cd ${dir} && make); git push`],
+    ["in a brace group", `{ cd ${dir}; } && git push`],
+    ["in a substitution", `x=$(cd ${dir} && pwd); git push`],
+    ["in bash -c", `bash -c 'cd ${dir}'; git push`],
+    ["skipped by an earlier &&", `false && cd ${dir}; git push`],
+  ])("an uncertain cd adds, never replaces: %s", (_, command) => {
+    expect(cwdsOfLast(command)?.toSorted()).toEqual([session, dir].toSorted());
+  });
+
+  test("a cd that moves nothing is ignored", () => {
+    expect(cwdsOfLast("cd /no/such/dir && git push")).toEqual([session]);
+    expect(cwdsOfLast("cd - && git push")).toEqual([session]);
+    expect(cwdsOfLast("cd $X && git push")).toEqual([session]);
+  });
+});
+
 /**
  * The decision path: the hook as the harness runs it — JSON on stdin, a deny
  * object on stdout — against throwaway repos and a throwaway HOME.
@@ -237,6 +284,7 @@ describe("decision path — the hook as a subprocess", () => {
   const prRepo = join(home, "SourceRoot", "pr-app");
   const directRepo = join(home, "SourceRoot", "direct-app");
   const scratch = join(home, "scratch");
+  const wtRepo = join(home, "SourceRoot", "pr-app-wt");
 
   const git = (cwd: string, ...args: string[]) => {
     const r = Bun.spawnSync(
@@ -263,6 +311,7 @@ describe("decision path — the hook as a subprocess", () => {
     );
     initRepo(prRepo, "pr-app", "master");
     initRepo(directRepo, "direct-app", "master");
+    git(prRepo, "worktree", "add", "-q", "-b", "docs/wt", wtRepo);
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -299,6 +348,39 @@ describe("decision path — the hook as a subprocess", () => {
     } finally {
       git(prRepo, "checkout", "-q", "master");
     }
+  });
+
+  // The session stands on master in prRepo; wtRepo is a feature-branch worktree of it.
+  test.each([
+    ["a leading cd", `cd ${wtRepo} && git add -A && git commit -q -m x --allow-empty && git push -q`],
+    ["a cd after another command", `git status >/dev/null && cd ${wtRepo} && git push -q`],
+    ["a cd after ;", `git status >/dev/null; cd ${wtRepo}; git push -q`],
+    ["a cd on its own line", `cd ${wtRepo}\ngit push -q`],
+    ["a heredoc commit message", `cd ${wtRepo} && git commit -q --allow-empty -m "$(cat <<'EOF'\nmsg\nEOF\n)" && git push -q`],
+  ])("a push from a feature worktree is allowed: %s", (_, command) => {
+    expect(denied(command)).toBe(false);
+  });
+
+  test.each([
+    ["no cd at all", `git status >/dev/null && git push -q`],
+    ["a push before the cd", `git push -q && cd ${wtRepo} && echo ok`],
+    ["a cd in a subshell", `(cd ${wtRepo} && git status); git push -q`],
+    ["a cd in a brace group", `{ cd ${wtRepo}; } && git push -q`],
+    ["a cd behind ||", `true || cd ${wtRepo} && git push -q`],
+    ["a cd skipped by &&", `false && cd ${wtRepo}; git push -q`],
+    ["a cd that only pipes", `cd ${wtRepo} | cat; git push -q`],
+    ["a cd in bash -c", `bash -c 'cd ${wtRepo}'; git push -q`],
+  ])("a push that may run on master is denied: %s", (_, command) => {
+    expect(denied(command)).toBe(true);
+  });
+
+  test("a cd to the master checkout from a feature worktree is denied", () => {
+    expect(denied(`git status >/dev/null && cd ${prRepo} && git push -q`, wtRepo)).toBe(true);
+  });
+
+  test("a subshell cd into a direct repo does not launder a master push", () => {
+    expect(denied(`(cd ${directRepo} && git status); git push origin master`, wtRepo)).toBe(true);
+    expect(denied(`(cd ${directRepo} && git status); git push origin master`, directRepo)).toBe(false);
   });
 
   test("a direct-to-master repo may push master", () => {

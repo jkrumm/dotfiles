@@ -297,6 +297,32 @@ function collectSubstitutions(src: string, sink: string[][]): void {
 }
 
 export function splitIntoCommands(input: string): string[][] {
+  return splitWithContext(input).map((command) => command.tokens);
+}
+
+/** The operator that ended a command, or that started it (`sep`): how it is sequenced. */
+export type Sequencing = "start" | "seq" | "and" | "or" | "pipe" | "bg" | "group" | "end";
+
+/** One simple command and how the shell sequences it relative to its neighbours. */
+export interface ShellCommand {
+  tokens: string[];
+  /** What precedes it: `;`/newline = seq, `&&` = and, `||` = or, `|` = pipe, `&` = bg. */
+  sep: Sequencing;
+  /** What follows it. A command followed by `|` or `&` runs in a subshell. */
+  next: Sequencing;
+  /** Inside a `( )` or `{ }` group. */
+  grouped: boolean;
+  /** Came out of a substitution, a heredoc body, or a `bash -c` / `eval` string. */
+  nested: boolean;
+}
+
+/**
+ * Like `splitIntoCommands`, but keeps what the flat list throws away: the
+ * operator on each side of a command, group membership, and whether it was
+ * nested. A reader that follows shell state (a `cd`) needs these to tell a
+ * command that certainly ran from one that may not have.
+ */
+export function splitWithContext(input: string): ShellCommand[] {
   return new CommandSplitter(input).run();
 }
 
@@ -398,6 +424,13 @@ const OPERATOR_CHARS = new Set(["|", ";", "&", "\n"]);
 /** Operators that double up (`&&`, `||`) and are consumed as one. */
 const DOUBLED_OPERATORS = new Set(["|", "&"]);
 const GROUP_CHARS = new Set(["(", ")", "{", "}"]);
+const OPENING_GROUP_CHARS = new Set(["(", "{"]);
+
+function operatorSequencing(ch: string, doubled: boolean): Sequencing {
+  if (ch === "|") return doubled ? "or" : "pipe";
+  if (ch === "&") return doubled ? "and" : "bg";
+  return "seq";
+}
 const BLANK_CHARS = new Set([" ", "\t", "\r"]);
 
 /**
@@ -406,8 +439,10 @@ const BLANK_CHARS = new Set([" ", "\t", "\r"]);
  * plain token text.
  */
 class CommandSplitter {
-  private readonly commands: string[][] = [];
+  private readonly commands: ShellCommand[] = [];
   private current: string[] = [];
+  private sep: Sequencing = "start";
+  private depth = 0;
   private token = "";
   private hasToken = false;
   private i = 0;
@@ -425,9 +460,9 @@ class CommandSplitter {
 
   constructor(private readonly input: string) {}
 
-  run(): string[][] {
+  run(): ShellCommand[] {
     while (this.i < this.input.length) this.step();
-    this.endCommand();
+    this.endCommand("end");
     return this.commands;
   }
 
@@ -453,12 +488,22 @@ class CommandSplitter {
     this.hasToken = false;
   }
 
-  private endCommand(): void {
+  /** `next` is what follows the command; it also becomes the `sep` of the one after. */
+  private endCommand(next: Sequencing): void {
     this.endToken();
-    if (this.current.length === 0) return;
-    this.commands.push(this.current);
-    for (const nested of nestedShellCommands(this.current)) this.commands.push(nested);
-    this.current = [];
+    if (this.current.length > 0) {
+      this.commands.push({ tokens: this.current, sep: this.sep, next, grouped: this.depth > 0, nested: false });
+      this.pushNested(nestedShellCommands(this.current));
+      this.current = [];
+    }
+    if (next !== "group" && next !== "end") this.sep = next;
+  }
+
+  /** Commands the current one runs inside itself; their position in the sequence is unknowable. */
+  private pushNested(commands: string[][]): void {
+    for (const tokens of commands) {
+      this.commands.push({ tokens, sep: "start", next: "end", grouped: true, nested: true });
+    }
   }
 
   /** The next character is literal; backslash-newline is a continuation the shell drops. */
@@ -504,7 +549,7 @@ class CommandSplitter {
   private substitution(): boolean {
     const span = substitutionSpan(this.input, this.i);
     if (!span) return false;
-    for (const cmd of splitIntoCommands(this.input.slice(span.start, span.end))) this.commands.push(cmd);
+    this.pushNested(splitIntoCommands(this.input.slice(span.start, span.end)));
     // The substitution itself yields a value in the outer token.
     this.add("\0");
     this.i = span.end + 1;
@@ -526,7 +571,7 @@ class CommandSplitter {
     }
     const newline = this.input.indexOf("\n", header.end);
     if (newline === -1) {
-      this.endCommand();
+      this.endCommand("end");
       this.i = this.input.length;
       return true;
     }
@@ -537,9 +582,13 @@ class CommandSplitter {
   private consumeHeredocBody(header: HeredocHeader, start: number): void {
     const { body, bodyEnd } = readHeredocBody(this.input, start, header);
     // An unquoted delimiter still expands substitutions inside the body.
-    if (!header.literal) collectSubstitutions(body, this.commands);
+    if (!header.literal) {
+      const substituted: string[][] = [];
+      collectSubstitutions(body, substituted);
+      this.pushNested(substituted);
+    }
     // The newline after the delimiter word ended this simple command.
-    this.endCommand();
+    this.endCommand("seq");
     this.i = bodyEnd;
   }
 
@@ -547,8 +596,9 @@ class CommandSplitter {
   private operator(): boolean {
     const ch = this.ch;
     if (!OPERATOR_CHARS.has(ch)) return false;
-    this.endCommand();
-    if (DOUBLED_OPERATORS.has(ch) && this.input[this.i + 1] === ch) this.i++;
+    const doubled = DOUBLED_OPERATORS.has(ch) && this.input[this.i + 1] === ch;
+    this.endCommand(operatorSequencing(ch, doubled));
+    if (doubled) this.i++;
     this.i++;
     return true;
   }
@@ -556,7 +606,8 @@ class CommandSplitter {
   /** Subshell / group boundaries also start a fresh command position. */
   private group(): boolean {
     if (!GROUP_CHARS.has(this.ch)) return false;
-    this.endCommand();
+    this.endCommand("group");
+    this.depth = Math.max(0, this.depth + (OPENING_GROUP_CHARS.has(this.ch) ? 1 : -1));
     this.i++;
     return true;
   }
