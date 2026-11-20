@@ -47,7 +47,7 @@ describe("splitWithContext — how each command is sequenced", () => {
   test("marks group members, and unmarks them after the group", () => {
     expect(view("(a && b); c")).toEqual([
       ["a", "start", "and", true, false],
-      ["b", "and", "group", true, false],
+      ["b", "and", "seq", true, false],
       ["c", "seq", "end", false, false],
     ]);
   });
@@ -55,6 +55,15 @@ describe("splitWithContext — how each command is sequenced", () => {
   test("marks commands from substitutions and shell strings as nested", () => {
     const nested = splitWithContext("x=$(a); bash -c 'b'").filter((c) => c.nested);
     expect(nested.map((c) => c.tokens.join(" "))).toEqual(["a", "b"]);
+  });
+
+  test("a newline after an operator continues the list; after a command it ends it", () => {
+    expect(view("a &&\nb\nc").map((r) => [r[1], r[2]])).toEqual([["start", "and"], ["and", "seq"], ["seq", "end"]]);
+    expect(view("a ||\nb").map((r) => r[1])).toEqual(["start", "or"]);
+  });
+
+  test("an operator after a group's close is what follows its last command", () => {
+    expect(view("(a) & b").map((r) => [r[1], r[2]])).toEqual([["start", "bg"], ["bg", "end"]]);
   });
 
   test("a newline is a sequence point", () => {

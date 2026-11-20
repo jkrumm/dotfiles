@@ -317,34 +317,40 @@ interface Step {
 /**
  * Follow `cd` through the command line, command by command.
  *
- * A `cd` that certainly ran in the shell that runs the rest (it starts the line
- * or follows `;`/newline, and no `|`, `&`, group or substitution wraps it)
- * REPLACES the directory. One that may not have run, or ran in a subshell
- * (after `||`, `|`, `&`; inside `( )`/`{ }`; inside `bash -c` or a
- * substitution; before `|`/`&`) ADDS its target and never takes one away: the
- * command is then judged in every directory it could run in, so ambiguity
- * fails closed. A `cd` after `&&` runs only if the commands before it
- * succeeded, so a following `;` may land back in the earlier directories.
+ * `cwds` is the set of directories the shell may be in. A `cd` that certainly
+ * ran in the shell that runs the rest (see `runsInThisShell`) REPLACES it, each
+ * directory moving to its own target. One that may not have run, or ran in a
+ * subshell, ADDS its targets and never takes one away: the push is then judged in
+ * every directory it could run in, so ambiguity fails closed.
  *
- * A target that is not a plain existing directory (`cd -`, `cd $X`, a missing
- * path) moves nothing.
+ * A `cd` after `&&` runs only if what came before succeeded: a command reached
+ * past a `;` or `||` may find the shell back in the directories it started in.
+ * A `cd` whose destination is not a plain path (`cd -`, bare `cd`, `popd`)
+ * widens the set to every directory seen so far. A path that is no existing
+ * directory (`cd $X`, a missing one) moves nothing.
  */
 export function stepsWithCwds(command: string, sessionCwd: string): Step[] {
+  const commands = splitWithContext(command);
+  const seen = new Set([sessionCwd, ...(process.env.HOME ? [process.env.HOME] : [])]);
   let cwds = [sessionCwd];
   let skipped: string[] = [];
-  return splitWithContext(command).map((cmd) => {
-    if (cmd.sep === "seq") cwds = union(cwds, skipped);
-    if (cmd.sep === "seq") skipped = [];
-    const step = { tokens: cmd.tokens, cwds };
-    const target = cdTarget(cmd.tokens, cwds[0]);
-    if (target === null) return step;
-    if (!runsInThisShell(cmd)) cwds = union(cwds, [target]);
-    else if (cmd.sep === "and") {
-      skipped = union(skipped, cwds);
-      cwds = [target];
-    } else {
+
+  return commands.map((cmd, i) => {
+    if (cmd.sep === "seq" || cmd.sep === "or") {
+      cwds = union(cwds, skipped);
       skipped = [];
-      cwds = [target];
+    }
+    const step = { tokens: cmd.tokens, cwds };
+    const move = readCd(cmd.tokens);
+    if (move === null) return step;
+
+    const targets = move === "unknown" ? [...seen] : cwds.map((cwd) => moveFrom(cwd, move));
+    for (const dir of targets) seen.add(dir);
+    if (move === "unknown" || !runsInThisShell(commands, i)) {
+      cwds = union(cwds, targets);
+    } else {
+      skipped = cmd.sep === "and" ? union(skipped, cwds) : [];
+      cwds = union([], targets);
     }
     return step;
   });
@@ -354,18 +360,54 @@ function union(a: string[], b: string[]): string[] {
   return [...new Set([...a, ...b])];
 }
 
-/** True when a `cd` here moves the shell the following commands run in, if it runs at all. */
-function runsInThisShell(cmd: ShellCommand): boolean {
-  if (cmd.nested || cmd.grouped) return false;
-  if (cmd.sep === "or" || cmd.sep === "pipe" || cmd.sep === "bg") return false;
-  return cmd.next !== "pipe" && cmd.next !== "bg";
+/**
+ * True when the `cd` at `index` moves the shell the following commands run in,
+ * if it runs at all: not in a group, a substitution or a `bash -c`, not after
+ * `||`, `|` or `&`, and not in a list that ends in `|` or `&` (`cd d && x &`
+ * backgrounds the whole list, the cd with it).
+ */
+function runsInThisShell(commands: ShellCommand[], index: number): boolean {
+  const cd = commands[index];
+  if (cd.nested || cd.grouped) return false;
+  if (cd.sep === "or" || cd.sep === "pipe" || cd.sep === "bg" || cd.next === "pipe") return false;
+  for (const cmd of commands.slice(index).filter((c) => !c.nested)) {
+    if (cmd.next === "bg") return false;
+    if (cmd.next !== "and" && cmd.next !== "or" && cmd.next !== "pipe") return true;
+  }
+  return true;
 }
 
-/** The existing directory a `cd <dir>` names, or null for anything else. */
-function cdTarget(tokens: string[], cwd: string): string | null {
-  if (tokens[0] !== "cd" || tokens.length !== 2 || tokens[1].startsWith("-")) return null;
-  const dir = expandPath(tokens[1], cwd);
-  return isDirectory(dir) ? dir : null;
+const CD_FLAG = /^-[PLe@]+$/;
+const REDIRECT = /^\d*[<>&]/;
+const REDIRECT_OPERATOR_ONLY = /^\d*(?:>>?|<|>&|&>>?)$/;
+
+/**
+ * What a `cd` / `pushd` / `popd` command does: null when it is none of them, the
+ * path it names, or "unknown" when the destination is not a plain path.
+ */
+function readCd(tokens: string[]): string | "unknown" | null {
+  if (tokens[0] === "popd") return "unknown";
+  if (tokens[0] !== "cd" && tokens[0] !== "pushd") return null;
+
+  const args = withoutRedirections(tokens.slice(1));
+  while (CD_FLAG.test(args[0] ?? "")) args.shift();
+  if (args[0] === "--") args.shift();
+  return args.length === 1 && args[0] !== "-" && !args[0].startsWith("-") ? args[0] : "unknown";
+}
+
+function withoutRedirections(args: string[]): string[] {
+  const kept: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (!REDIRECT.test(args[i])) kept.push(args[i]);
+    else if (REDIRECT_OPERATOR_ONLY.test(args[i])) i++;
+  }
+  return kept;
+}
+
+/** Where a `cd <path>` taken from `cwd` leaves the shell; a path that is no directory leaves it there. */
+function moveFrom(cwd: string, path: string): string {
+  const dir = expandPath(path, cwd);
+  return isDirectory(dir) ? dir : cwd;
 }
 
 /**

@@ -269,8 +269,41 @@ describe("stepsWithCwds — where the shell stands, command by command", () => {
 
   test("a cd that moves nothing is ignored", () => {
     expect(cwdsOfLast("cd /no/such/dir && git push")).toEqual([session]);
-    expect(cwdsOfLast("cd - && git push")).toEqual([session]);
     expect(cwdsOfLast("cd $X && git push")).toEqual([session]);
+  });
+
+  test("cd - , a bare cd and popd widen to every directory seen", () => {
+    expect(cwdsOfLast(`cd ${dir} && git status && cd - && git push`)?.toSorted()).toEqual(expect.arrayContaining([session, dir]));
+    expect(cwdsOfLast(`cd ${dir} && popd && git push`)).toContain(session);
+    expect(cwdsOfLast(`cd ${dir} && cd && git push`)).toContain(session);
+    expect(cwdsOfLast("cd - && git push")).toContain(session);
+  });
+
+  test("cd flags and redirections do not hide the target", () => {
+    expect(cwdsOfLast(`cd -P ${dir} && git push`)).toEqual([dir]);
+    expect(cwdsOfLast(`cd -- ${dir} && git push`)).toEqual([dir]);
+    expect(cwdsOfLast(`cd ${dir} 2>/dev/null && git push`)).toEqual([dir]);
+    expect(cwdsOfLast(`cd ${dir} > /dev/null && git push`)).toEqual([dir]);
+    expect(cwdsOfLast(`pushd ${dir} && git push`)).toEqual([dir]);
+  });
+
+  test("a newline after && keeps the cd conditional", () => {
+    expect(cwdsOfLast(`false &&\n cd ${dir}\n git push`)?.toSorted()).toEqual([session, dir].toSorted());
+  });
+
+  test("directories skipped by an &&-guarded cd return after ||", () => {
+    expect(cwdsOfLast(`[ -d ${dir} ] && cd ${dir} || git push`)?.toSorted()).toEqual([session, dir].toSorted());
+  });
+
+  test("a cd in a list that is backgrounded runs in a subshell", () => {
+    expect(cwdsOfLast(`cd ${dir} && make & git push`)?.toSorted()).toEqual([session, dir].toSorted());
+  });
+
+  test("a relative cd resolves against every directory the shell may be in", () => {
+    mkdirSync(join(session, "sub"), { recursive: true });
+    mkdirSync(join(dir, "sub"), { recursive: true });
+    const cwds = cwdsOfLast(`false && cd ${dir}; cd sub; git push`);
+    expect(cwds?.toSorted()).toEqual([join(session, "sub"), join(dir, "sub")].toSorted());
   });
 });
 
@@ -370,6 +403,10 @@ describe("decision path — the hook as a subprocess", () => {
     ["a cd skipped by &&", `false && cd ${wtRepo}; git push -q`],
     ["a cd that only pipes", `cd ${wtRepo} | cat; git push -q`],
     ["a cd in bash -c", `bash -c 'cd ${wtRepo}'; git push -q`],
+    ["a newline after && keeps the cd conditional", `false &&\n cd ${wtRepo}\n git push -q`],
+    ["a push after || of an &&-guarded cd", `[ -d ${wtRepo} ] && cd ${wtRepo} || git push -q`],
+    ["cd - back to the session", `cd ${wtRepo} && git status >/dev/null && cd - && git push -q`],
+    ["a backgrounded cd list", `cd ${wtRepo} && git status >/dev/null & git push -q`],
   ])("a push that may run on master is denied: %s", (_, command) => {
     expect(denied(command)).toBe(true);
   });
