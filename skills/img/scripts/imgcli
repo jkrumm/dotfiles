@@ -1029,7 +1029,7 @@ print((o.get("cost") or {}).get("usd") or 0)
   fi
 
   local res="$GEN_TMP/icons-res.json"
-  image_mime "$src" >/dev/null
+  case "${src##*.}" in svg|SVG) : ;; *) image_mime "$src" >/dev/null ;; esac
   agw_run "$res" icon image-icon "$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$src")" \
     --background "$bg" --cutout "$cutout"
   OUT="$out" JSON="$json" GEN_COST="$gen_cost" SRC="$src" python3 -c '
@@ -1064,6 +1064,172 @@ else:
 ' "$res"
 }
 
+# --- sheet (agw image-sheet) -------------------------------------------------
+# A numbered contact sheet of 1-24 images, each cell at 320, 64, 32 and 16 px.
+# --private uploads the sheet and prints one presigned URL; --artifact uploads
+# every cell png and files a markdown Report (one picture per option) that the
+# owner can comment on in the Console. The Console address comes from
+# FACTORY_CONSOLE_URL in ~/.config/factory/env — never written into this file.
+
+FACTORY_ENV_FILE="${FACTORY_ENV_FILE:-${HOME}/.config/factory/env}"
+
+console_base() {
+  [ -f "$FACTORY_ENV_FILE" ] || return 0
+  sed -n 's/^FACTORY_CONSOLE_URL=//p' "$FACTORY_ENV_FILE" | tail -n 1 | sed -e "s/^[\"']//" -e "s/[\"']\$//" -e 's#/*$##'
+}
+
+cmd_sheet() {
+  local files=() labels="" ground="" cols="" private=0 artifact="" title="" note="" expires="" json=0
+  local usage_line="usage: imgcli sheet <file>... [--labels a,b] [--ground dark|light|both] [--cols N] [--private [--expires <dur>]] [--artifact <repo> --title <title> [--note <text>]] [--json]"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --labels) [ $# -ge 2 ] || die "--labels needs a value"; labels="$2"; shift 2 ;;
+      --ground) [ $# -ge 2 ] || die "--ground needs a value"; ground="$2"; shift 2 ;;
+      --cols) [ $# -ge 2 ] || die "--cols needs a value"; cols="$2"; shift 2 ;;
+      --private) private=1; shift ;;
+      --expires) [ $# -ge 2 ] || die "--expires needs a value"; expires="$2"; shift 2 ;;
+      --artifact) [ $# -ge 2 ] || die "--artifact needs a repo"; artifact="$2"; shift 2 ;;
+      --title) [ $# -ge 2 ] || die "--title needs a value"; title="$2"; shift 2 ;;
+      --note) [ $# -ge 2 ] || die "--note needs a value"; note="$2"; shift 2 ;;
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) files+=("$1"); shift ;;
+    esac
+  done
+  [ ${#files[@]} -ge 1 ] && [ ${#files[@]} -le 24 ] || die "$usage_line (1 to 24 files)"
+  case "$ground" in ''|dark|light|both) : ;; *) die "--ground must be dark, light or both: $ground" ;; esac
+  if [ -n "$cols" ]; then
+    case "$cols" in *[!0-9]*) die "--cols must be 1-24: $cols" ;; esac
+    { [ "$cols" -ge 1 ] && [ "$cols" -le 24 ]; } || die "--cols must be 1-24: $cols"
+  fi
+  { [ -z "$artifact" ] && { [ -n "$title" ] || [ -n "$note" ]; }; } && die "--title and --note need --artifact <repo>"
+  { [ -n "$artifact" ] && [ -z "$title" ]; } && die "--artifact needs --title"
+  { [ -n "$expires" ] && [ "$private" = 0 ] && [ -z "$artifact" ]; } && die "--expires needs --private or --artifact"
+  local f
+  for f in "${files[@]}"; do
+    [ -f "$f" ] || die "no such file: $f"
+    case "$(printf '%s' "${f##*.}" | tr '[:upper:]' '[:lower:]')" in
+      png|jpg|jpeg|webp|svg) : ;;
+      *) die "sheet takes png, jpeg, webp or svg: $f" ;;
+    esac
+  done
+  need python3
+  [ -z "$artifact" ] || need factory
+  parse_expires "$expires"
+
+  gen_tmp
+  local abs=() args=()
+  for f in "${files[@]}"; do abs+=("$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$f")"); done
+  args=("${abs[@]}")
+  [ -z "$labels" ] || args+=(--labels "$labels")
+  [ -z "$ground" ] || args+=(--ground "$ground")
+  [ -z "$cols" ] || args+=(--cols "$cols")
+  [ -z "$artifact" ] || args+=(--cells)
+  local res="$GEN_TMP/sheet-res.json" plan="$GEN_TMP/sheet-plan.tsv" results="$GEN_TMP/sheet-up.jsonl"
+  agw_run "$res" sheet image-sheet "${args[@]}"
+  mkdir -p "$GEN_DIR"
+  # Copies the sheets to ~/Pictures/imgcli/ and lists what to upload: kind, ground, number, path.
+  OUT_DIR="$GEN_DIR" PRIVATE="$private" ARTIFACT="$artifact" python3 -c '
+import json, os, shutil, sys, time
+o = json.load(open(sys.argv[1]))["output"]
+stamp = time.strftime("%Y%m%d-%H%M%S")
+sheets = []
+for s in o["sheets"]:
+    path = os.path.join(os.environ["OUT_DIR"], "sheet-%s-%s.png" % (stamp, s["ground"]))
+    shutil.copyfile(s["path"], path)
+    sheets.append({"file": path, "ground": s["ground"], "width": s["width"], "height": s["height"]})
+rows = []
+if os.environ["PRIVATE"] == "1":
+    rows += [("sheet", s["ground"], 0, s["file"]) for s in sheets]
+if os.environ["ARTIFACT"]:
+    if not o["cells"]:
+        sys.exit("agw image-sheet returned no cells")
+    rows += [("cell", c["ground"], c["number"], c["path"]) for c in o["cells"]]
+open(sys.argv[2], "w").write("".join("%s\t%s\t%d\t%s\n" % r for r in rows))
+json.dump(sheets, open(sys.argv[2] + ".sheets", "w"))
+' "$res" "$plan" || die "could not read the agw image-sheet result"
+
+  : >"$results"
+  if [ -s "$plan" ]; then
+    load_private_config
+    local kind gr num path
+    while IFS=$'\t' read -r kind gr num path; do
+      private_put "$path"
+      KIND="$kind" GROUND="$gr" NUM="$num" URL="$P_URL" EXPIRES_AT="$P_EXPIRES_AT" python3 -c '
+import json, os
+e = os.environ
+print(json.dumps({"kind": e["KIND"], "ground": e["GROUND"], "number": int(e["NUM"]), "url": e["URL"], "expiresAt": e["EXPIRES_AT"]}))
+' >>"$results"
+    done <"$plan"
+  fi
+
+  # The Report body: one "## N. label" heading and one picture per option (one
+  # per ground with --ground both).
+  local art_id="" art_url="" body="$GEN_TMP/sheet-body.md"
+  if [ -n "$artifact" ]; then
+    NOTE="$note" python3 -c '
+import json, os, sys
+o = json.load(open(sys.argv[1]))["output"]
+urls = {}
+for l in open(sys.argv[2]):
+    r = json.loads(l)
+    if r["kind"] == "cell":
+        urls.setdefault(r["number"], []).append((r["ground"], r["url"]))
+lines = []
+if os.environ["NOTE"]:
+    lines += [os.environ["NOTE"], ""]
+for img in o["images"]:
+    n = img["number"]
+    label = img.get("label") or os.path.basename(img["file"])
+    lines += ["## %d. %s" % (n, label), ""]
+    for ground, url in urls.get(n, []):
+        lines += ["![%d. %s on %s](%s)" % (n, label, ground, url), ""]
+open(sys.argv[3], "w").write("\n".join(lines))
+' "$res" "$results" "$body" || die "could not build the report"
+    local out
+    out="$(factory artifact new --repo "$artifact" --title "$title" --content-format markdown --content "@$body" --format json)" \
+      || die "factory artifact new failed"
+    art_id="$(python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+d = d.get("artifact", d) if isinstance(d, dict) else {}
+print(d.get("id") or d.get("ref") or "")
+' "$out")"
+    [ -n "$art_id" ] || die "factory artifact new named no artifact id: $out"
+    local base
+    base="$(console_base)"
+    [ -z "$base" ] || art_url="$base/artifacts/$art_id"
+  fi
+
+  SHEETS="$plan.sheets" RES="$res" RESULTS="$results" ART_ID="$art_id" ART_URL="$art_url" TITLE="$title" JSON="$json" python3 -c '
+import json, os
+e = os.environ
+env = json.load(open(e["RES"]))
+sheets = json.load(open(e["SHEETS"]))
+ups = [json.loads(l) for l in open(e["RESULTS"]) if l.strip()]
+for s in sheets:
+    for u in ups:
+        if u["kind"] == "sheet" and u["ground"] == s["ground"]:
+            s["url"], s["expiresAt"] = u["url"], u["expiresAt"]
+images = [{"number": i["number"], "file": i["file"], "label": i.get("label")} for i in env["output"]["images"]]
+out = {"id": env["runId"], "sheets": sheets, "images": images}
+if e["ART_ID"]:
+    out["artifact"] = {"id": e["ART_ID"], "title": e["TITLE"], "url": e["ART_URL"] or None}
+if e["JSON"] == "1":
+    print(json.dumps(out))
+else:
+    print("sheet      %d image(s), %d sheet(s)" % (len(images), len(sheets)))
+    for s in sheets:
+        print("  %-5s %sx%s  %s" % (s["ground"], s["width"], s["height"], s["file"]))
+        if "url" in s:
+            print("    expires %s\n    %s" % (s["expiresAt"], s["url"]))
+    if e["ART_ID"]:
+        print("artifact   %s" % e["ART_ID"])
+        if e["ART_URL"]:
+            print("  %s" % e["ART_URL"])
+'
+}
+
 usage() {
   cat <<'EOT'
 imgcli — generate images, publish them to the CDN, share them privately
@@ -1073,8 +1239,10 @@ imgcli — generate images, publish them to the CDN, share them privately
                  [--copy] [--open] [--json]
 
   imgcli cutout  <file> [--model recraft|bria] [--out <file.png>] [--json]
-  imgcli icon    "<prompt>" | --from <file> [--quality medium] [--bg #rrggbb] [--cutout auto|always|never]
+  imgcli icon    "<prompt>" | --from <file|.svg> [--quality medium] [--bg #rrggbb] [--cutout auto|always|never]
                  [--out <dir>] [--json]
+  imgcli sheet   <file>... [--labels a,b] [--ground dark|light|both] [--cols N] [--private [--expires <dur>]]
+                 [--artifact <repo> --title <title> [--note <text>]] [--json]
 
   imgcli upload  <file> [prefix/] [--name N] [--copy] [--open] [--json]
   imgcli publish <file> [prefix/] ...              (alias of upload)
@@ -1131,10 +1299,23 @@ CUTOUT & ICONS
            apple-touch-icon.png (180, opaque on --bg), icon-1024.png (opaque,
            Xcode/App Store), AppIcon.icns (macOS), head.html, manifest.webmanifest.
            From a prompt it generates 1024x1024 with native alpha (no cutout
-           needed); --from <file> takes existing art and cuts it out when it has
+           needed); --from <file|.svg> takes existing art and cuts it out when it has
            no transparency (--cutout auto); sources under 512px are upscaled first
            (real-esrgan, $0.002). Vectorizing adds $0.01. Typical total from a
            prompt at medium: ~$0.023.
+
+SHEET
+  sheet    makes a numbered contact sheet with `agw image-sheet` (1-24 png, jpeg, webp or
+           svg files, free): each cell shows the image at 320, 64, 32 and 16 px under its
+           number and --labels. Ground is dark by default; both writes a dark and a light
+           sheet. The sheets are copied to ~/Pictures/imgcli/. --private uploads them and
+           prints one presigned URL per sheet. --artifact <repo> --title <t> uploads every
+           cell as its own private picture and files a markdown Report with factory
+           artifact new (one "## N. label" heading and one picture per option; --note is
+           the text above them): it prints the artifact id and the Console address, built
+           from FACTORY_CONSOLE_URL in ~/.config/factory/env (only the id when that is
+           unset). Give the owner the Console address, never a presigned URL: he comments
+           on a picture there. Pictures in the Report are presigned, so they last 7 days.
 
 JSON
   cutout   {"id","model","file","width","height","cost_usd","latency_ms"}
@@ -1143,6 +1324,8 @@ JSON
   gen      {"id","model","size","quality","cost_usd","latency_ms","public","private",
             "images":[{"file","id"}],"plan"?}; --public adds key,cdnUrl,markdown
             per image, --private adds key,url,expiresAt
+  sheet    {"id","sheets":[{"file","ground","width","height","url"?,"expiresAt"?}],
+            "images":[{"number","file","label"}],"artifact"?:{"id","title","url"}}
   upload   {"uploaded","key","url","dimensions","bytes"}   (skipped: uploaded:false + reason)
   private  {"key","url","expiresAt","bytes"}
 
@@ -1171,6 +1354,7 @@ case "${1:-}" in
   gen)            shift; cmd_gen "$@" ;;
   cutout)         shift; cmd_cutout "$@" ;;
   icon|icons)     shift; cmd_icon "$@" ;;
+  sheet)          shift; cmd_sheet "$@" ;;
   ""|-h|--help|help) usage ;;
   share|library|link) die "'$1' was removed with image-share (2026-10) — use 'private', 'private-url' or 'private-ls'" ;;
   *) die "unknown command: $1 (try --help)" ;;
