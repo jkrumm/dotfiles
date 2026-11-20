@@ -58,6 +58,7 @@ services:
   - { name: hermes-serve-liveness, repo: hermes-agent, kind: launchd, tier: core, label: com.jkrumm.hermes-serve-liveness, memory_mib: 50 }
   - { name: home-climate, repo: home, kind: launchd, tier: core, label: com.jkrumm.home-climate, memory_mib: 50 }
   - { name: home-nacht, repo: home, kind: launchd, tier: core, label: com.jkrumm.home-nacht, memory_mib: 50 }
+  - { name: home-guard, repo: home, kind: launchd, tier: core, label: com.jkrumm.home-guard, memory_mib: 50 }
   - { name: homebridge, repo: home, kind: launchd, tier: core, label: com.jkrumm.homebridge, memory_mib: 100 }
   - { name: icloud-photos-export, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.icloud-photos-export, memory_mib: 50, note: "01:30 nightly; peaks near 1 GiB for the minutes osxphotos reads the library" }
   - { name: iris, repo: iris, kind: launchd, tier: core, label: com.jkrumm.iris, door: iris, memory_mib: 90 }
