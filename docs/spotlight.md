@@ -73,6 +73,6 @@ client watching a parent directory.
 
 Is anything worth doing? No. The three levers are all poor: (1) stopping clients means stopping the agents' file watching;
 (2) a `.fseventsd/no_log` file at the volume root stops the on-disk event history, is root-only, and would not reduce the live
-delivery that drives the CPU; its gain could not be measured here; (3) the daily `com.jkrumm.fseventsd-watch` restart already
+delivery that drives the CPU; its gain could not be measured here; (3) the hourly `com.jkrumm.fseventsd-watch` restart already
 exists for the leak case. At load 10 it costs 9-15 % of a core; the 40 % peaks come with the load, not before it. To look again
 when it peaks: `make spotlight-load SECS=60` and the `log show` line above name the same daemons and the registrations.

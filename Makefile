@@ -2935,7 +2935,7 @@ colima-dns-test: ## The default VM's resolver derivation (colima/vm-dns*.sh, app
 	@shellcheck -S warning $(DOTFILES_DIR)/colima/vm-dns.sh $(DOTFILES_DIR)/colima/vm-dns-guest.sh $(DOTFILES_DIR)/colima/apply-provision.sh $(DOTFILES_DIR)/colima/vm-dns.test.sh
 	@/bin/bash $(DOTFILES_DIR)/colima/vm-dns.test.sh
 
-# Daily restart of a leaking fseventsd (memory > 1.5 GB, or CPU >= 150 % for 10 min): 2.1 GB at 260 % CPU after 5 days
+# Hourly restart of a leaking fseventsd (memory > 1.5 GB, or CPU >= 150 % for 10 min): 2.1 GB at 260 % CPU after 5 days
 # put the dev host into swap thrash on 2026-11-12 (issue 870). The restart is `sudo -n killall fseventsd`, allowed by ONE
 # sudoers rule that the OWNER installs once: `ask-human.sh ask 'install the fseventsd restart rule' --cmd 'cd
 # ~/SourceRoot/dotfiles && make fseventsd-sudoers'` (the mini's sudo password is MacBook-only). Until then the job logs
@@ -2944,7 +2944,7 @@ colima-dns-test: ## The default VM's resolver derivation (colima/vm-dns*.sh, app
 fseventsd-watch-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.fseventsd-watch" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ daily at 05:10 → restart fseventsd past 1.5 GB or 10 min at 150 % CPU; log: ~/Library/Logs/fseventsd-watch.log"
+	@echo "    ↳ hourly at :10 → restart fseventsd past 1.5 GB or 10 min at 150 % CPU; log: ~/Library/Logs/fseventsd-watch.log"
 fseventsd-watch-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.fseventsd-watch.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
