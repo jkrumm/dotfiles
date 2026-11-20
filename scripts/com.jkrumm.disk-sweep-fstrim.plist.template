@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.disk-sweep-fstrim</string>
+  <!-- Every 4 h at :15: fstrim of the Colima data disk alone, the sweep's colima-trim step. The
+       data disk regrows 20+ GiB within hours of a trim (docs/disk.md, Issue 2315); the daily 04:40
+       sweep is the only other trim. Its log line reads "disk-sweep: 1 steps", apart from the daily run. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.disk-sweep-fstrim</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>14400</string>
+    <string>--timeout</string><string>1200</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/disk-sweep.sh</string>
+    <string>colima-trim</string>
+  </array>
+  <!-- --timeout 1200: the step's own fstrim bound is 600 s (scripts/disk-sweep.sh TOOL_TIMEOUT); the job's deadline sits above it. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- StartCalendarInterval, as the daily sweep: a fire missed while asleep runs once on wake. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>15</integer></dict>
+  </array>
+  <key>RunAtLoad</key><false/>
+  <!-- Same log as the daily sweep, rotated by log-rotate (derived from this plist). -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/disk-sweep.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/disk-sweep.log</string>
+</dict>
+</plist>
