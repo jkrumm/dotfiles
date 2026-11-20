@@ -330,6 +330,10 @@ run
 assert_eq "dead holder is stale: run proceeds" "$RC" 0
 assert_eq "lock released on exit" "$([ -e "$LOCK" ] && echo yes || echo no)" no
 sleep 30 & other=$!
+# fork-to-exec: until the child execs, ps still shows this test's command line (it names brew-upgrade)
+for _ in $(seq 1 500); do
+  [[ "$(ps -o command= -p "$other" 2>/dev/null)" == *"sleep 30"* ]] && break
+done
 echo "$other" > "$LOCK"
 run
 assert_eq "live pid that is not brew-upgrade is stale (pid reuse)" "$RC" 0
