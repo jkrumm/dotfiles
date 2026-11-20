@@ -363,6 +363,14 @@ weatherorb-map.test {
 	reverse_proxy localhost:8081
 }
 
+# walkingpad — the host daemon's remote listener (walkingpad-mac, [daemon] remote_port, 127.0.0.1:7708). Every route,
+# GET /health included, answers 401 without the remote bearer token (`walkingpad token` prints it). The local 7706
+# listener (Kuma probe, make verify) is not behind this door.
+walkingpad.test {
+	import local
+	reverse_proxy localhost:7708
+}
+
 # ─── VPN-only AWS web UIs (via prometheus-scripts/vpn sidecar) ───────────────
 # Caddy fronts the public hostname on 127.0.0.1:443; the sidecar binds a
 # non-443 port and forwards over the AWS Client VPN tunnel. /etc/hosts pin
