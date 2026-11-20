@@ -140,6 +140,7 @@ setup:
 	@$(MAKE) --no-print-directory mini-apps-setup
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
+	@$(MAKE) --no-print-directory disk-sweep-fstrim-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
 	@$(MAKE) --no-print-directory icloud-photos-export-setup
 	@$(MAKE) --no-print-directory photos-analysis-off
@@ -2857,7 +2858,7 @@ log-rotate-test:
 # Converged by `make setup`. Teardown removes the jobrun state file too, or jobs-grade would
 # grade the retired label `unloaded` forever. `disk-sweep-run` runs every step once, docker
 # included — the sanctioned route for those commands, since a hook blocks raw docker here.
-.PHONY: disk-sweep-setup disk-sweep-teardown disk-sweep-run disk-sweep-test
+.PHONY: disk-sweep-setup disk-sweep-teardown disk-sweep-run disk-sweep-test disk-sweep-fstrim-setup disk-sweep-fstrim-teardown
 disk-sweep-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep" PLIST_DIR="$(DOTFILES_DIR)/scripts"
@@ -2872,6 +2873,17 @@ disk-sweep-run:
 disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
+
+# The 4-hourly fstrim (docs/disk.md): the sweep's colima-trim step alone, between the daily 04:40 runs.
+disk-sweep-fstrim-setup:
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep-fstrim" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ every 4 h at :15 → fstrim the Colima data disk; log: ~/Library/Logs/disk-sweep.log"
+disk-sweep-fstrim-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.disk-sweep-fstrim.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.disk-sweep-fstrim.json"; \
+	echo "  ✓ disk-sweep-fstrim torn down (unloaded, plist and jobrun state removed)"
 
 # The external volume contract (docs/external-ssd.md). The unlock job is installed by `make setup` (step
 # `_setup-external-volume`) on the mini once config/external-volume.json says attached=true, and is a no-op until then.
@@ -4130,6 +4142,7 @@ help:
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
 	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, tmp, package caches, Lima IPSWs)"
+	@echo "  make disk-sweep-fstrim-setup    Load the 4-hourly fstrim of the Colima data disk (the sweep's colima-trim step alone)"
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
