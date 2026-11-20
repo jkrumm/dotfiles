@@ -14,10 +14,13 @@ echo '  agw web read <url> [--ask <string>] [--format json|plain]'
 echo '  agw llm summarize [text] [--max-words <integer>] [--format json|plain]'`,
   factory: `case "$*" in
   "issue new --help") echo 'usage: factory issue new [flags]'; echo '  --repo <text>  required'; echo '  --title <text>' ;;
+  "issue --all --help") echo 'usage: factory issue <verb> [flags]'; echo; echo '  issue defer <id>  the lead waits'; echo '  issue ask <id>    the lead raises a Decision' ;;
+  "issue defer --help") echo 'usage: factory issue defer <id> [flags]'; echo '  --attempt <integer>  required'; echo '  --after <issue-id>  repeatable' ;;
   *--help*) echo 'usage: factory [--format json|plain] <command>'; echo; echo 'commands:'
     echo '  version                  the CLI version'
     echo '  session note <session> <text>   a note typed to a lead'
     echo '  issue new                the owner files an Issue'
+    echo '  issue     defer <id>, ask <id>   the group, its verbs in the group help'
     echo '  issue show <id>          one Issue'
     echo '  merge-lock --project <name> -- <cmd>   run <cmd> holding the lock'
     echo '  hook <event>             the Claude Code hook' ;;
@@ -84,6 +87,15 @@ describe("findings", () => {
     const r = await scan({ "AGENTS.md": "`factory session wait --on workers`\n" })
     expect(r.code).toBe(1)
     expect(r.err).toContain("AGENTS.md:1: no such command: factory session wait")
+  })
+
+  test("a group whose help lists its verbs with no Commands header (factory issue --all --help) resolves them and their flags", async () => {
+    const r = await scan({
+      "docs/a.md": "`factory issue defer 12 --attempt 1 --after issue_3`\n`factory issue defer 12 --nope`\n`factory issue frobnicate`\n",
+    })
+    expect(r.err).toContain("docs/a.md:2: no such flag: factory issue defer --nope")
+    expect(r.err).toContain("docs/a.md:3: no such command: factory issue frobnicate")
+    expect(r.err.split("\n").filter((l) => l.startsWith("docs/"))).toHaveLength(2)
   })
 
   test("a flag before the verb is skipped, its value too when the table says it takes one", async () => {
