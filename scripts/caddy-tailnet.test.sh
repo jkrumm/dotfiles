@@ -182,6 +182,29 @@ first=$(grep -n '^	@plain host' "$OUT" | head -1 | cut -d: -f1)
 caddy validate --config "$OUT" --adapter caddyfile >/dev/null 2>&1 \
   && ok "caddy validate accepts the wake and the door log" || bad "caddy validate rejects the wake and the door log"
 
+echo "validate with a door log the user cannot open (root-owned in production)"
+
+# A directory the user cannot write stands in for the daemon's root:admin log file.
+mkdir -p "$TMP/ro"; chmod 500 "$TMP/ro"
+: > "$TMP/hosts"; gen "$TMP/hosts"
+sed "s#output file $TMP/doors.log#output file $TMP/ro/doors.log#" "$OUT" > "$TMP/ro.caddy"
+if [ "$(id -u)" = 0 ]; then
+  echo "  skip: running as root, the directory is writable"
+else
+  caddy validate --config "$TMP/ro.caddy" --adapter caddyfile >/dev/null 2>&1 \
+    && bad "precondition: validating the include as is should fail on the door log" \
+    || ok "precondition: the include as is fails on the unwritable door log"
+  # The real function from the script, so the test cannot drift from it.
+  eval "$(sed -n '/^validate_include() {/,/^}/p' "$GEN")"
+  # shellcheck disable=SC2034 # read by validate_include, which is eval'd above
+  OUT="$TMP/ro.caddy" DOOR_LOG="$TMP/ro/doors.log"
+  validate_include && ok "validate_include accepts it via a scratch door log" || bad "validate_include rejects it"
+  printf 'x.test {\n\tbogus_directive\n}\n' > "$TMP/bad.caddy"
+  OUT="$TMP/bad.caddy"
+  validate_include && bad "validate_include accepts a broken include" || ok "validate_include still rejects a broken include"
+fi
+chmod 700 "$TMP/ro"
+
 [ "$fails" = 0 ] && { echo "caddy-tailnet generator: all passed"; exit 0; }
 echo "caddy-tailnet generator: $fails failed"
 exit 1

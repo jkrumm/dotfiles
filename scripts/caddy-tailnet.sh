@@ -1406,7 +1406,29 @@ fi
 # how good the config is. The include carries everything this script wrote
 # (site block, tls/dns module, every handler); the running daemon's own reload
 # below is what proves the composed file, and it rolls back on failure.
-if (( ! SKIP_RELOAD )) && ! caddy validate --config "$OUT" --adapter caddyfile >/dev/null 2>&1; then
+#
+# The include itself names the door log (emit_apps_control), and that file is root:admin
+# once the daemon has opened it, so validating the include as the user fails with
+# "open …caddy-doors.log: permission denied" — every regeneration rolled back. Validate a
+# copy whose door log points at a scratch file instead; that still provisions the same
+# log writer module and checks every other line unchanged. The copy holds the Cloudflare
+# token, so it lives in a chmod-700 temp dir and is removed at once.
+validate_include() {
+  local dir copy rc=0
+  dir=$(mktemp -d -t caddy-tailnet-validate) || return 1
+  chmod 700 "$dir"
+  copy="$dir/tailnet.caddy"
+  # awk, not ${var//…}: bash 3.2 (macOS /bin/bash) keeps the quotes inside a quoted pattern literally.
+  ( umask 077
+    awk -v from="output file $DOOR_LOG" -v to="output file $dir/doors.log" '
+      { i = index($0, from); if (i) $0 = substr($0, 1, i - 1) to substr($0, i + length(from)); print }
+    ' "$OUT" > "$copy" )
+  caddy validate --config "$copy" --adapter caddyfile >/dev/null 2>&1 || rc=$?
+  rm -rf "$dir"
+  return "$rc"
+}
+
+if (( ! SKIP_RELOAD )) && ! validate_include; then
   restore_rollback
   die "generated config is invalid — inspect $OUT (it holds the Cloudflare token; redact before sharing)"
 fi
