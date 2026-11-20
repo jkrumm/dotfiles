@@ -425,6 +425,7 @@ const OPERATOR_CHARS = new Set(["|", ";", "&", "\n"]);
 const DOUBLED_OPERATORS = new Set(["|", "&"]);
 const GROUP_CHARS = new Set(["(", ")", "{", "}"]);
 const OPENING_GROUP_CHARS = new Set(["(", "{"]);
+const CONTINUING = new Set<Sequencing>(["and", "or", "pipe"]);
 
 function operatorSequencing(ch: string, doubled: boolean): Sequencing {
   if (ch === "|") return doubled ? "or" : "pipe";
@@ -491,12 +492,28 @@ class CommandSplitter {
   /** `next` is what follows the command; it also becomes the `sep` of the one after. */
   private endCommand(next: Sequencing): void {
     this.endToken();
-    if (this.current.length > 0) {
+    const hadCommand = this.current.length > 0;
+    let closedGroup = false;
+    if (hadCommand) {
       this.commands.push({ tokens: this.current, sep: this.sep, next, grouped: this.depth > 0, nested: false });
       this.pushNested(nestedShellCommands(this.current));
       this.current = [];
+    } else {
+      closedGroup = this.closeGroupWith(next);
     }
-    if (next !== "group" && next !== "end") this.sep = next;
+    if (next === "group" || next === "end") return;
+    // A newline straight after `&&`, `||` or `|` continues the list: the next command stays joined to it.
+    const continuation = !hadCommand && !closedGroup && next === "seq" && CONTINUING.has(this.sep);
+    if (!continuation) this.sep = next;
+  }
+
+  /** `(a) & b`: the operator after a group's `)` is what follows the group's last command. */
+  private closeGroupWith(next: Sequencing): boolean {
+    if (next === "group" || next === "end") return false;
+    const last = this.commands.findLast((command) => !command.nested);
+    if (last?.next !== "group") return false;
+    last.next = next;
+    return true;
   }
 
   /** Commands the current one runs inside itself; their position in the sequence is unknowable. */
