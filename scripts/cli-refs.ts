@@ -24,6 +24,7 @@ type Spec = {
   deep: boolean // `<cli> <verb> --help` is safe and complete: ask it per verb
   noHelp?: string[] // verbs never asked (a verb whose --help would read stdin or run a wrapped command)
   extra?: string[] // verbs the top help does not list in command position
+  helpFlags?: string[] // flags put before --help of the top help and a group's, not a verb's (factory's --all: its session-restricted listing hides the owner's verbs)
   valueFlags?: string[] // flags before the verb that take a value (`--format plain`)
   globalFlags?: string[]
   passthrough?: boolean // an unknown first word is forwarded to another program, so it is no finding
@@ -36,7 +37,10 @@ export const CLIS: Record<string, Spec> = {
   factory: {
     verbs: true,
     deep: true,
-    noHelp: ["hook", "follow", "slot", "deploy-lock", "merge-lock"],
+    noHelp: ["hook"],
+    helpFlags: ["--all"],
+    // verbs the help lists in no command position: `also` group, and `issue new` (filed by the owner's skill, absent from every listing)
+    extra: ["follow", "deploy-lock", "merge-lock", "retro", "version", "issue new", "slot run"],
     valueFlags: ["--format"],
     globalFlags: ["--format"],
   },
@@ -186,6 +190,10 @@ class Asker {
     return Bun.which(cli, { PATH: this.env.PATH ?? "" })
   }
 
+  helpFlags(cli: string): string[] {
+    return CLIS[cli]?.helpFlags ?? []
+  }
+
   private async slot<T>(fn: () => Promise<T>): Promise<T> {
     while (this.running >= SPAWNS) await new Promise<void>((r) => this.waiting.push(r))
     this.running++
@@ -229,7 +237,7 @@ class Asker {
       hit = this.slot(async () => {
         const bin = this.which(cli)
         if (!bin) return null
-        const proc = Bun.spawn([bin, ...path, "--help"], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: this.env as Record<string, string> })
+        const proc = Bun.spawn([bin, ...path, ...(path.length <= 1 ? this.helpFlags(cli) : []), "--help"], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: this.env as Record<string, string> })
         const timer = setTimeout(() => proc.kill(), TIMEOUT_MS)
         try {
           const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
@@ -277,8 +285,15 @@ export function parseTable(cli: string, text: string, extra: string[] = []): Tab
 }
 
 // A verb help's `Commands:` section: the words in command position, nothing else (prose lines stay out).
-export function subCommands(help: string): Set<string> {
+export function subCommands(help: string, group = ""): Set<string> {
   const subs = new Set<string>()
+  // a group's help lists its verbs as `<group> <verb> <args>` lines, with no Commands: header (factory issue --help)
+  if (group) for (const raw of help.split("\n")) {
+    const line = raw.trim()
+    if (!line.startsWith(`${group} `)) continue
+    const word = line.slice(group.length + 1).split(/\s+/, 1)[0]!
+    if (WORD.test(word)) subs.add(word)
+  }
   let inside = false
   for (const raw of help.split("\n")) {
     if (/^\s*(sub)?commands:\s*$/i.test(raw)) {
@@ -328,7 +343,7 @@ export async function check(q: Quote, asker: Asker): Promise<Finding[]> {
     if (hasPrefix(table.paths, [...cur, w])) return "ok"
     if (!cur.length || !table.paths.has(cur.join(" "))) return "unknown"
     if (!asks(cur)) return "arg"
-    const subs = subCommands((await asker.verbHelp(q.cli, cur)) ?? "")
+    const subs = subCommands((await asker.verbHelp(q.cli, cur)) ?? "", cur.join(" "))
     if (!subs.size) return "arg"
     if (!subs.has(w)) return "unknown"
     table.paths.add([...cur, w].join(" "))
