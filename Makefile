@@ -2887,7 +2887,7 @@ log-rotate-test:
 disk-sweep-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ daily at 04:40 → prune build cache + dangling images, fstrim colima, stale tmp entries, package caches, Lima IPSWs; log: ~/Library/Logs/disk-sweep.log"
+	@echo "    ↳ daily at 04:40 → prune build cache + dangling images, fstrim colima, stale tmp entries, package caches, Lima IPSWs, closed Issues' worktree build dirs; log: ~/Library/Logs/disk-sweep.log"
 disk-sweep-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.disk-sweep.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -4166,7 +4166,7 @@ help:
 	@echo "  make log-rotate-setup           Load the 15-min copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
-	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, tmp, package caches, Lima IPSWs)"
+	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, tmp, package caches, Lima IPSWs, closed worktrees' build dirs)"
 	@echo "  make disk-sweep-fstrim-setup    Load the 4-hourly fstrim of the Colima data disk (the sweep's colima-trim step alone)"
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"

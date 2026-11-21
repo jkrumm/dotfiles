@@ -27,7 +27,7 @@
 # what is safe to remove (tmpdir with no lsof answer removes nothing). Every external tool runs
 # under with_timeout. Overrides (also what the test suite uses): DISK_SWEEP_TMPDIR,
 # DISK_SWEEP_LSOF, DISK_SWEEP_PGREP, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
-# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT. `make disk-sweep-run` runs every step once, docker included.
+# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT, DISK_SWEEP_FACTORY. `make disk-sweep-run` runs every step once, docker included.
 
 set -euo pipefail
 
@@ -40,7 +40,7 @@ TOOL_TIMEOUT=600
 UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
-STEPS=(tmpdir pkg-caches lima-cache simulators docker colima-trim)
+STEPS=(tmpdir pkg-caches lima-cache simulators worktrees docker colima-trim)
 
 # Free KB on the volume holding $1; 0 when df cannot say, so the arithmetic below never breaks.
 free_kb() {
@@ -272,6 +272,44 @@ step_simulators() {
     || { echo "simulators: simctl delete unavailable failed: $(tail -n 1 <<<"$out")"; return 1; }
   after=$(free_kb "$HOME")
   echo "simulators: unavailable simulators deleted, $(delta "$before" "$after")"
+}
+
+# A factory worktree outlives its Issue (the factory reaps processes, not directories), and its build dirs
+# are regenerable: target/ (Rust, 15-60 GB per live lead) and node_modules/ (~1.3 GB each). 2026-11-21: 38 GiB
+# across closed worktrees (Issue 2756). Only a worktree whose Issue the factory reports as closed is touched,
+# and only its build dirs go: the source, the git checkout and a target/ with no sibling Cargo.toml stay.
+# An Issue the factory cannot show is kept.
+step_worktrees() {
+  local factory=${DISK_SWEEP_FACTORY:-factory}
+  command -v "$factory" >/dev/null 2>&1 || { skip worktrees "$factory not on PATH"; return 0; }
+  command -v jq >/dev/null 2>&1 || { skip worktrees "jq not installed"; return 0; }
+  local before after wt base dir issue state list total removed left closed=0
+  before=$(free_kb "$HOME")
+  list=$(mktemp) || { echo "worktrees: FAILED: mktemp"; return 1; }
+  for wt in "$HOME"/SourceRoot/*/.claude/worktrees/factory-* "$HOME"/IuRoot/*/.claude/worktrees/factory-*; do
+    [ -d "$wt" ] || continue
+    base=${wt##*/}
+    [[ $base =~ ^factory-([0-9]+)-[0-9]+$ ]] || continue
+    issue=${BASH_REMATCH[1]}
+    state=$(with_timeout 30 "$factory" issue show "issue_$issue" 2>/dev/null | with_timeout 10 jq -r '.state // empty' 2>/dev/null) || state=""
+    [ "$state" = closed ] || continue
+    closed=$((closed + 1))
+    while IFS= read -r -d '' dir; do
+      if [ "${dir##*/}" = target ] && [ ! -f "$(dirname "$dir")/Cargo.toml" ]; then continue; fi
+      printf '%s\0' "$dir" >> "$list"
+    done < <(find "$wt" -type d \( -name node_modules -o -name target \) -prune -print0 2>/dev/null)
+  done
+  total=$(count_listed "$list")
+  xargs -0 rm -rf -- < "$list" || true # judged by the re-test below, not by rm's exit
+  removed=$(count_gone "$list")
+  rm -f "$list"
+  after=$(free_kb "$HOME")
+  left=$((total - removed))
+  if [ "$left" -gt 0 ]; then
+    echo "worktrees: FAILED: $removed of $total build dirs of $closed closed Issue(s) removed ($left could not be), $(delta "$before" "$after")"
+    return 1
+  fi
+  echo "worktrees: $total target/node_modules dir(s) of $closed closed Issue(s) removed, $(delta "$before" "$after")"
 }
 
 if [ "$#" -gt 0 ]; then SELECTED=("$@"); else SELECTED=("${STEPS[@]}"); fi

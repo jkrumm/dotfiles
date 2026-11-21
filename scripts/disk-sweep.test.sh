@@ -143,4 +143,39 @@ out12=$(DISK_SWEEP_PGREP="$FAKE/pgrep-none" bash "$HERE/disk-sweep.sh" lima-cach
 check "lima-cache: unremovable image fails the step" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "1 could not be"' _ "$rc12" "$out12"
 chflags nouchg "$L/locked/data"
 
+# (g) worktrees: only a closed Issue's build dirs go. The factory is faked: 7001 closed, 7002 working, 7003 unknown.
+cat > "$FAKE/factory" <<'FACT'
+#!/bin/sh
+case "$3" in
+  issue_7001) echo '{"id":7001,"state":"closed"}' ;;
+  issue_7002) echo '{"id":7002,"state":"working"}' ;;
+  *) echo "no such issue" >&2; exit 1 ;;
+esac
+FACT
+chmod +x "$FAKE/factory"
+W="$HOME/SourceRoot/app/.claude/worktrees"
+mkdir -p "$W/factory-7001-1/src" "$W/factory-7001-1/node_modules/pkg" "$W/factory-7001-1/web/node_modules/x" \
+  "$W/factory-7001-1/core/target/debug" "$W/factory-7001-1/docs/target" \
+  "$W/factory-7002-1/node_modules" "$W/factory-7003-1/target" "$W/scratch-1/node_modules"
+echo x > "$W/factory-7001-1/src/main.ts"
+echo x > "$W/factory-7001-1/core/Cargo.toml"
+echo x > "$W/factory-7001-1/core/target/debug/bin"
+echo x > "$W/factory-7001-1/node_modules/pkg/index.js"
+echo x > "$W/factory-7001-1/docs/target/keep.md"
+echo x > "$W/factory-7002-1/node_modules/keep"
+echo x > "$W/factory-7003-1/target/keep"
+echo x > "$W/scratch-1/node_modules/keep"
+out13=$(DISK_SWEEP_FACTORY="$FAKE/factory" bash "$HERE/disk-sweep.sh" worktrees 2>&1); rc13=$?
+check "worktrees: exit 0" test "$rc13" -eq 0
+check "closed Issue: node_modules gone, nested too" sh -c '[ ! -e "$1/factory-7001-1/node_modules" ] && [ ! -e "$1/factory-7001-1/web/node_modules" ]' _ "$W"
+check "closed Issue: Rust target/ beside Cargo.toml gone" test ! -e "$W/factory-7001-1/core/target"
+check "closed Issue: source kept" test -f "$W/factory-7001-1/src/main.ts"
+check "closed Issue: target/ without Cargo.toml kept" test -f "$W/factory-7001-1/docs/target/keep.md"
+check "working Issue kept" test -f "$W/factory-7002-1/node_modules/keep"
+check "unknown Issue kept" test -f "$W/factory-7003-1/target/keep"
+check "non-factory worktree kept" test -f "$W/scratch-1/node_modules/keep"
+check "worktrees: counts 3 dirs of 1 closed Issue" sh -c 'printf "%s" "$1" | grep -qF "worktrees: 3 target/node_modules dir(s) of 1 closed Issue(s) removed"' _ "$out13"
+out14=$(DISK_SWEEP_FACTORY="$TMP/no-factory" bash "$HERE/disk-sweep.sh" worktrees 2>&1); rc14=$?
+check "no factory CLI: skipped, exit 0, nothing removed" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "skipped" && [ -f "$3/factory-7002-1/node_modules/keep" ]' _ "$rc14" "$out14" "$W"
+
 exit "$fail"
