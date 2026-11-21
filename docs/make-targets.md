@@ -16,7 +16,7 @@
 | `make storage-status` | Shares, mounts, free space, keepalive grade, external volume, mirror and restic age; `ARGS=--json` is the contract in `docs/storage.md` §Status. Read-only, bounded; `make doctor` WARNs from it. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make mini-prune` | Mini: lists, with `ARGS=--apply` removes, the plist of every disabled job and every stopped container no registry row names (`docs/mini-registry.md`). |
-| `make deploy` | `make setup` under the repo-contract name; prints what it does. On the mini it then runs `scripts/gate-pin-notice.sh` (`scripts/AGENTS.md` §Deploy gate pins). |
+| `make deploy` | `make setup` under the repo-contract name; prints what it does. Refuses inside a linked worktree (`scripts/deploy-guard.sh`): the plists it renders embed the checkout path, so run it as `make -C` the main checkout. On the mini it then runs `scripts/gate-pin-notice.sh` (`scripts/AGENTS.md` §Deploy gate pins). |
 | `make worktree-audit` / `worktree-prune` | List / reclaim clean, fully-merged git worktrees across `~/SourceRoot` + `~/IuRoot` — they pile up in four different parent dirs (repo-local, `.claude/worktrees/`, `~/IuRoot/worktrees/`, `~/IuRoot/.wt/`), so it asks git rather than assuming a location. |
 
 `make doctor` on **both** machines: LaunchAgent grading, the architecture-map

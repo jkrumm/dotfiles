@@ -876,7 +876,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Order is the cost of a red run: the cheap suites go first so a failure there stops within
@@ -918,7 +918,8 @@ logs: ## Bounded tail of the dotfiles-owned agent logs, then exit
 		[ -f "$$f" ] && { echo "== $$f"; tail -n 40 "$$f"; } || true; \
 	done
 
-deploy: ## Converge this machine onto the tracked config (wraps setup; nothing to ship); on the mini, then tell the owner if a file the IuRoot deploy gate pins changed
+deploy: ## Converge this machine onto the tracked config (wraps setup; nothing to ship); refuses inside a linked worktree; on the mini, then tell the owner if a file the IuRoot deploy gate pins changed
+	@bash $(DOTFILES_DIR)/scripts/deploy-guard.sh $(DOTFILES_DIR)
 	@$(MAKE) --no-print-directory setup
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" = "cache" ]; then \
@@ -2737,6 +2738,13 @@ secrets-rotate-test:
 opbackup-auto-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/opbackup-auto.sh $(DOTFILES_DIR)/scripts/opbackup-auto.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/opbackup-auto.test.sh
+
+# deploy-guard suite: a linked worktree is refused by `make deploy`, the main checkout passes. Hermetic.
+.PHONY: deploy-guard-test
+deploy-guard-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/deploy-guard.sh $(DOTFILES_DIR)/scripts/deploy-guard.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/deploy-guard.test.sh
+	@$(DOTFILES_DIR)/scripts/deploy-guard.test.sh
 
 # gate-pin-notice regression suite: a pinned-file change enqueues one item, a
 # newer one replaces it, an unrelated change enqueues nothing. Hermetic.
