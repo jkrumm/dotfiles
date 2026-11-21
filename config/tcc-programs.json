@@ -8,6 +8,8 @@
     "com.iu.teamchat-runtime-deploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot only" },
     "com.iu.prometheus-vpn-watcher": { "class": "no-grant", "why": "uv python; touches the VPN client and ~/IuRoot only" },
     "com.jkrumm.modelpick-web": { "class": "no-grant", "why": "bun in a Cellar path; serves from ~/SourceRoot" },
+    "com.jkrumm.orb.build": { "class": "removable", "why": "ad-hoc built orb binary on a versioned path (~/orb/releases/<sha>); ORB_DATA_ROOT is /Volumes/orb-data, so it reads and writes the external volume. The Removable Volumes grant is answered once at the screen, and a new release needs it again (docs/tcc.md)" },
+    "com.jkrumm.orb.serve": { "class": "removable", "why": "ad-hoc built orb binary on a versioned path (~/orb/releases/<sha>); ORB_DATA_ROOT is /Volumes/orb-data, so it reads and writes the external volume. The Removable Volumes grant is answered once at the screen, and a new release needs it again (docs/tcc.md)" },
     "com.jkrumm.weatherorb.serve": { "class": "removable", "why": "ad-hoc built openmeteo-api; data/ and products/ are symlinks onto the external volume since 2026-11-14 (job unloaded, V1 frozen: no live probe until it is revived)" },
     "com.jkrumm.weatherorb.watchdog": { "class": "removable", "why": "uv in a Cellar path; reads and writes data/, products/ and var/ entries that are symlinks onto the external volume since 2026-11-14 (job unloaded, V1 frozen)" },
     "com.jkrumm.weatherorb.worker-ingest": { "class": "removable", "why": "uv python; reads and writes data/, products/ and var/ entries that are symlinks onto the external volume since 2026-11-14 (job unloaded, V1 frozen)" },
