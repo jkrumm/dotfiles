@@ -27,7 +27,7 @@
 # what is safe to remove (tmpdir with no lsof answer removes nothing). Every external tool runs
 # under with_timeout. Overrides (also what the test suite uses): DISK_SWEEP_TMPDIR,
 # DISK_SWEEP_LSOF, DISK_SWEEP_PGREP, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
-# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT, DISK_SWEEP_FACTORY, DISK_SWEEP_SCCACHE_MAX_GB, DISK_SWEEP_SCCACHE_DIR. `make disk-sweep-run` runs every step once, docker included.
+# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT, DISK_SWEEP_FACTORY, DISK_SWEEP_SCCACHE_MAX_GB, DISK_SWEEP_SCCACHE_DIR, DISK_SWEEP_SHARED_TMP. `make disk-sweep-run` runs every step once, docker included.
 
 set -euo pipefail
 
@@ -41,7 +41,7 @@ TOOL_TIMEOUT=600
 UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
-STEPS=(tmpdir pkg-caches lima-cache simulators worktrees scratch docker colima-trim)
+STEPS=(tmpdir node-cache pkg-caches lima-cache simulators worktrees scratch docker colima-trim)
 
 # Free KB on the volume holding $1; 0 when df cannot say, so the arithmetic below never breaks.
 free_kb() {
@@ -103,40 +103,33 @@ step_colima-trim() {
   echo "colima-trim: $(tr '\n' ';' <<<"$summary" | sed 's/;$//'), $(delta "$before" "$after")"
 }
 
-# Top-level entries only, older than 3 days, with nothing recent beneath them, not currently open.
+# The tmp roots the tmpdir step sweeps. Both are this user's to clear: $TMPDIR under /var/folders, and
+# /private/tmp, where the same processes leave entries too (2026-11-21: 2646 stale top-level entries there, ~12 GB,
+# that no step reached). DISK_SWEEP_SHARED_TMP overrides the second root; the test suite points it at a fixture, empty disables it.
+# Top-level entries only, older than 3 days, owned by this user, with nothing recent beneath them, not currently open.
 # The open set comes from ONE lsof call for the whole machine: `lsof +D` per entry over 300k
 # entries would never finish. That set is what keeps live work safe, so without a trustworthy one
 # nothing is removed. Entries carrying the sunlnk flag are macOS daemon state (SIP-protected, rm
 # fails on them): never touched.
-step_tmpdir() {
-  [ -x "$LSOF" ] || { skip tmpdir "$LSOF missing — cannot tell which entries are open"; return 0; }
-  local root=${DISK_SWEEP_TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)}
-  root=${root%/}
-  [ -n "$root" ] && [ -d "$root" ] || { skip tmpdir "no tmp dir${root:+ at $root}"; return 0; }
+
+# One tmp root against the lsof output in $2. Counts into TMP_TOTAL and TMP_REMOVED; a failure is appended to
+# TMP_REASONS. Always returns 0, so one root's failure never stops the other.
+tmp_sweep_root() {
+  local root raw=$2 open cand_list list find_err entry name total removed
+  root=$(cd "$1" 2>/dev/null && pwd -P) || { TMP_REASONS+="${TMP_REASONS:+; }cannot resolve $1"; return 0; }
   # lsof reports resolved paths (/private/var/...), so match against the resolved root.
-  root=$(cd "$root" && pwd -P) || { echo "tmpdir: FAILED: cannot resolve $root"; return 1; }
-
-  local before after raw rc=0 open cand_list list find_err entry name total removed left
-  # Any non-zero lsof exit means the open set may be incomplete (exit 1 = some files could not be
-  # listed), and an incomplete set would let rm -rf take an open entry. On the mini lsof exits 0.
-  raw=$(with_timeout 300 "$LSOF" -Fn 2>/dev/null) || rc=$?
-  if [ "$rc" -ne 0 ] || ! grep -q '^n/' <<<"$raw"; then
-    echo "tmpdir: FAILED: lsof gave no open-file set — nothing removed"
-    return 1
-  fi
   open=$(awk -v p="$root/" 'index($0, "n" p) == 1 {s = substr($0, length(p) + 2); sub(/\/.*/, "", s); if (s != "") print s}' <<<"$raw" | sort -u) \
-    || { echo "tmpdir: FAILED: could not reduce the open-file set — nothing removed"; return 1; }
-
-  before=$(free_kb "$root")
-  cand_list=$(mktemp) || { echo "tmpdir: FAILED: mktemp"; return 1; }
-  list=$(mktemp) || { rm -f "$cand_list"; echo "tmpdir: FAILED: mktemp"; return 1; }
-  find_err=$(mktemp) || { rm -f "$cand_list" "$list"; echo "tmpdir: FAILED: mktemp"; return 1; }
+    || { TMP_REASONS+="${TMP_REASONS:+; }could not reduce the open-file set for $root — nothing removed"; return 0; }
+  cand_list=$(mktemp) || { TMP_REASONS+="${TMP_REASONS:+; }mktemp"; return 0; }
+  list=$(mktemp) || { rm -f "$cand_list"; TMP_REASONS+="${TMP_REASONS:+; }mktemp"; return 0; }
+  find_err=$(mktemp) || { rm -f "$cand_list" "$list"; TMP_REASONS+="${TMP_REASONS:+; }mktemp"; return 0; }
   # find exits 1 when an entry vanishes between readdir and stat — routine in a tmp dir that live
   # processes churn (2026-11-21: a `.package` dotfile). A vanished entry needs no removing, so
   # "No such file or directory" alone is not a failure; any other error still is.
-  if ! find "$root" -mindepth 1 -maxdepth 1 -mmin +4320 ! -flags +sunlnk -print0 > "$cand_list" 2> "$find_err" \
+  # -user: this user's entries only. /private/tmp also holds root's (pytest-of-root, daemon state), not ours.
+  if ! find "$root" -mindepth 1 -maxdepth 1 -user "$(id -u)" -mmin +4320 ! -flags +sunlnk -print0 > "$cand_list" 2> "$find_err" \
     && grep -qv ': No such file or directory$' "$find_err"; then
-    rm -f "$cand_list" "$list" "$find_err"; echo "tmpdir: FAILED: find over $root — nothing removed"; return 1
+    rm -f "$cand_list" "$list" "$find_err"; TMP_REASONS+="${TMP_REASONS:+; }find over $root — nothing removed"; return 0
   fi
   rm -f "$find_err"
   while IFS= read -r -d '' entry; do
@@ -152,13 +145,61 @@ step_tmpdir() {
   xargs -0 rm -rf -- < "$list" || true # judged by the re-test below, not by rm's exit
   removed=$(count_gone "$list")
   rm -f "$cand_list" "$list"
-  after=$(free_kb "$root")
-  left=$((total - removed))
-  if [ "$left" -gt 0 ]; then
-    echo "tmpdir: FAILED: $removed of $total stale entries removed from $root ($left could not be), $(delta "$before" "$after")"
+  TMP_TOTAL=$((TMP_TOTAL + total)); TMP_REMOVED=$((TMP_REMOVED + removed))
+  if [ "$removed" -lt "$total" ]; then
+    TMP_REASONS+="${TMP_REASONS:+; }$removed of $total stale entries removed from $root ($((total - removed)) could not be)"
+  fi
+  return 0
+}
+
+step_tmpdir() {
+  [ -x "$LSOF" ] || { skip tmpdir "$LSOF missing — cannot tell which entries are open"; return 0; }
+  local root=${DISK_SWEEP_TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)}
+  root=${root%/}
+  [ -n "$root" ] && [ -d "$root" ] || { skip tmpdir "no tmp dir${root:+ at $root}"; return 0; }
+  local shared=${DISK_SWEEP_SHARED_TMP-/private/tmp}
+  shared=${shared%/}
+  local before after raw rc=0
+  # Any non-zero lsof exit means the open set may be incomplete (exit 1 = some files could not be
+  # listed), and an incomplete set would let rm -rf take an open entry. On the mini lsof exits 0.
+  raw=$(with_timeout 300 "$LSOF" -Fn 2>/dev/null) || rc=$?
+  if [ "$rc" -ne 0 ] || ! grep -q '^n/' <<<"$raw"; then
+    echo "tmpdir: FAILED: lsof gave no open-file set — nothing removed"
     return 1
   fi
-  echo "tmpdir: $removed entries older than 3 days removed from $root, $(delta "$before" "$after")"
+  before=$(free_kb "$HOME")
+  TMP_TOTAL=0; TMP_REMOVED=0; TMP_REASONS=""
+  tmp_sweep_root "$root" "$raw"
+  if [ -n "$shared" ] && [ "$shared" != "$root" ] && [ -d "$shared" ]; then tmp_sweep_root "$shared" "$raw"; fi
+  after=$(free_kb "$HOME")
+  if [ -n "$TMP_REASONS" ]; then
+    echo "tmpdir: FAILED: $TMP_REASONS, $(delta "$before" "$after")"
+    return 1
+  fi
+  echo "tmpdir: $TMP_REMOVED entries older than 3 days removed from $root${shared:+ and $shared}, $(delta "$before" "$after")"
+}
+
+# Node's compile cache (NODE_COMPILE_CACHE, under $TMPDIR) is rewritten all day, so the tmpdir step's directory
+# rule never reaches it (2026-11-21: 7.8 GB, touched every minute). Its files go by their own age: a file not written
+# for 3 days is regenerable, and a node process that misses an entry just compiles it again.
+step_node-cache() {
+  local root=${DISK_SWEEP_TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)}
+  root=${root%/}
+  local dir="$root/node-compile-cache" before after list total removed
+  [ -n "$root" ] && [ -d "$dir" ] || { skip node-cache "no node compile cache at $dir"; return 0; }
+  before=$(free_kb "$HOME")
+  list=$(mktemp) || { echo "node-cache: FAILED: mktemp"; return 1; }
+  find "$dir" -type f -mmin +4320 -print0 > "$list" 2>/dev/null || true
+  total=$(count_listed "$list")
+  xargs -0 rm -f -- < "$list" || true # judged by the re-test below, not by rm's exit
+  removed=$(count_gone "$list")
+  rm -f "$list"
+  after=$(free_kb "$HOME")
+  if [ "$removed" -lt "$total" ]; then
+    echo "node-cache: FAILED: $removed of $total files not written for 3 days removed from $dir ($((total - removed)) could not be), $(delta "$before" "$after")"
+    return 1
+  fi
+  echo "node-cache: $removed file(s) not written for 3 days removed from $dir, $(delta "$before" "$after")"
 }
 
 # Size in KB, or non-zero when du could not measure all of it — a cap check must not read that as 0.
@@ -175,17 +216,21 @@ step_pkg-caches() {
 
   if command -v uv >/dev/null 2>&1; then
     local uvout uvrc=0 lockfile holder
-    # A held cache lock is not a failure: another uv process (a long-lived `uv run` or tool; the
-    # lock is held for the process's life) owns it, and waiting out uv's 300s default (or 540s,
-    # as this once did) only burned the sweep's time. Probe with a short wait; on a lock timeout
-    # skip the prune and name the holder. Any other uv error still fails the step.
+    # A held cache lock is held for a uv process's life, and a `uv run` can outlive every sweep
+    # (2026-11-21: pid 69270, six days): the plain prune then never ran. Probe with a short wait; on a
+    # lock timeout prune with --force, which ignores the lock. The cache is regenerable (a process that
+    # loses an entry re-fetches it). Any other uv error still fails the step.
     uvout=$(with_timeout "$TOOL_TIMEOUT" env UV_LOCK_TIMEOUT="$UV_LOCK_WAIT" uv cache prune 2>&1) || uvrc=$?
     if [ "$uvrc" -eq 0 ]; then
       parts+="uv pruned, "
     elif grep -q 'when waiting for lock' <<<"$uvout"; then
       lockfile="$(with_timeout 10 uv cache dir 2>/dev/null || true)/.lock"
       holder=$(with_timeout 10 "$LSOF" -t -- "$lockfile" 2>/dev/null | head -n 1 || true)
-      parts+="uv prune skipped: cache lock held by pid ${holder:-unknown}, "
+      if uvout=$(with_timeout "$TOOL_TIMEOUT" uv cache prune --force 2>&1); then
+        parts+="uv pruned past the lock held by pid ${holder:-unknown}, "
+      else
+        parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1
+      fi
     else
       parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1
     fi

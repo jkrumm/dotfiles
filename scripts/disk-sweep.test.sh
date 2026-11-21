@@ -9,6 +9,8 @@ mkdir -p "$HOME"
 export DISK_SWEEP_TMPDIR="$TMP/tmproot"
 T="$DISK_SWEEP_TMPDIR"
 mkdir -p "$T"
+# The second tmp root (/private/tmp on the mini) is a fixture too: no run may touch the real one.
+SH="$TMP/shared-tmproot"; mkdir -p "$SH"; export DISK_SWEEP_SHARED_TMP="$SH"
 FAKE="$TMP/fake"
 mkdir -p "$FAKE"
 
@@ -27,13 +29,18 @@ mkdir "$T/old-dir-fresh-child"
 echo x > "$T/old-dir-fresh-child/new"
 old 5 "$T/old-dir-fresh-child"
 old 5 "$T/old-dir/f" "$T/old-dir" "$T/old-file" "$T/held" "$T/com.apple.keep"
+mkdir "$SH/old-shared" "$SH/fresh-shared" "$SH/held-shared"
+echo x > "$SH/old-shared/f"; echo x > "$SH/fresh-shared/f"; echo x > "$SH/held-shared/f"
+old 5 "$SH/old-shared/f" "$SH/old-shared" "$SH/held-shared/f" "$SH/held-shared"
 sleep 60 > "$T/held/f" &
 holder=$!
+sleep 60 > "$SH/held-shared/f" &
+holder2=$!
 
 # The real lsof, asked only about the fixture file: a machine-wide scan costs ~10 s and adds nothing here.
-printf '#!/bin/sh\nexec /usr/sbin/lsof -Fn -- "%s"\n' "$T/held/f" > "$FAKE/lsof-scoped"; chmod +x "$FAKE/lsof-scoped"
+printf '#!/bin/sh\nexec /usr/sbin/lsof -Fn -- "%s" "%s"\n' "$T/held/f" "$SH/held-shared/f" > "$FAKE/lsof-scoped"; chmod +x "$FAKE/lsof-scoped"
 out=$(DISK_SWEEP_LSOF="$FAKE/lsof-scoped" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc=$?
-kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+kill "$holder" "$holder2" 2>/dev/null; wait "$holder" "$holder2" 2>/dev/null
 printf '%s\n' "$out" | sed 's/^/    | /'
 
 check "exits 0" test "$rc" -eq 0
@@ -44,6 +51,10 @@ check "fresh tmp file kept" test -f "$T/fresh-file"
 check "old tmp dir with an open file kept" test -f "$T/held/f"
 check "Apple-owned tmp entry kept" test -d "$T/com.apple.keep"
 check "old tmp dir holding a fresh file kept" test -f "$T/old-dir-fresh-child/new"
+check "shared tmp: old entry removed" test ! -e "$SH/old-shared"
+check "shared tmp: fresh entry kept" test -f "$SH/fresh-shared/f"
+check "shared tmp: old entry held open kept" test -f "$SH/held-shared/f"
+check "tmpdir: one summary line naming both roots" sh -c 'printf "%s" "$1" | grep -q "^tmpdir: .* removed from .* and "' _ "$out"
 check "every step prints a size line" sh -c 'printf "%s\n" "$1" | grep -c "free space +" | grep -qx 2' _ "$out"
 
 bash "$HERE/disk-sweep.sh" nonsense >/dev/null 2>&1; rc3=$?
@@ -70,6 +81,18 @@ out6=$(DISK_SWEEP_TMPDIR="$T3" DISK_SWEEP_LSOF="$FAKE/lsof-none" bash "$HERE/dis
 check "unremovable entry: step fails and says so" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "1 could not be"' _ "$rc6" "$out6"
 check "unremovable entry: the removable one still went" test ! -e "$T3/gone"
 chflags nouchg "$T3/locked/f"
+
+# node-cache: a compile-cache file not written for 3 days goes (nested too), a fresh one and the directories stay.
+NC="$TMP/nodecache-root"; mkdir -p "$NC/node-compile-cache/sub"
+echo x > "$NC/node-compile-cache/old-entry"; echo x > "$NC/node-compile-cache/sub/old2"; echo x > "$NC/node-compile-cache/fresh-entry"
+old 5 "$NC/node-compile-cache/old-entry" "$NC/node-compile-cache/sub/old2"
+out_nc=$(DISK_SWEEP_TMPDIR="$NC" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc=$?
+check "node-cache: exit 0" test "$rc_nc" -eq 0
+check "node-cache: old files gone, nested too" sh -c '[ ! -e "$1/old-entry" ] && [ ! -e "$1/sub/old2" ]' _ "$NC/node-compile-cache"
+check "node-cache: fresh file and directories kept" sh -c '[ -f "$1/fresh-entry" ] && [ -d "$1/sub" ]' _ "$NC/node-compile-cache"
+check "node-cache: summary counts two files" sh -c 'printf "%s" "$1" | grep -q "^node-cache: 2 file(s) not written for 3 days removed"' _ "$out_nc"
+out_nc2=$(DISK_SWEEP_TMPDIR="$TMP/no-such-tmp" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc2=$?
+check "node-cache: no cache dir: skipped, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "node-cache: skipped"' _ "$rc_nc2" "$out_nc2"
 
 # (c) find loses an entry mid-listing (exit 1, "No such file or directory"): not a failure, the rest still goes.
 # Any other find error still fails the step with nothing removed.
@@ -109,8 +132,13 @@ case "$1 $2" in
   "cache dir") echo "$FAKE_UV_DIR" ;;
   "cache prune")
     echo "seen UV_LOCK_TIMEOUT=$UV_LOCK_TIMEOUT" >> "$FAKE_UV_LOG"
+    if [ "$3" = "--force" ]; then
+      echo "seen --force" >> "$FAKE_UV_LOG"
+      [ "$FAKE_UV_MODE" = busy-stuck ] && { echo "error: forced prune broke" >&2; exit 2; }
+      echo "Pruning cache at: $FAKE_UV_DIR"; exit 0
+    fi
     case "$FAKE_UV_MODE" in
-      busy) echo "error: Timeout ($UV_LOCK_TIMEOUT s) when waiting for lock on \`$FAKE_UV_DIR\` at \`$FAKE_UV_DIR/.lock\`, is another uv process running?" >&2; exit 2 ;;
+      busy|busy-stuck) echo "error: Timeout ($UV_LOCK_TIMEOUT s) when waiting for lock on \`$FAKE_UV_DIR\` at \`$FAKE_UV_DIR/.lock\`, is another uv process running?" >&2; exit 2 ;;
       error) echo "error: failed to read cache entry" >&2; exit 2 ;;
       *) echo "Pruning cache at: $FAKE_UV_DIR"; exit 0 ;;
     esac ;;
@@ -123,8 +151,10 @@ uvsweep() { # $1 = FAKE_UV_MODE
   PATH="$FAKE:/usr/bin:/bin" FAKE_UV_MODE="$1" DISK_SWEEP_LSOF="$FAKE/lsof-holder" /bin/bash "$HERE/disk-sweep.sh" pkg-caches 2>&1
 }
 out8=$(uvsweep busy); rc8=$?
-check "uv lock busy: skipped with the holder pid, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "uv prune skipped: cache lock held by pid 4242" && ! printf "%s" "$2" | grep -q FAILED' _ "$rc8" "$out8"
-check "uv lock busy: probes with the short lock timeout" grep -qx "seen UV_LOCK_TIMEOUT=20" "$FAKE_UV_LOG"
+check "uv lock busy: pruned past the lock, names the holder, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "uv pruned past the lock held by pid 4242" && ! printf "%s" "$2" | grep -q FAILED' _ "$rc8" "$out8"
+check "uv lock busy: probes with the short lock timeout, then forces" sh -c 'grep -qx "seen UV_LOCK_TIMEOUT=20" "$1" && grep -qx "seen --force" "$1"' _ "$FAKE_UV_LOG"
+out8b=$(uvsweep busy-stuck); rc8b=$?
+check "uv lock busy and the forced prune fails: step fails, exit 1" sh -c '[ "$1" -eq 1 ] && printf "%s" "$2" | grep -q "uv prune FAILED: error: forced prune broke"' _ "$rc8b" "$out8b"
 out9=$(uvsweep error); rc9=$?
 check "uv real error: step fails, exit 1" sh -c '[ "$1" -eq 1 ] && printf "%s" "$2" | grep -q "uv prune FAILED: error: failed to read cache entry"' _ "$rc9" "$out9"
 out10=$(uvsweep ok); rc10=$?
