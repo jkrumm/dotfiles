@@ -17,6 +17,7 @@ What links where, and what is rendered or copied instead. Edit at either end of 
 | `config/opencode/tui.json` | `~/.config/opencode/tui.json` | TUI-only keys. `theme` lives **here**, not in `opencode.json` |
 | `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + the Herdr app |
 | `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
+| `config/opencode/plugins/claude-hooks.js` | `~/.config/opencode/plugins/` (the **file**) | Runs a repo's `.claude/settings.json` Pre/PostToolUse command hooks after OpenCode's edit, write and apply_patch (`docs/opencode.md`) |
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
 | `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json` (sidebar folders, one line per repo); link per item, never the dir (it holds the app's shipped mods) |
 | `config/herdr-core/config.toml` | `~/.config/herdr-core/config.toml` | Core settings (`restore_screen`); linked by `make herdr-core-setup`, read at the next core start |

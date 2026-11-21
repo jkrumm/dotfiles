@@ -299,6 +299,9 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/opencode/plugins/protect-branches.js" \
 		DST="$(HOME)/.config/opencode/plugins/protect-branches.js"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/opencode/plugins/claude-hooks.js" \
+		DST="$(HOME)/.config/opencode/plugins/claude-hooks.js"
 	@# agent/: RENDERED, not linked — OpenCode rejects Claude's subagent frontmatter.
 	@python3 $(DOTFILES_DIR)/scripts/opencode-agents.py
 
@@ -1949,6 +1952,7 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/tui.json"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/themes"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/plugins/protect-branches.js"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/plugins/claude-hooks.js"
 	@echo "  1Password (personal account)"
 	@if bash $(DOTFILES_DIR)/scripts/lib/op-signed-in.sh tkrumm; then \
 		echo "    ✓ op session active ($$(op account get --account tkrumm --format=json 2>/dev/null | jq -r '.email // .name // "unknown"'))"; \
@@ -2793,6 +2797,11 @@ authorized-keys-sync-test:
 .PHONY: hooks-test
 hooks-test:
 	@bun test $(DOTFILES_DIR)/hooks/
+
+check: opencode-plugins-test
+.PHONY: opencode-plugins-test
+opencode-plugins-test: ## bun test for the OpenCode plugins (claude-hooks.js)
+	@bun test $(DOTFILES_DIR)/config/opencode/plugins/
 
 .PHONY: secrets-backend-cache
 secrets-backend-cache:
