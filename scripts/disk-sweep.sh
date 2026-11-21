@@ -27,20 +27,21 @@
 # what is safe to remove (tmpdir with no lsof answer removes nothing). Every external tool runs
 # under with_timeout. Overrides (also what the test suite uses): DISK_SWEEP_TMPDIR,
 # DISK_SWEEP_LSOF, DISK_SWEEP_PGREP, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
-# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT, DISK_SWEEP_FACTORY. `make disk-sweep-run` runs every step once, docker included.
+# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT, DISK_SWEEP_FACTORY, DISK_SWEEP_SCCACHE_MAX_GB, DISK_SWEEP_SCCACHE_DIR. `make disk-sweep-run` runs every step once, docker included.
 
 set -euo pipefail
 
 BUILDCACHE_MAX="${DISK_SWEEP_BUILDCACHE_MAX:-15GB}"
 NPM_MAX_GB="${DISK_SWEEP_NPM_MAX_GB:-3}"
 BUN_MAX_GB="${DISK_SWEEP_BUN_MAX_GB:-5}"
+SCCACHE_MAX_GB="${DISK_SWEEP_SCCACHE_MAX_GB:-5}"
 LSOF="${DISK_SWEEP_LSOF:-/usr/sbin/lsof}"
 PGREP="${DISK_SWEEP_PGREP:-pgrep}"
 TOOL_TIMEOUT=600
 UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
-STEPS=(tmpdir pkg-caches lima-cache simulators worktrees docker colima-trim)
+STEPS=(tmpdir pkg-caches lima-cache simulators worktrees scratch docker colima-trim)
 
 # Free KB on the volume holding $1; 0 when df cannot say, so the arithmetic below never breaks.
 free_kb() {
@@ -310,6 +311,66 @@ step_worktrees() {
     return 1
   fi
   echo "worktrees: $total target/node_modules dir(s) of $closed closed Issue(s) removed, $(delta "$before" "$after")"
+}
+
+# Scratch that outlives its use. ~/cache/<repo>/<issue-id> is a per-Issue cache: reaped where `factory issue show`
+# reports that Issue closed (the worktrees step's rule, applied to the cache tree). A ~/.cache/cloud-wave clone (a directory)
+# untouched for 14 days goes: a wave clone is regenerable. sccache's disk cache goes when it is over DISK_SWEEP_SCCACHE_MAX_GB.
+# Kept: a name that is not a plain Issue number (cargo-target-seed's `seed` is that tool's to prune), an Issue the factory
+# cannot show, and loose files in cloud-wave.
+step_scratch() {
+  local factory=${DISK_SWEEP_FACTORY:-factory} issues=yes missing="" closed_note=""
+  command -v "$factory" >/dev/null 2>&1 || { issues=no; missing=$factory; }
+  command -v jq >/dev/null 2>&1 || { issues=no; missing="${missing:+$missing, }jq"; }
+  [ "$issues" = yes ] || closed_note=" (closed-Issue dirs skipped: no $missing)"
+  local before after dir base state list total removed left kb closed=0 clones=0 rc=0
+  local sc=${DISK_SWEEP_SCCACHE_DIR:-$HOME/Library/Caches/Mozilla.sccache} sc_note="sccache not cached"
+  before=$(free_kb "$HOME")
+  list=$(mktemp) || { echo "scratch: FAILED: mktemp"; return 1; }
+  if [ "$issues" = yes ]; then
+    for dir in "$HOME"/cache/*/[0-9]*; do
+      [ -d "$dir" ] || continue
+      base=${dir##*/}
+      [[ $base =~ ^[0-9]+$ ]] || continue
+      state=$(with_timeout 30 "$factory" issue show "issue_$base" 2>/dev/null | with_timeout 10 jq -r '.state // empty' 2>/dev/null) || state=""
+      [ "$state" = closed ] || continue
+      closed=$((closed + 1))
+      printf '%s\0' "$dir" >> "$list"
+    done
+  fi
+  if [ -d "$HOME/.cache/cloud-wave" ]; then
+    while IFS= read -r -d '' dir; do
+      [ -z "$(find "$dir" -mmin -20160 -print -quit 2>/dev/null)" ] || continue
+      clones=$((clones + 1))
+      printf '%s\0' "$dir" >> "$list"
+    done < <(find "$HOME/.cache/cloud-wave" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+  fi
+  total=$(count_listed "$list")
+  xargs -0 rm -rf -- < "$list" || true # judged by the re-test below, not by rm's exit
+  removed=$(count_gone "$list")
+  rm -f "$list"
+  if [ -d "$sc" ]; then
+    if ! kb=$(dir_kb "$sc"); then
+      sc_note="sccache FAILED: cannot measure $sc"; rc=1
+    elif [ "$kb" -le $((SCCACHE_MAX_GB * 1024 * 1024)) ]; then
+      sc_note="sccache $((kb / 1024)) MB under cap"
+    else
+      with_timeout 20 sccache --stop-server >/dev/null 2>&1 || true
+      if rm -rf -- "$sc" && [ ! -e "$sc" ]; then
+        sc_note="sccache $((kb / 1024)) MB over the $SCCACHE_MAX_GB GB cap, removed"
+      else
+        sc_note="sccache removal FAILED"; rc=1
+      fi
+    fi
+  fi
+  after=$(free_kb "$HOME")
+  left=$((total - removed))
+  if [ "$left" -gt 0 ]; then
+    echo "scratch: FAILED: $removed of $total entries removed ($left could not be), $sc_note, $(delta "$before" "$after")"
+    return 1
+  fi
+  echo "scratch: $closed cache dir(s) of closed Issues$closed_note and $clones wave clone(s) untouched 14 days removed, $sc_note, $(delta "$before" "$after")"
+  return "$rc"
 }
 
 if [ "$#" -gt 0 ]; then SELECTED=("$@"); else SELECTED=("${STEPS[@]}"); fi

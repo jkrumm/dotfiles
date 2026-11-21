@@ -178,4 +178,42 @@ check "worktrees: counts 3 dirs of 1 closed Issue" sh -c 'printf "%s" "$1" | gre
 out14=$(DISK_SWEEP_FACTORY="$TMP/no-factory" bash "$HERE/disk-sweep.sh" worktrees 2>&1); rc14=$?
 check "no factory CLI: skipped, exit 0, nothing removed" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "skipped" && [ -f "$3/factory-7002-1/node_modules/keep" ]' _ "$rc14" "$out14" "$W"
 
+# (h) scratch: a closed Issue's ~/cache/<repo>/<id> goes; open, unknown, non-numeric and seed dirs stay. A cloud-wave
+# clone untouched 14 days goes; a fresh clone, a loose file and a ~/.cache dir outside cloud-wave stay. An sccache dir
+# over its cap goes (the server is stopped first); one under its cap stays.
+S="$HOME/cache"
+mkdir -p "$S/weatherorb/7001/target" "$S/weatherorb/7002" "$S/weatherorb/7003" "$S/weatherorb/e162-2176" "$S/shutterflow/seed/k"
+echo x > "$S/weatherorb/7001/target/f"; echo x > "$S/weatherorb/7002/f"; echo x > "$S/weatherorb/7003/f"
+echo x > "$S/weatherorb/e162-2176/f"; echo x > "$S/shutterflow/seed/k/f"
+W2="$HOME/.cache/cloud-wave"
+mkdir -p "$W2/clean-old/src" "$W2/clean-new/src" "$HOME/.cache/uv/wheel"
+echo x > "$W2/clean-old/src/f"; echo x > "$W2/clean-new/src/f"; echo x > "$W2/loose.log"; echo x > "$HOME/.cache/uv/wheel/f"
+old 20 "$W2/clean-old/src/f" "$W2/clean-old/src" "$W2/clean-old" "$W2/loose.log" "$HOME/.cache/uv/wheel/f" "$HOME/.cache/uv/wheel" "$HOME/.cache/uv"
+SC="$TMP/sccache-over"; SC2="$TMP/sccache-under"
+mkdir -p "$SC/blob" "$SC2/blob"; echo x > "$SC/blob/f"; echo x > "$SC2/blob/f"
+printf '#!/bin/sh\necho "$*" >> "%s"\n' "$TMP/sccache.log" > "$FAKE/sccache"; chmod +x "$FAKE/sccache"
+out15=$(PATH="$FAKE:$PATH" DISK_SWEEP_FACTORY="$FAKE/factory" DISK_SWEEP_SCCACHE_DIR="$SC" DISK_SWEEP_SCCACHE_MAX_GB=0 bash "$HERE/disk-sweep.sh" scratch 2>&1); rc15=$?
+PATH="$FAKE:$PATH" DISK_SWEEP_FACTORY="$FAKE/factory" DISK_SWEEP_SCCACHE_DIR="$SC2" bash "$HERE/disk-sweep.sh" scratch >/dev/null 2>&1; rc16=$?
+printf '%s\n' "$out15" | sed 's/^/    | /'
+check "scratch: exit 0" test "$rc15" -eq 0
+check "scratch: closed Issue's cache dir gone" test ! -e "$S/weatherorb/7001"
+check "scratch: working and unknown Issue dirs kept" sh -c '[ -f "$1/weatherorb/7002/f" ] && [ -f "$1/weatherorb/7003/f" ]' _ "$S"
+check "scratch: non-numeric and seed dirs kept" sh -c '[ -f "$1/weatherorb/e162-2176/f" ] && [ -f "$1/shutterflow/seed/k/f" ]' _ "$S"
+check "scratch: 14-day wave clone gone" test ! -e "$W2/clean-old"
+check "scratch: fresh clone, loose file and ~/.cache/uv kept" sh -c '[ -f "$1/clean-new/src/f" ] && [ -f "$1/loose.log" ] && [ -f "$2/.cache/uv/wheel/f" ]' _ "$W2" "$HOME"
+check "scratch: over-cap sccache removed" test ! -e "$SC"
+check "scratch: sccache server stopped before removal" grep -qx -- '--stop-server' "$TMP/sccache.log"
+check "scratch: under-cap sccache kept" test -f "$SC2/blob/f"
+check "scratch: under-cap run exit 0" test "$rc16" -eq 0
+# (i) scratch without the factory CLI: the closed-Issue part is skipped, but the sccache cap and the wave-clone reap still run.
+SC3="$TMP/sccache-nofactory"; mkdir -p "$SC3/blob"; echo x > "$SC3/blob/f"
+mkdir -p "$W2/clean-old2/src"; echo x > "$W2/clean-old2/src/f"; old 20 "$W2/clean-old2/src/f" "$W2/clean-old2/src" "$W2/clean-old2"
+PATH="$FAKE:$PATH" DISK_SWEEP_FACTORY="$TMP/no-factory" DISK_SWEEP_SCCACHE_DIR="$SC3" DISK_SWEEP_SCCACHE_MAX_GB=0 bash "$HERE/disk-sweep.sh" scratch >"$TMP/nofactory.out" 2>&1; rc17=$?
+check "scratch without factory: exit 0" test "$rc17" -eq 0
+check "scratch without factory: over-cap sccache still removed" test ! -e "$SC3"
+check "scratch without factory: 14-day wave clone still removed" test ! -e "$W2/clean-old2"
+check "scratch without factory: working Issue dir kept" test -f "$S/weatherorb/7002/f"
+check "scratch without factory: says the closed-Issue part was skipped" grep -q "closed-Issue dirs skipped" "$TMP/nofactory.out"
+check "scratch: summary counts, no FAILED" sh -c 'printf "%s" "$1" | grep -q "^scratch: 1 cache dir(s) of closed Issues and 1 wave clone(s) untouched 14 days removed" && ! printf "%s" "$1" | grep -q FAILED' _ "$out15"
+
 exit "$fail"
