@@ -1,4 +1,13 @@
 DOTFILES_DIR := $(shell pwd)
+# Setup writes DOTFILES_DIR into host links and LaunchAgent plists, so a linked worktree
+# refuses the write goals (scripts/deploy-guard.sh names the main checkout's make -C line).
+# Parse-time, so no recipe runs before the refusal.
+_HOST_WRITE_GOAL := $(firstword $(filter setup %-setup _setup-% _link _render-plists,$(MAKECMDGOALS)))
+ifneq ($(_HOST_WRITE_GOAL),)
+ifneq ($(shell bash $(DOTFILES_DIR)/scripts/deploy-guard.sh $(DOTFILES_DIR) $(_HOST_WRITE_GOAL) || echo refused),)
+$(error make $(_HOST_WRITE_GOAL) refused: run it from the main checkout)
+endif
+endif
 CLAUDE_DIR   := $(HOME)/.claude
 SOURCEROOT   := $(HOME)/SourceRoot
 # The software-factory checkout: source of the Claude Code hooks (_render-settings) and the Herdr glance mod.

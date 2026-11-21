@@ -2,7 +2,7 @@
 
 | Command | Does |
 |-|-|
-| `make setup` | Converge this machine onto the tracked config. Idempotent, safe to re-run. |
+| `make setup` | Converge this machine onto the tracked config. Idempotent, safe to re-run. Refuses inside a linked worktree, as do every `*-setup` and `_link` / `_render-plists` (the Makefile's top guard, `scripts/deploy-guard.sh <dir> <goal>`): run them as `make -C` the main checkout. |
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
 | `make doctor` | Read-only health. Self-routes on the backend marker (`scripts/AGENTS.md` §Secrets). Last line: `N passed, M info — clean.` only with zero failures **and** zero warnings, else `N passed, M warnings, …`; `--json` makes it one `{"passed","failed","warnings","info"}` line. Exit 1 on a failure only. Info lines (a pending-update count the Drift monitor pages, a section that does not apply here) never count. |
 | `make help` | Every target, one line each. |

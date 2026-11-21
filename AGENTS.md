@@ -22,7 +22,7 @@ A nested `AGENTS.md` loads only when you Read a file in its directory, not on an
 
 ## Deploy
 
-`make deploy` is `make setup`: idempotent, run it on both machines from the main checkout (it refuses inside a linked worktree: the LaunchAgent plists would embed the worktree path). Nothing deploys from CI (it only runs `make check-linux`) and there is no release: a merged commit is live once symlinked. On the mini it then runs `scripts/gate-pin-notice.sh` (`scripts/AGENTS.md` §Deploy gate pins). Every make target: `make help`, `docs/make-targets.md`.
+`make deploy` is `make setup`: idempotent, run it on both machines from the main checkout (`setup` and every `*-setup` refuse inside a linked worktree: the LaunchAgent plists and host links would embed the worktree path). Nothing deploys from CI (it only runs `make check-linux`) and there is no release: a merged commit is live once symlinked. On the mini it then runs `scripts/gate-pin-notice.sh` (`scripts/AGENTS.md` §Deploy gate pins). Every make target: `make help`, `docs/make-targets.md`.
 
 ## Verify & Monitor
 
