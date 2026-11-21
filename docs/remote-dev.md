@@ -108,8 +108,11 @@ The Herdr app's `jk-spaces` mod draws the folders: `config/herdr-app/groups.json
 declares the taxonomy (linked to `~/.config/herdr-app/groups.json` by `make
 herdr-app-setup`), a space joins the group naming its repo, the rest land in
 `OTHER`. Adding a
-repo is one line in the JSON; an unopened space is skipped, so listing one early
-costs nothing.
+repo is one line in the JSON: `make herdr-app-setup` (the MacBook runs it after a
+pull that touches `config/herdr-app/`) opens a mini space for every listed repo
+that exists on the mini, with or without a terminal in it (`noMiniSpace` lists
+the exceptions). A repo missing on the mini or an unopened space is skipped, so
+listing one early costs nothing.
 
 ## Putting work on the mini
 

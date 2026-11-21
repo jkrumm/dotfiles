@@ -110,7 +110,14 @@ core_cwds=$(hc exec --on mini sh -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$P
   | /usr/bin/python3 -c 'import json,sys; [print(t["cwd"]) for t in json.load(sys.stdin).get("terminals", []) if t.get("cwd")]' 2>/dev/null || true)
 core_repos=""
 [ -z "$core_cwds" ] || core_repos=$(printf '%s\n' "$core_cwds" | hc exec --on mini -i sh -c "$REPOS_OF" 2>/dev/null || true)
-mini_repos=$(printf '%s\n' "$core_repos" | sort -u)
+# Every repo groups.json lists that exists on the mini gets its space too, with or without a terminal, so a newly listed
+# repo shows up under its folder at once (`noMiniSpace` members keep their sidebar place and get none). A member resolves to
+# ~/SourceRoot/<name>, else ~/IuRoot/<name>; the member `IuRoot` is the work root itself.
+GROUP_REPOS_OF='while read -r l; do if [ "$l" = IuRoot ]; then if [ -d "$HOME/IuRoot" ]; then printf "%s\t%s\n" "$l" "$HOME/IuRoot"; fi; continue; fi; for r in "$HOME/SourceRoot" "$HOME/IuRoot"; do if [ -d "$r/$l/.git" ]; then printf "%s\t%s\n" "$l" "$r/$l"; break; fi; done; done | sort -u'
+group_names=$(/usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); skip=set(d.get("noMiniSpace",[])); [print(n) for g in d["groups"] for n in g["members"] if n not in skip]' "$SRC/groups.json")
+group_repos=""
+[ -z "$group_names" ] || group_repos=$(printf '%s\n' "$group_names" | hc exec --on mini -i sh -c "$GROUP_REPOS_OF" 2>/dev/null || true)
+mini_repos=$(printf '%s\n%s\n' "$core_repos" "$group_repos" | sed '/^$/d' | sort -u)
 while IFS=$'\t' read -r name folder; do
   [ -n "$name" ] || continue
   if grep -qxF "$folder" <<<"$mini_open"; then say "· mini space $name (open)"; continue; fi

@@ -141,7 +141,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
-	@$(MAKE) --no-print-directory _setup-factory-spaces
 	@$(MAKE) --no-print-directory _setup-factory-post-deploy
 	@$(MAKE) --no-print-directory claude-accounts-setup
 	@$(MAKE) --no-print-directory claude-accounts-keepalive-setup
@@ -169,11 +168,6 @@ setup:
 	@echo "  Done. Reload your shell: source ~/.zshrc"
 	@echo ""
 
-.PHONY: _setup-factory-spaces
-_setup-factory-spaces:
-	@echo "  Factory spaces..."
-	@python3 $(DOTFILES_DIR)/scripts/factory-spaces.py | sed 's/^/    · /'
-
 .PHONY: _setup-factory-post-deploy
 # The factory's deploy runs ~/.config/factory/post-deploy after a healthy deploy; ours tells the MacBook to pull the
 # live jk-glance. Mini only (backend marker == cache): the MacBook has no factory release and no `ssh iumac` key.
@@ -186,10 +180,6 @@ _setup-factory-post-deploy:
 			SRC="$(DOTFILES_DIR)/scripts/factory-post-deploy.sh" \
 			DST="$(HOME)/.config/factory/post-deploy"; \
 	fi
-
-.PHONY: factory-spaces-test
-factory-spaces-test: ## Hermetic suite for factory-spaces.py (temp HOME, fixture groups.json)
-	@python3 -W ignore $(DOTFILES_DIR)/scripts/factory-spaces.test.py
 
 .PHONY: _check-prereqs
 _check-prereqs:
@@ -886,7 +876,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Order is the cost of a red run: the cheap suites go first so a failure there stops within
@@ -910,7 +900,7 @@ check-slow: ## The slowest check suites in parallel (wall time = the longest one
 #
 # The Linux-safe subset, run by .github/workflows/check.yml on a hosted ubuntu-latest runner (the repo is
 # public). Everything here is hermetic and free of macOS-only tools; the rest stays in `check`.
-check-linux: shellcheck-all hooks-test kuma-door-test swapout-rate-test brew-service-test caddy-registry-test backup-1password-test herdr-core-test factory-spaces-test hc-reap-test launchd-restarts-test ## Linux-safe subset of `check` (CI)
+check-linux: shellcheck-all hooks-test kuma-door-test swapout-rate-test brew-service-test caddy-registry-test backup-1password-test herdr-core-test hc-reap-test launchd-restarts-test ## Linux-safe subset of `check` (CI)
 
 shellcheck-all: ## shellcheck -S warning over every tracked bash script (zsh scripts excluded)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "  ✗ shellcheck not installed — run 'brew bundle'"; exit 1; }
