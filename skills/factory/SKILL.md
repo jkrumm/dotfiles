@@ -17,6 +17,17 @@ this page holds only what the help cannot decide for you.
 - An edit that must land in this session's live tree is `@implementer`, not an Issue.
 - The lead cannot see this session: the facts carry the ask, the why, exact paths, scope limits and any research done.
 
+## Decide before you file
+
+Settle every open point in this session before `factory issue new`: look, decide, or ask the owner here while he is in the room. The lead can only guess at what this session left open.
+
+- Write each settled choice into the facts as a `Decided` line, with its reason. A direction the owner gave is quoted with his words and the date: the lead and the Judge read a quote as his.
+- Leave to the lead what only the code can answer, and say so in `change`.
+- `--checkpoint spec` makes the lead write its plan first; nobody waits on it, and the owner reads it only if he comments. It is no sign-off. Its cases are in `factory issue schema`.
+- `--checkpoint gate` is the one way to hold a chain for the owner: a product gate, rare.
+- A question for the owner that survives this session is one sentence under an `Ask the owner` fact, with its options. The lead raises it as a Decision.
+- Give `--after` only where the Issue needs another Issue's output or the owner's answer. A row that could start today gets no edge (`--alone`), even when its chain sits behind a gate.
+
 ## One Issue, a few, or a plan
 
 | Shape | How |
