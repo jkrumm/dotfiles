@@ -19,6 +19,9 @@ const DEFAULT_TIMEOUT_S = 60;
 const WRITE_TOOLS = { edit: "Edit", write: "Write", apply_patch: "Edit" };
 
 const cache = new Map(); // settings path -> { mtimeMs, hooks }
+// tool.execute.after is typed to carry the call's args, but a version that drops them
+// must not turn PostToolUse hooks into silent no-ops: keep the before-hook's args by callID.
+const pendingArgs = new Map();
 
 // The project's hooks object, or null. One stat per call; the file is re-read only
 // when its mtime moved. A missing or unparsable file is "no hooks": never block an edit.
@@ -145,6 +148,10 @@ function verdict(event, res) {
   return null;
 }
 
+function hasPostHooks(directory) {
+  return Boolean(projectHooks(directory)?.PostToolUse);
+}
+
 // Runs every matching hook for every touched file; returns the blocking messages.
 async function dispatch(event, tool, args, directory, sessionID, response) {
   if (!(tool in WRITE_TOOLS)) return [];
@@ -175,11 +182,14 @@ async function dispatch(event, tool, args, directory, sessionID, response) {
 
 export const ClaudeHooks = async ({ directory }) => ({
   "tool.execute.before": async (input, output) => {
+    if (input.tool in WRITE_TOOLS && hasPostHooks(directory)) pendingArgs.set(input.callID, output.args);
     const messages = await dispatch("PreToolUse", input.tool, output.args, directory, input.sessionID);
     if (messages.length) throw new Error(messages.join("\n"));
   },
   "tool.execute.after": async (input, output) => {
-    const messages = await dispatch("PostToolUse", input.tool, input.args, directory, input.sessionID, {
+    const args = input.args ?? pendingArgs.get(input.callID);
+    pendingArgs.delete(input.callID);
+    const messages = await dispatch("PostToolUse", input.tool, args, directory, input.sessionID, {
       output: output.output,
     });
     if (messages.length) {

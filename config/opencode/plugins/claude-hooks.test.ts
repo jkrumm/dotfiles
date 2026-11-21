@@ -111,6 +111,18 @@ describe("PostToolUse", () => {
   });
 });
 
+describe("tool.execute.after without args", () => {
+  test("falls back to the args the before hook saw", async () => {
+    const dir = project({ hooks: { PostToolUse: [hook("echo 'late finding' >&2; exit 2")] } });
+    const hooks = await ClaudeHooks({ directory: dir } as never);
+    const args = { filePath: join(dir, "a.ts"), content: "x" };
+    await hooks["tool.execute.before"]({ tool: "write", sessionID: "s1", callID: "c9" }, { args });
+    const output = { title: "", output: "ok", metadata: {} };
+    await hooks["tool.execute.after"]({ tool: "write", sessionID: "s1", callID: "c9" }, output);
+    expect(output.output).toContain("late finding");
+  });
+});
+
 describe("PreToolUse", () => {
   test("exit 2 denies with the stderr as the error", async () => {
     const dir = project({
