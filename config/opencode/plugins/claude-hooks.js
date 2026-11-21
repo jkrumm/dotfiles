@@ -19,7 +19,7 @@ import { isAbsolute, join, resolve } from "node:path";
 const DEFAULT_TIMEOUT_S = 60;
 
 // OpenCode tool -> the Claude Code tool name a hook matcher is written against.
-const WRITE_TOOLS = { edit: "Edit", write: "Write", apply_patch: "Edit" };
+const WRITE_TOOLS = { edit: "Edit", write: "Write", patch: "Edit" };
 
 const cache = new Map(); // settings path -> { mtimeMs, hooks }
 
@@ -72,7 +72,7 @@ function commandHooks(hooks, event, toolName) {
 // The files a write tool touches, as [{ toolName, path, deleted }].
 function targets(tool, args, directory) {
   const abs = (p) => (isAbsolute(p) ? p : resolve(directory, p));
-  if (tool === "apply_patch") {
+  if (tool === "patch") {
     const out = [];
     for (const m of String(args?.patchText ?? "").matchAll(
       /^\*\*\* (Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$/gm,

@@ -111,7 +111,7 @@ describe("PostToolUse", () => {
     expect(await post(dir, "read", { path: join(dir, "a.ts") })).toBe(OK);
   });
 
-  test("apply_patch runs per file, skipping deletes", async () => {
+  test("patch runs per file, skipping deletes", async () => {
     const dir = project({
       hooks: { PostToolUse: [hook('jq -r .tool_input.file_path >> "$CLAUDE_PROJECT_DIR/seen"')] },
     });
@@ -126,7 +126,7 @@ describe("PostToolUse", () => {
       "*** Delete File: src/gone.ts",
       "*** End Patch",
     ].join("\n");
-    await post(dir, "apply_patch", { patchText });
+    await post(dir, "patch", { patchText });
     expect(readFileSync(join(dir, "seen"), "utf8").trim().split("\n")).toEqual([
       join(dir, "src/a.ts"),
       join(dir, "src/b.ts"),
