@@ -4,8 +4,9 @@ DOTFILES_DIR := $(shell pwd)
 # Parse-time, so no recipe runs before the refusal.
 _HOST_WRITE_GOAL := $(firstword $(filter setup %-setup _setup-% _link _render-plists,$(MAKECMDGOALS)))
 ifneq ($(_HOST_WRITE_GOAL),)
-ifneq ($(shell bash $(DOTFILES_DIR)/scripts/deploy-guard.sh $(DOTFILES_DIR) $(_HOST_WRITE_GOAL) || echo refused),)
-$(error make $(_HOST_WRITE_GOAL) refused: run it from the main checkout)
+_HOST_WRITE_RC := $(shell bash $(DOTFILES_DIR)/scripts/deploy-guard.sh $(DOTFILES_DIR) $(_HOST_WRITE_GOAL); echo $$?)
+ifneq ($(_HOST_WRITE_RC),0)
+$(error $(if $(filter 1,$(_HOST_WRITE_RC)),make $(_HOST_WRITE_GOAL) refused: run it from the main checkout,make $(_HOST_WRITE_GOAL) stopped: deploy-guard could not read the checkout's git state (see above)))
 endif
 endif
 CLAUDE_DIR   := $(HOME)/.claude

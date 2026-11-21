@@ -69,6 +69,14 @@ for goal in setup batt-setup _link; do
     bad "make $goal refuses in a linked worktree" "rc=$rc $out"
   fi
 done
+NOGIT="$TMP/nogit"
+mkdir -p "$NOGIT/scripts" && cp "$MAKEFILE" "$NOGIT/Makefile" && cp "$GUARD" "$NOGIT/scripts/deploy-guard.sh" || exit 2
+out="$(HOME="$TMP/home" make -C "$NOGIT" -n setup 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"could not read the checkout's git state"* && "$out" != *"refused"* && "$out" != *"Setting up dotfiles"* ]]; then
+  ok "setup outside a git checkout stops with the git-state reason, not the worktree one"
+else
+  bad "setup outside a git checkout stops with the git-state reason, not the worktree one" "rc=$rc $out"
+fi
 out="$(HOME="$TMP/home" make -C "$WT" -n help 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]]; then ok "make help still runs in a linked worktree"; else bad "make help still runs in a linked worktree" "rc=$rc $out"; fi
 
