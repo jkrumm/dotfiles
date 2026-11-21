@@ -28,7 +28,7 @@ authorization.
 
 **`config/Caddyfile` is the single app registry.** Every
 `<name>.test { reverse_proxy localhost:PORT }` block automatically gets a clean
-tailnet door — a new app needs nothing else.
+tailnet door — a new app needs nothing else. A block with more than one `reverse_proxy` handler, or upstreams on different ports (a path split, such as `fpp-next.test`), is skipped by `scripts/lib/caddy-registry.py`: no tailnet door.
 
 | Door | URL | Scope |
 |-|-|-|

@@ -205,6 +205,27 @@ fpp-logdy.test {
 	reverse_proxy localhost:7723
 }
 
+# fpp-next — free-planning-poker v9 (the rewrite), local dev. Production serves one hostname and splits it by
+# path; this door does the same so origin-bound behaviour (storage, service worker scope, the WebSocket origin
+# check) is seen here first. /room, /room/* and /_room/* → the room app's Vite dev server (:7739, WebSocket
+# hot reload included); /api/* → the API (:7740, WebSocket at /api/ws); everything else → the site's Astro dev (:7738).
+# Started by hand, no LaunchAgent. Recorded as ports in config/mini/services.yaml (fpp-next).
+# Not in the tailnet registry: a block with three upstreams is skipped by scripts/lib/caddy-registry.py.
+fpp-next.test {
+	import local
+	@room path /room /room/* /_room/*
+	handle @room {
+		reverse_proxy localhost:7739
+	}
+	@api path /api/*
+	handle @api {
+		reverse_proxy localhost:7740
+	}
+	handle {
+		reverse_proxy localhost:7738
+	}
+}
+
 # modelpick — model-choice decider/dashboard (TanStack Start, SSR) on :7727.
 modelpick.test {
 	import local

@@ -152,7 +152,7 @@ nothing. The check for the pieces: `make mini-apps-test` (hermetic), `make mini-
 **Which dev servers start.** Registered with a `start` command (the repo's own `package.json` script, no change to any app):
 `basalt-playground`, `basalt-marketing`, `jkrumm-com`, `sy-serendipity`, `sy-serendipity-codex`. Without one, so the door wakes
 nothing and the page says so: `argo-dev` (its dev API refuses to boot on the mini, `live-guard.sh`), `fpp` (four ports and
-logdy), `rollhook` (a docker compose stack), `plannotator` (started by `rv`). Leads still validate against built output and
+logdy), `fpp-next` (three ports), `rollhook` (a docker compose stack), `plannotator` (started by `rv`). Leads still validate against built output and
 never start a dev server; the wake is for the owner's browser.
 
 ## Process type

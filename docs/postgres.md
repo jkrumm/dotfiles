@@ -28,6 +28,7 @@ never stop it, so its data never moves there.
 | `argo_test_<12 hex>` | superuser | argo's tests (`scripts/test.sh`, `bun test:api`): created and dropped per run, undeclared (reported as drift) | unix socket in `/tmp`, as the OS user |
 | `usage_test_<12 hex>` | superuser | usage-tracker's tests (`src/pg/testing.ts`): created and dropped per run, the harness refuses any other name (`assertScratchName`), undeclared (reported as drift) | unix socket in `/tmp`, as the OS user, no password |
 | `weatherorb_accounts_test` | superuser | weatherorb's accounts test | moves to a test container (weatherorb issue 1131) |
+| `fpp` | `fpp` | free-planning-poker v9's dev stack (`fpp-next.test`) | peer over `/tmp` (0700) |
 
 The superuser is the OS user that ran initdb. It logs in only over the unix sockets (trust; both
 socket directories are 0700 sockets owned by that user), for admin, backups and this apply. TCP is

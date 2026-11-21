@@ -53,6 +53,7 @@ server:
   hba:
     - local all ${USER} trust
     - local athena athena_owner,athena_app peer map=athena
+    - local fpp fpp peer map=fpp
     - local weatherorb,weatherorb_dbos weatherorb_owner,weatherorb_spots_ro peer map=weatherorb
     # weatherorb's tests: the superuser creates weatherorb_<suite>_test_<id> scratch databases,
     # the spots tests then log in to them as the app roles
@@ -62,6 +63,7 @@ server:
   ident:
     - athena ${USER} athena_owner
     - athena ${USER} athena_app
+    - fpp ${USER} fpp
     - weatherorb ${USER} weatherorb_owner
     - weatherorb ${USER} weatherorb_spots_ro
 
@@ -93,6 +95,10 @@ roles:
   factory:
     connection_limit: 10
     password: op://mini/vps-dev/SHARED_FACTORY_DB_PASSWORD
+  # free-planning-poker v9's dev stack (fpp-next.test): its API logs in as the OS user by peer over the socket.
+  fpp:
+    connection_limit: 20
+    password: none
   # Owns a schema of the prod mirror in `postgres`; nothing logs in as it here.
   modelpick:
     password: none
@@ -218,6 +224,11 @@ databases:
       PUBLIC: [CONNECT, TEMPORARY]
     schemas:
       dbos: { owner: weatherorb_owner }
+  # free-planning-poker v9's database (fpp-next.test), owned by its app role. PUBLIC gets no CONNECT, so only fpp and the superuser reach it.
+  fpp:
+    owner: fpp
+    locale: { provider: libc, locale: en_US.UTF-8 }
+
   weatherorb_accounts_test:
     owner: ${USER}
     locale: { provider: libc, locale: en_US.UTF-8 }

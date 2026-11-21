@@ -124,6 +124,7 @@ services:
   - { name: basalt-marketing, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt, start: "cd ~/SourceRoot/basalt-ui && bun run dev:marketing", memory_mib: 400 }
   - { name: basalt-playground, repo: basalt-ui, kind: dev-server, tier: on-demand, door: basalt-playground, start: "cd ~/SourceRoot/basalt-ui && bun run dev:playground", memory_mib: 400 }
   - { name: fpp, repo: free-planning-poker, kind: dev-server, tier: on-demand, door: [fpp, fpp-server, fpp-analytics, fpp-logdy], memory_mib: 800 }
+  - { name: fpp-next, repo: free-planning-poker, kind: dev-server, tier: on-demand, door: fpp-next, ports: [7738, 7739, 7740], memory_mib: 0, debt: { no-budget: "issue_2764: no budget until the v9 stack has run for an hour; set memory_mib then" }, note: "free-planning-poker v9 (the rewrite), started by hand, no start command: 7738 Astro (site), 7739 Vite (/room), 7740 API (/api); config/Caddyfile splits fpp-next.test by path" }
   - { name: jkrumm-com, repo: jkrumm.com, kind: dev-server, tier: on-demand, door: jkrumm, start: "cd ~/SourceRoot/jkrumm.com && bun run start", memory_mib: 400 }
   - { name: plannotator, repo: dotfiles, kind: dev-server, tier: on-demand, door: plannotator, memory_mib: 200, note: "the interim review backend behind rv" }
   - { name: rollhook, repo: rollhook, kind: dev-server, tier: on-demand, door: [rollhook, rollhook-dashboard, rollhook-marketing], memory_mib: 600 }
