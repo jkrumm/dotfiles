@@ -115,7 +115,7 @@ step_tmpdir() {
   # lsof reports resolved paths (/private/var/...), so match against the resolved root.
   root=$(cd "$root" && pwd -P) || { echo "tmpdir: FAILED: cannot resolve $root"; return 1; }
 
-  local before after raw rc=0 open cand_list list entry name total removed left
+  local before after raw rc=0 open cand_list list find_err entry name total removed left
   # Any non-zero lsof exit means the open set may be incomplete (exit 1 = some files could not be
   # listed), and an incomplete set would let rm -rf take an open entry. On the mini lsof exits 0.
   raw=$(with_timeout 300 "$LSOF" -Fn 2>/dev/null) || rc=$?
@@ -129,9 +129,15 @@ step_tmpdir() {
   before=$(free_kb "$root")
   cand_list=$(mktemp) || { echo "tmpdir: FAILED: mktemp"; return 1; }
   list=$(mktemp) || { rm -f "$cand_list"; echo "tmpdir: FAILED: mktemp"; return 1; }
-  if ! find "$root" -mindepth 1 -maxdepth 1 -mmin +4320 ! -flags +sunlnk -print0 > "$cand_list"; then
-    rm -f "$cand_list" "$list"; echo "tmpdir: FAILED: find over $root — nothing removed"; return 1
+  find_err=$(mktemp) || { rm -f "$cand_list" "$list"; echo "tmpdir: FAILED: mktemp"; return 1; }
+  # find exits 1 when an entry vanishes between readdir and stat — routine in a tmp dir that live
+  # processes churn (2026-11-21: a `.package` dotfile). A vanished entry needs no removing, so
+  # "No such file or directory" alone is not a failure; any other error still is.
+  if ! find "$root" -mindepth 1 -maxdepth 1 -mmin +4320 ! -flags +sunlnk -print0 > "$cand_list" 2> "$find_err" \
+    && grep -qv ': No such file or directory$' "$find_err"; then
+    rm -f "$cand_list" "$list" "$find_err"; echo "tmpdir: FAILED: find over $root — nothing removed"; return 1
   fi
+  rm -f "$find_err"
   while IFS= read -r -d '' entry; do
     name=${entry##*/}
     # Apple-owned entries (sockets, launchd and dirhelper state) are not ours to remove.

@@ -71,6 +71,31 @@ check "unremovable entry: step fails and says so" sh -c '[ "$1" -ne 0 ] && print
 check "unremovable entry: the removable one still went" test ! -e "$T3/gone"
 chflags nouchg "$T3/locked/f"
 
+# (c) find loses an entry mid-listing (exit 1, "No such file or directory"): not a failure, the rest still goes.
+# Any other find error still fails the step with nothing removed.
+cat > "$FAKE/find" <<'FIND'
+#!/bin/sh
+case " $* " in
+  *" -flags "*)
+    /usr/bin/find "$@"
+    case "$FAKE_FIND_MODE" in
+      vanish) echo "find: $4/.vanished.package: No such file or directory" >&2; exit 1 ;;
+      denied) echo "find: $4/private: Permission denied" >&2; exit 1 ;;
+    esac ;;
+  *) exec /usr/bin/find "$@" ;;
+esac
+FIND
+chmod +x "$FAKE/find"
+findsweep() { # $1 = FAKE_FIND_MODE, $2 = tmp root
+  PATH="$FAKE:$PATH" FAKE_FIND_MODE="$1" DISK_SWEEP_TMPDIR="$2" DISK_SWEEP_LSOF="$FAKE/lsof-none" bash "$HERE/disk-sweep.sh" tmpdir 2>&1
+}
+T4="$TMP/tmproot4"; mkdir -p "$T4/stale"; old 5 "$T4/stale"
+out13=$(findsweep vanish "$T4"); rc13=$?
+check "find loses an entry mid-listing: exit 0, stale entry removed" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/stale" ] && ! printf "%s" "$3" | grep -q FAILED' _ "$rc13" "$T4" "$out13"
+T5="$TMP/tmproot5"; mkdir -p "$T5/stale"; old 5 "$T5/stale"
+out14=$(findsweep denied "$T5"); rc14=$?
+check "find permission error: step fails, nothing removed" sh -c '[ "$1" -ne 0 ] && [ -d "$2/stale" ] && printf "%s" "$3" | grep -q "find over"' _ "$rc14" "$T5" "$out14"
+
 # (d) pkg-caches with no package manager on PATH: an over-cap npm cache is removed, the rest is silent.
 mkdir -p "$HOME/.npm/_cacache"; echo x > "$HOME/.npm/_cacache/blob"
 out7=$(PATH=/usr/bin:/bin DISK_SWEEP_NPM_MAX_GB=0 /bin/bash "$HERE/disk-sweep.sh" pkg-caches 2>&1); rc7=$?
