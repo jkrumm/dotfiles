@@ -140,17 +140,31 @@ The default Colima VM then went to 4 GiB with the mounts of `colima/mounts.mini.
 Open: the teamchat VM's move into the default one and Athena's script cleanup need Issues in the
 work repo epos-ai-teamchat-athena, which only the owner can file (drafts:
 `~/.local/state/pg-cutover/work-repo-drafts/`); vps still has to remove the stopped container from
-`compose.dev.yml`; after 7 days and a proven restore from the HomeLab, the Docker volume and
-Athena's old data directory go (a dotfiles follow-up).
+`compose.dev.yml` (its `volumes:` still lists `postgres-dev-data`).
 
-Kept after the cutover, untouched: the Docker volume `vps_postgres-dev-data` and Athena's data
-directory `~/.local/state/athena/pg18` (its launchd job disabled, not removed). They are removed in a
-follow-up only after 7 days AND a restore from the HomeLab copy of the nightly dump is proven
-(owner's rule). Rollback within those 7 days: stop the bare server's clients, `docker start
-postgres`, `ALTER DATABASE <db> RESET default_transaction_read_only` for each of its four databases
-(the cutover left them read-only), `launchctl enable` and bootstrap `com.iu.athena-postgres`,
-restore the saved config from the cutover's run directory, restart the bare server. Writes made to
-the bare server since the cutover are not in the old copies.
+### Restore proof and removal of the old copies (issue 1163, 2026-11-21)
+
+Owner's rule: the cutover's copies go only after 7 days AND one restore from the HomeLab copy of the
+nightly dump is proven. Both held on 2026-11-21.
+
+- **Proof.** Backup `20261121T021505Z` (the newest complete one, `homelab:/mnt/hdd/backups/vps-mini-postgres/`,
+  1.6 GB, nine databases) was pulled, its `SHA256SUMS` verified, and every `<database>.dump` restored
+  with `pg_restore --exit-on-error` into a scratch cluster (initdb on port 5498, `pg-apply
+  --no-schemas` first, run with vps `scripts/restore-drill-pg-dev.sh` and `PG_DEV_PORT`/`PG_DEV_SOCKDIR`
+  pointed at it). Compared with the backup's `counts.tsv` (exact `COUNT(*)` per table and relation-kind
+  counts, taken inside the dump's own snapshot): `DRILL PASS`, zero differences in all nine databases
+  (agent_workflows 44 tables / 96,196 rows, athena 71 / 216,105, postgres 50 / 1,407, shared 161 /
+  4,125,469, spike_s1 36 / 2,380, weatherorb 51 / 38,668,117, weatherorb_dbos 13 / 383,989,
+  weatherorb_accounts_test 15 / 4, one weatherorb test database 1 / 8,500). The scratch cluster is
+  stopped and deleted.
+- **Removed.** The Docker volume `vps_postgres-dev-data` (no container referenced it), Athena's old
+  data directory `~/.local/state/athena/pg18` (its `com.iu.athena-postgres` plist was already gone;
+  `pgsock/` stays, the bare server serves it), and the cutover dumps under
+  `~/.local/state/pg-cutover/*/dumps`. Weatherorb's data and the `colima-athena-poc` disk
+  (`docs/disk.md`, the owner's call) were not touched.
+- **No rollback to the old copies any more.** The bare server is the only copy of what was written
+  since the cutover; recovery is the nightly dump (`docs/recovery-drill.md`). `make pg-rollback-drill`
+  and `make pg-cutover` need the old container and Athena's data directory and no longer run.
 
 ## Settings
 
