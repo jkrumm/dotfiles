@@ -872,14 +872,31 @@ _setup-git-headless:
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
-.PHONY: check check-linux shellcheck-all verify logs deploy version
+.PHONY: check check-slow check-linux shellcheck-all verify logs deploy version
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test jobs-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test smb-keepalive-test hc-reap-test browser-reap-test icloud-photos-export-test ext-mirror-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test factory-spaces-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
-# the failures (~5 min, dominated by the relogin and human-queue suites).
+# the failures. Order is the cost of a red run: the cheap suites go first so a failure there stops within
+# about a minute, and the five heaviest (measured 2026-11-21, serial: devhost-heartbeat 209 s, claude-launcher
+# 66 s, ext-mirror 47 s, smb-keepalive 46 s, jobs 32 s of ~570 s in all) run last, together, in `check-slow`.
+# A suite that grows past a minute belongs in CHECK_SLOW.
+CHECK_SLOW := devhost-heartbeat-test claude-launcher-test ext-mirror-test smb-keepalive-test jobs-test
+
+check-slow: ## The slowest check suites in parallel (wall time = the longest one); each suite's output stays whole, replayed in order
+	@d=$$(mktemp -d "$${TMPDIR:-/tmp}/check-slow.XXXXXX"); \
+	for t in $(CHECK_SLOW); do \
+		( $(MAKE) --no-print-directory $$t >"$$d/$$t.log" 2>&1; echo $$? >"$$d/$$t.rc" ) & \
+	done; wait; \
+	failed=""; \
+	for t in $(CHECK_SLOW); do \
+		echo "== $$t"; cat "$$d/$$t.log"; \
+		[ "$$(cat "$$d/$$t.rc")" = 0 ] || failed="$$failed $$t"; \
+	done; \
+	rm -rf "$$d"; \
+	[ -z "$$failed" ] || { echo "  ✗ check-slow failed:$$failed"; exit 1; }
 #
 # The Linux-safe subset, run by .github/workflows/check.yml on a hosted ubuntu-latest runner (the repo is
 # public). Everything here is hermetic and free of macOS-only tools; the rest stays in `check`.
