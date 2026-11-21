@@ -124,6 +124,20 @@ describe("tool.execute.after without args", () => {
 });
 
 describe("PreToolUse", () => {
+  test("a denied call keeps no args for the after hook", async () => {
+    const dir = project({
+      hooks: { PreToolUse: [hook("exit 2")], PostToolUse: [hook("echo 'should not run' >&2; exit 2")] },
+    });
+    const hooks = await ClaudeHooks({ directory: dir } as never);
+    const args = { filePath: join(dir, "a.ts"), content: "x" };
+    await expect(
+      hooks["tool.execute.before"]({ tool: "write", sessionID: "s1", callID: "c7" }, { args }),
+    ).rejects.toThrow();
+    const output = { title: "", output: "ok", metadata: {} };
+    await hooks["tool.execute.after"]({ tool: "write", sessionID: "s1", callID: "c7" }, output);
+    expect(output.output).toBe("ok");
+  });
+
   test("exit 2 denies with the stderr as the error", async () => {
     const dir = project({
       hooks: { PreToolUse: [hook("echo 'managed file, do not edit' >&2; exit 2")] },

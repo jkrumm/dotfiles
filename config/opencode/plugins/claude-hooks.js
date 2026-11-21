@@ -182,9 +182,9 @@ async function dispatch(event, tool, args, directory, sessionID, response) {
 
 export const ClaudeHooks = async ({ directory }) => ({
   "tool.execute.before": async (input, output) => {
-    if (input.tool in WRITE_TOOLS && hasPostHooks(directory)) pendingArgs.set(input.callID, output.args);
     const messages = await dispatch("PreToolUse", input.tool, output.args, directory, input.sessionID);
     if (messages.length) throw new Error(messages.join("\n"));
+    if (input.tool in WRITE_TOOLS && hasPostHooks(directory)) pendingArgs.set(input.callID, output.args);
   },
   "tool.execute.after": async (input, output) => {
     const args = input.args ?? pendingArgs.get(input.callID);
