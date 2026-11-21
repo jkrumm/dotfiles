@@ -8,6 +8,17 @@ plugins, env) and on `permissions.deny` + `permissions.defaultMode`
 in bypass, not manual); `permissions.allow` and
 `model`/`effortLevel`/`alwaysThinkingEnabled` are preserved from the live file.
 
+**Code Mode is on for every session** (`env.CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, an experimental Claude Code
+feature). Each tool call from a script still passes the PreToolUse hooks under its usual tool name; the script itself
+is the `REPL` tool.
+
+- **Off for one launch:** `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=0 c` (a `0` anywhere wins).
+- **Off for good:** delete the line and re-render. A session started in Code Mode then resumes only with the variable
+  set to `1` in its shell, so let those sessions finish first or resume them by hand.
+- **A new account or machine:** the first Code Mode launch shows a consent dialog (stored as
+  `codeModeCaveatsAcceptedV1` in that account's `.claude.json`). Accept it once in an interactive `c --account <id>`
+  before unattended work lands there, because an unattended launch waits at the dialog.
+
 
 ## Output style
 
