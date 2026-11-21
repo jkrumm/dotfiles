@@ -114,10 +114,12 @@ core_repos=""
 # repo shows up under its folder at once (`noMiniSpace` members keep their sidebar place and get none). A member resolves to
 # ~/SourceRoot/<name>, else ~/IuRoot/<name>; the member `IuRoot` is the work root itself.
 GROUP_REPOS_OF='while read -r l; do if [ "$l" = IuRoot ]; then if [ -d "$HOME/IuRoot" ]; then printf "%s\t%s\n" "$l" "$HOME/IuRoot"; fi; continue; fi; for r in "$HOME/SourceRoot" "$HOME/IuRoot"; do if [ -d "$r/$l/.git" ]; then printf "%s\t%s\n" "$l" "$r/$l"; break; fi; done; done | sort -u'
-group_names=$(/usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); skip=set(d.get("noMiniSpace",[])); [print(n) for g in d["groups"] for n in g["members"] if n not in skip]' "$SRC/groups.json")
+skip_names=$(/usr/bin/python3 -c 'import json,sys; [print(n) for n in json.load(open(sys.argv[1])).get("noMiniSpace", [])]' "$SRC/groups.json")
+group_names=$(/usr/bin/python3 -c 'import json,sys; [print(n) for g in json.load(open(sys.argv[1]))["groups"] for n in g["members"]]' "$SRC/groups.json")
 group_repos=""
 [ -z "$group_names" ] || group_repos=$(printf '%s\n' "$group_names" | hc exec --on mini -i sh -c "$GROUP_REPOS_OF" 2>/dev/null || true)
-mini_repos=$(printf '%s\n%s\n' "$core_repos" "$group_repos" | sed '/^$/d' | sort -u)
+# `noMiniSpace` also drops a repo that only has a terminal on the mini.
+mini_repos=$(printf '%s\n%s\n' "$core_repos" "$group_repos" | sed '/^$/d' | sort -u | awk -F'\t' -v skip="$skip_names" 'BEGIN { n = split(skip, a, "\n"); for (i = 1; i <= n; i++) drop[a[i]] = 1 } !($1 in drop)')
 while IFS=$'\t' read -r name folder; do
   [ -n "$name" ] || continue
   if grep -qxF "$folder" <<<"$mini_open"; then say "· mini space $name (open)"; continue; fi

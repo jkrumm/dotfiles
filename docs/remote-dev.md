@@ -111,8 +111,8 @@ herdr-app-setup`), a space joins the group naming its repo, the rest land in
 repo is one line in the JSON: `make herdr-app-setup` (the MacBook runs it after a
 pull that touches `config/herdr-app/`) opens a mini space for every listed repo
 that exists on the mini, with or without a terminal in it (`noMiniSpace` lists
-the exceptions). A repo missing on the mini or an unopened space is skipped, so
-listing one early costs nothing.
+the exceptions). A repo not cloned on the mini is skipped, so listing one before
+it exists there costs nothing.
 
 ## Putting work on the mini
 
