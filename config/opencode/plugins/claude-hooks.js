@@ -2,14 +2,17 @@
 // edit hooks (the basalt-ui lint shim, a deny on managed files); OpenCode loads the
 // repo's AGENTS.md, skills and rules but never runs them. This plugin runs the
 // PreToolUse / PostToolUse command hooks whose matcher covers a file-writing tool,
-// with the event JSON on stdin in the shape Claude Code sends and
-// CLAUDE_PROJECT_DIR set. Exit 2 on PreToolUse denies the call (a thrown error is
-// the deny, as in protect-branches.js); exit 2 on PostToolUse appends the hook's
-// stderr to the tool result, which is how the model hears it. Any other exit is a
-// non-blocking error and stays silent, as in Claude Code. Stop and every other
-// event are out of scope (docs/opencode.md). Hook API: opencode.ai/docs/plugins.
+// with the event JSON on stdin in the shape Claude Code sends and CLAUDE_PROJECT_DIR
+// set. Exit 2 on PreToolUse denies the call (a thrown error is the deny); exit 2 on
+// PostToolUse appends the hook's stderr to the tool result, which is how the model
+// hears it. Any other exit is a non-blocking error and stays silent, as in Claude
+// Code. Stop and every other event are out of scope (docs/opencode.md).
 //
-// OpenCode treats every export of this file as a plugin: export only the plugin.
+// OpenCode v2 API (verified live on 2.0.32, 2026-11-21): a plugin default-exports
+// { id, setup(ctx) }; a named v1 export fails to load. `ctx.tool.hook` takes
+// "execute.before" (event: tool, sessionID, id, input; a throw denies) and
+// "execute.after" (the same plus status and a mutable result.content of text parts).
+// One plugin instance exists per project: ctx.location.directory is that project.
 import { statSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
@@ -19,9 +22,6 @@ const DEFAULT_TIMEOUT_S = 60;
 const WRITE_TOOLS = { edit: "Edit", write: "Write", apply_patch: "Edit" };
 
 const cache = new Map(); // settings path -> { mtimeMs, hooks }
-// tool.execute.after is typed to carry the call's args, but a version that drops them
-// must not turn PostToolUse hooks into silent no-ops: keep the before-hook's args by callID.
-const pendingArgs = new Map();
 
 // The project's hooks object, or null. One stat per call; the file is re-read only
 // when its mtime moved. A missing or unparsable file is "no hooks": never block an edit.
@@ -87,7 +87,7 @@ function targets(tool, args, directory) {
     }
     return out;
   }
-  const file = args?.filePath;
+  const file = args?.path ?? args?.filePath;
   if (typeof file !== "string" || !file) return [];
   return [{ toolName: WRITE_TOOLS[tool], path: abs(file), deleted: false }];
 }
@@ -148,10 +148,6 @@ function verdict(event, res) {
   return null;
 }
 
-function hasPostHooks(directory) {
-  return Boolean(projectHooks(directory)?.PostToolUse);
-}
-
 // Runs every matching hook for every touched file; returns the blocking messages.
 async function dispatch(event, tool, args, directory, sessionID, response) {
   if (!(tool in WRITE_TOOLS)) return [];
@@ -180,20 +176,26 @@ async function dispatch(event, tool, args, directory, sessionID, response) {
   return messages;
 }
 
-export const ClaudeHooks = async ({ directory }) => ({
-  "tool.execute.before": async (input, output) => {
-    const messages = await dispatch("PreToolUse", input.tool, output.args, directory, input.sessionID);
-    if (messages.length) throw new Error(messages.join("\n"));
-    if (input.tool in WRITE_TOOLS && hasPostHooks(directory)) pendingArgs.set(input.callID, output.args);
-  },
-  "tool.execute.after": async (input, output) => {
-    const args = input.args ?? pendingArgs.get(input.callID);
-    pendingArgs.delete(input.callID);
-    const messages = await dispatch("PostToolUse", input.tool, args, directory, input.sessionID, {
-      output: output.output,
+export default {
+  id: "claude-hooks",
+  async setup(ctx) {
+    const directory = ctx.location.directory;
+    await ctx.tool.hook("execute.before", async (event) => {
+      const messages = await dispatch("PreToolUse", event.tool, event.input, directory, event.sessionID);
+      if (messages.length) throw new Error(messages.join("\n"));
     });
-    if (messages.length) {
-      output.output = `${output.output ?? ""}\n\nPostToolUse hook feedback (.claude/settings.json):\n${messages.join("\n")}`;
-    }
+    await ctx.tool.hook("execute.after", async (event) => {
+      if (event.status !== "completed") return;
+      const text = event.result?.content?.map((part) => part.text).join("\n");
+      const messages = await dispatch("PostToolUse", event.tool, event.input, directory, event.sessionID, {
+        output: text,
+      });
+      if (messages.length) {
+        event.result.content.push({
+          type: "text",
+          text: `PostToolUse hook feedback (.claude/settings.json):\n${messages.join("\n")}`,
+        });
+      }
+    });
   },
-});
+};
