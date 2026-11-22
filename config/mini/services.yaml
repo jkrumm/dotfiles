@@ -49,6 +49,7 @@ services:
   - { name: factory-door, repo: software-factory, kind: launchd, tier: core, label: com.jkrumm.factory-door, process_type: interactive, memory_mib: 50 }
   - { name: finances, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances, memory_mib: 50 }
   - { name: finances-backup-push, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances-backup-push, memory_mib: 50 }
+  - { name: finances-market, repo: finances, kind: launchd, tier: core, label: com.jkrumm.finances-market, memory_mib: 50 }
   - { name: fseventsd-watch, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.fseventsd-watch, memory_mib: 50 }
   - { name: hc-events, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-events, process_type: interactive, memory_mib: 50 }
   - { name: hc-reap, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.hc-reap, memory_mib: 50 }
