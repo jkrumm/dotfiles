@@ -7,8 +7,10 @@
 # that owns the credential (--machine, default: this one). It runs `claude auth login --claudeai` with BROWSER set to
 # claude-login-browser.sh (never `ssh mini claude …`: the login Keychain is only reachable from the GUI session). The
 # helper opens the authorize URL in the browser signed in to the account (registry `loginBrowser`); the owner clicks
-# approve. On the MacBook that is all; on the mini the browser is elsewhere, so the approval page shows a code that the
-# owner pastes into the login terminal (the helper says so, in the terminal and by notification). Afterwards `claude-account refresh --ids <id>` runs and the owner gets a native notification
+# approve. That is all on either machine: on the mini the MacBook forwards the login's callback port to the mini for the
+# life of the login (claude-login-browser.sh), so the click reaches the mini's login. Only when that forward cannot be
+# opened the approval page shows a code instead, which a native dialog on the MacBook takes and sends to the login prompt.
+# Afterwards `claude-account refresh --ids <id>` runs and the owner gets a native notification
 # ("Claude login me: renewed, valid until <date>", or a failure line with the log path), on the MacBook. "Renewed"
 # is proven, not assumed: the Keychain item's refresh_expires_at is read before and after the login (`claude-account
 # expiry --json --ids <id>`, which also reads a disabled account's first login) and must be newer afterwards; a login
@@ -23,20 +25,22 @@
 #             works), labelled into the dotfiles space as the tab `relogin <id>`, no parent. After success it exits and
 #             removes itself a few seconds later, only that terminal; the outcome notification goes to the MacBook over
 #             ssh. A failed login drops into a shell there, left open for the paste fallback. Asking again while the
-#             terminal still waits opens its approval page again and repeats where the code goes; one whose login is
+#             terminal still waits opens its approval page again (and the code dialog, in paste mode); one whose login is
 #             over (a failed one at its shell) is replaced. Without a running core
 #             (checked through launchd first: an `hc` call would start a stray one) it stops and says so.
 #   --visible   today's behaviour for debugging: a Terminal window / hc terminal that stays open, no worker, no
 #               notification.
 #
 #   (no flag)   from any machine: reach the owning machine and start the login there
-#   --ask       instead push a native approval dialog to the MacBook (scripts/ask-human.sh); its command is the
-#               line above, so one click starts the login. Never runs anything by itself.
+#   --ask       instead ask for the login on the MacBook (scripts/ask-human.sh): it waits until the MacBook is in use (the
+#               gate's `in-use`), then asks. A granted auto-run class (config/macbook-auto-classes.tsv, `claude-relogin`)
+#               starts the login with no dialog; without the grant a native approval dialog does, and one click starts it.
+#               On the MacBook itself the grant (human-queue.sh consent) starts it directly.
 #   --dry-run   print exactly what would run, run nothing
 #   --in-pane / --worker / --watch <hc:address> / --result-file <file>   internal
 #
 # Automating the login itself (driving the browser, reading the mail) is out of bounds: a human always approves.
-# Test seams: CLAUDE_RELOGIN_ASK_HUMAN, CLAUDE_RELOGIN_LOG, CLAUDE_RELOGIN_POLL_S,
+# Test seams: CLAUDE_RELOGIN_ASK_HUMAN, CLAUDE_RELOGIN_ASK_POLL_S, CLAUDE_RELOGIN_ASK_MAX_WAIT_S, CLAUDE_RELOGIN_LOG, CLAUDE_RELOGIN_POLL_S,
 # CLAUDE_RELOGIN_CLOSE_DELAY_S, CLAUDE_RELOGIN_BG_IDLE_S, CLAUDE_RELOGIN_MAX_WAIT_S, CLAUDE_RELOGIN_ABSENT_N,
 # CLAUDE_RELOGIN_TERM_GRACE_S, CLAUDE_RELOGIN_FOREGROUND (run the workers inline);
 # CLAUDE_RELOGIN_SPACE_DIR (the repo whose Herdr space the tab joins; default ~/SourceRoot/dotfiles);
@@ -59,6 +63,9 @@ MAX_WAIT_S="${CLAUDE_RELOGIN_MAX_WAIT_S:-3600}"   # longest the opener waits for
 STATE_DIR="${CLAUDE_RELOGIN_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claude-accounts}" # <id>.relogin-url: the approval URL while a mini login waits
 ABSENT_N="${CLAUDE_RELOGIN_ABSENT_N:-3}"          # consecutive clean "it is gone" answers before a terminal counts as closed
 TERM_GRACE_S="${CLAUDE_RELOGIN_TERM_GRACE_S:-5}"  # SIGTERM, this long, then SIGKILL
+ASK_POLL_S="${CLAUDE_RELOGIN_ASK_POLL_S:-120}"          # --ask: how often it looks whether the MacBook is in use
+ASK_MAX_WAIT_S="${CLAUDE_RELOGIN_ASK_MAX_WAIT_S:-86400}" # --ask: gives up waiting after this (the keepalive's next ask follows its own 24 h)
+AUTO_CONSENT="${CLAUDE_RELOGIN_AUTO_CONSENT:-$HOME/.config/jk/auto-run.consent}" # the MacBook's grant of the `claude-relogin` auto-run class
 export PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" # appended: a non-login ssh shell lacks them, an existing PATH entry (or a test stub) wins
 REMOTE_PATH='export PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH"'
 # What a remote shell runs to start the relogin on its own machine ($HOME is that machine's).
@@ -111,13 +118,53 @@ step() {
 # ── --ask: a dialog on the MacBook whose command starts the login, so the owner clicks once ───────
 if (( ask )); then
   cmd="$REMOTE_SCRIPT $id --machine $machine"
-  text="Claude login '$id' on the $machine needs a new /login${reason:+ ($reason)}. Run starts the login on the $machine and opens the approval page in ${app:-your default browser}; approve there, a notification follows. Nothing runs until you click Run."
+  text="Claude login '$id' on the $machine needs a new /login${reason:+ ($reason)}. It opens the approval page in ${app:-your default browser}: approve there and the login finishes by itself. Run starts it."
+  # The state of the MacBook, as its gate's `in-use` verb says: active, idle, locked; unknown when it cannot be asked
+  # (then the ask goes out as before: an unreachable MacBook leaves the request pending in the queue).
+  mac_state() {
+    local out
+    if [[ "$here" == macbook ]]; then out=$(SSH_ORIGINAL_COMMAND=in-use bash "$HERE/iumac-gate.sh" 2>/dev/null) || out=""
+    else out=$(ssh -o BatchMode=yes -o ConnectTimeout=8 iumac in-use 2>/dev/null) || out=""; fi
+    case "$out" in active|idle|locked) echo "$out" ;; *) echo unknown ;; esac
+  }
+  # The owner's grant of the auto-run class, as the gate reads it: a file of ours that nobody else can write.
+  auto_granted() {
+    local mode
+    mode=$(stat -f %Lp "$AUTO_CONSENT" 2>/dev/null)
+    [[ ! -e "$(dirname "$AUTO_CONSENT")/auto-run.off" && -f "$AUTO_CONSENT" && -O "$AUTO_CONSENT" ]] || return 1
+    case "$mode" in ?[2367]?|??[2367]) return 1 ;; esac
+    grep -qxF -- claude-relogin "$AUTO_CONSENT"
+  }
+  if (( dry )); then
+    echo "would wait until the MacBook is in use (ssh iumac in-use says active), then:"
+    if [[ "$here" == macbook ]]; then
+      echo "  with the claude-relogin auto-run class granted: bash $(login_shquote "$SELF") $id --machine $machine"
+      echo "would set: HUMAN_QUEUE_MAC_HOST=local"
+      HUMAN_QUEUE_MAC_HOST=local step bash "$ASK_HUMAN" ask "$text" --cmd "$cmd"
+    else
+      step bash "$ASK_HUMAN" ask "$text" --cmd "$cmd"
+    fi
+    exit 0
+  fi
+  # Nobody is asked while the MacBook is idle or locked: the login would open a page nobody sees. It waits for the owner.
+  waited=0
+  while :; do
+    case "$(mac_state)" in idle|locked) ;; *) break ;; esac
+    if (( waited >= ASK_MAX_WAIT_S )); then
+      echo "claude-relogin: re-login of '$id' on the $machine: the MacBook stayed unused for $waited s, no ask made (the keepalive asks again)" >&2
+      exit 0
+    fi
+    sleep "$ASK_POLL_S"; waited=$((waited + ASK_POLL_S))
+  done
   if [[ "$here" == macbook ]]; then
-    # this IS the MacBook: show the dialog here, no ssh self-loop
-    (( dry )) && echo "would set: HUMAN_QUEUE_MAC_HOST=local"
-    HUMAN_QUEUE_MAC_HOST=local step bash "$ASK_HUMAN" ask "$text" --cmd "$cmd"
+    # this IS the MacBook: the granted class starts the login with no dialog, else the dialog is shown here (no ssh self-loop)
+    if auto_granted; then
+      echo "claude-relogin: re-login of '$id' on the $machine: the MacBook is in use, starting it (the granted auto-run class)" >&2
+      exec bash "$SELF" "$id" --machine "$machine"
+    fi
+    HUMAN_QUEUE_MAC_HOST=local bash "$ASK_HUMAN" ask "$text" --cmd "$cmd"
   else
-    step bash "$ASK_HUMAN" ask "$text" --cmd "$cmd"
+    bash "$ASK_HUMAN" ask "$text" --cmd "$cmd"
   fi
   exit $?
 fi
@@ -130,7 +177,7 @@ login_env() { # [extra NAME=value…] — builds login_cmd
   # unset for it (setting it changes the Keychain service)
   login_cmd=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_BASE_URL)
   [[ -z "$dir" ]] && login_cmd+=(-u CLAUDE_CONFIG_DIR)
-  login_cmd+=("USER=${USER:-$(id -un)}" "BROWSER=$HELPER" "CLAUDE_LOGIN_ACCOUNT=$id" "CLAUDE_LOGIN_MACHINE=$machine" "CLAUDE_LOGIN_URL_FILE=$url_file")
+  login_cmd+=("USER=${USER:-$(id -un)}" "BROWSER=$HELPER" "CLAUDE_LOGIN_ACCOUNT=$id" "CLAUDE_LOGIN_MACHINE=$machine" "CLAUDE_LOGIN_URL_FILE=$url_file" "CLAUDE_LOGIN_TERMINAL=$(hc_term_name "$id")")
   [[ -n "$dir" ]] && login_cmd+=("CLAUDE_CONFIG_DIR=${dir/#\~/$HOME}")
   login_cmd+=("$@" claude auth login --claudeai)
 }
@@ -599,16 +646,23 @@ if [[ "$machine" == mini ]]; then
           waiting_url=$(head -1 "$url_file" 2>/dev/null)
           where="the tab 'relogin $id' (terminal $tname, $old) in the Herdr app"
           if [[ -z "$waiting_url" ]]; then
-            notify "The login for $id is starting in $where: the approval page opens in a moment, paste its code there."
-            echo "claude-relogin: the login terminal for '$id' ($old) is still starting: its approval page opens in a moment, paste the code in $where"
+            notify "The login for $id is starting: the approval page opens in a moment, approve there."
+            echo "claude-relogin: the login terminal for '$id' ($old) is still starting: its approval page opens in a moment, approve there"
             exit 0
           fi
           if ! login_open_on_mac "$app" "$waiting_url"; then
-            notify "The login for $id still waits for its code in $where, but the approval page could not be opened. See the terminal."
-            die "the login for '$id' waits in $where; could not open its approval page on the MacBook. Open it yourself and paste the code: $waiting_url"
+            notify "The login for $id still waits for you, but the approval page could not be opened. See the terminal."
+            die "the login for '$id' waits in $where; could not open its approval page on the MacBook. Open it yourself ($waiting_url) and approve; if the page shows a code, paste it at the prompt there"
           fi
-          notify "The login for $id waits for its code: approve in ${app:-your browser}, then paste the code into $where."
-          echo "claude-relogin: the login for '$id' already waits in $where: its approval page is open again in ${app:-your browser}; paste the code there"
+          if login_url_is_paste "$waiting_url"; then
+            # paste mode: the page shows a code, the dialog on the MacBook takes it (again, when the first one was closed)
+            login_code_dialog_start "$id" "$tname" "$url_file"
+            notify "The login for $id waits for its code: approve in ${app:-your browser}, then paste the code the page shows into the dialog on this MacBook."
+            echo "claude-relogin: the login for '$id' already waits: its approval page is open again in ${app:-your browser}; the code goes into the dialog on the MacBook (or the prompt in $where)"
+          else
+            notify "Approve in ${app:-your browser}: the approval page of the login for $id is open again and the login finishes by itself."
+            echo "claude-relogin: the login for '$id' already waits: its approval page is open again in ${app:-your browser}; approve there, nothing to paste"
+          fi
           exit 0
         fi
         bounded hc kill "$tname" >/dev/null 2>&1; bounded hc rm "$tname" >/dev/null 2>&1
@@ -627,7 +681,7 @@ if [[ "$machine" == mini ]]; then
   [[ "$addr" =~ ^t[0-9a-z]+$ ]] || { rm -f "$url_file"; die "hc run gave no terminal address: $json"; }
   wrc=0
   [[ "$visible" == 1 ]] || spawn_worker "$id" --machine mini --watch "hc:$addr" --result-file "$result_file" || wrc=$?
-  echo "claude-relogin: login terminal '$tname' ($addr) opened on the mini; approve in ${app:-your browser}"
+  echo "claude-relogin: login terminal '$tname' ($addr) opened on the mini; approve in ${app:-your browser}, the login finishes by itself"
   exit "$wrc"
 else
   # --visible on the MacBook: a Terminal window that stays

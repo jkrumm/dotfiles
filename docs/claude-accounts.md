@@ -461,7 +461,7 @@ pending re-login dialogs younger than 24 h (a push that failed while this Mac sl
 Tinycast's Claude usage view reads `health --json` and offers each row's `fix`.
 The Herdr app's `jk-status` polls `health --json` every 5 min for its ⚠ chip. A Re-login started from the chip in `jk-details`
 sets `shared("jk.relogin")`; `jk-status` then re-polls from 60 s after the start, once a minute, until that row is gone or 15 min
-have passed (the chip's "approve in browser" label, "approve, paste code" for a mini login, follows the same key), so the chip clears when the login lands.
+have passed (the chip's "approve in browser" label follows the same key, on either machine), so the chip clears when the login lands.
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
@@ -501,11 +501,11 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
      so the app shows it as the tab `relogin <id>` (named best-effort through the doc once the app has adopted it).
      The core is a launchd GUI-session child, which is why the Keychain works (`ssh mini` is not enough). After success
      the command exits and the terminal removes itself (`--rm`); the watcher sweeps it a few seconds later with `hc rm`
-     (never a live one). A failed login drops into `exec $SHELL -l` in that terminal, left open for the paste fallback;
+     (never a live one). A failed login drops into `exec $SHELL -l` in that terminal, left open for the manual fallback;
      `--visible` always keeps the shell. **A second relogin while the terminal waits does not refuse:** the helper keeps the
      approval URL in `~/.cache/claude-accounts/<id>.relogin-url` (mode 600; created empty when the login starts, removed
      on any exit of the login process), so the repeated call opens the same page again in the account's browser, notifies the
-     MacBook where the code goes (the tab and terminal name) and exits 0 with the same words. A terminal with no URL file
+     MacBook (approve; in the code fallback also where the code goes) and exits 0 with the same words. A terminal with no URL file
      (its login is over: a failed one left at its shell) is closed (`hc kill`, `hc rm`) and replaced by a fresh login; if it will not
      close the call refuses and names `hc kill relogin-<id>`. A finished terminal is removed first. `launchctl print` checks the core runs before
      any `hc` call (an `hc` call starts a stray core otherwise); with no core it stops and says so. From the MacBook the hop is still one ssh to the
@@ -515,23 +515,34 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
      never counts as "closed": the terminal is gone only after 3 clean "absent" answers in a row, and that is
      reported by notification, never silently. After 60 minutes without a result it notifies "did not finish" and
      leaves the window/terminal open.
-2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port). The
-   helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
-   Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`: the callback
-   lands on that machine's CLI, nothing to paste. **On the mini, code-paste is the designed path, not a fallback.** The
-   browser's localhost is the MacBook's, and the mini's key grants no reverse forward (decided 2026-11-17: no
-   `permitlisten` is added, the helper no longer tries one). So the helper swaps the URL's redirect_uri for the
-   platform's code page (`https://platform.claude.com/oauth/code/callback`, the manual URL the CLI itself prints; state
-   and PKCE challenge stay, so the code completes this very login) and opens that with `ssh iumac open-url` (stdin: app,
-   URL). The approval page shows a code. The helper then tells the owner where it goes, in the login terminal and by
-   notification on the MacBook (`Approve in Google Chrome, then paste the code into the tab 'relogin iu' (terminal
-   relogin-iu) in the Herdr app on the mini.`). A registry that cannot be read never falls back to a guessed browser:
-   the helper prints the URL instead.
-3. **You approve in that browser and paste the code.** On the mini that is: approve, copy the code the page shows, paste
-   it at `Paste code here if prompted >` in the tab `relogin <id>` of the Herdr app (it is the mini's terminal
-   `relogin-<id>`). Nothing drives the browser or reads mail or the code: automating the login itself is out of bounds
-   (Anthropic's terms), a human always approves. If you lost the page or the tab, run `claude-relogin <id>` again (or
-   click the chip again): it opens the page again and repeats the notification.
+2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port, bound on
+   127.0.0.1 only and kept open next to the CLI's paste prompt: checked 2026-11-22). The helper opens it in the browser signed
+   in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me` Helium; no field = the system default, and it
+   says so). On the MacBook that is `open -a <app> <url>`: the callback lands on that machine's CLI, nothing to paste.
+   **On the mini the MacBook forwards the callback port.** The helper calls the gate verb `login-forward` (`ssh iumac
+   login-forward`, stdin: app, port, the ORIGINAL URL). The MacBook refuses unless the URL is https, the port is 1024-65535
+   and the one in the URL's loopback `redirect_uri`, and nothing listens on it there; then it runs `ssh -N -L
+   127.0.0.1:<port>:127.0.0.1:<port> mini` (no ControlMaster: the forward must die with the verb), opens the page in the
+   account's browser and answers `forwarded`. The forward lives while the verb's stdin is open, which the mini keeps open for
+   as long as the login's marker file (`~/.cache/claude-accounts/<id>.relogin-url`) exists, and at most an hour (the helper
+   timeout `IUMAC_GATE_FORWARD_MAX`). The browser's callback to `localhost:<port>` reaches the mini's listener: no code
+   exists, and the login ends on the approve click. The MacBook's notification says `Approve in Helium: the approval page is
+   open and the login finishes by itself.` A registry that cannot be read never falls back to a guessed browser: the helper
+   prints the URL instead.
+3. **You approve in that browser.** That is all (after the e-mail login, when the browser's claude.ai session has ended).
+   Nothing drives the browser or reads mail: automating the login itself is out of bounds (Anthropic's terms), a human
+   always approves. If you lost the page, run `claude-relogin <id>` again (or click the chip again): it opens the page
+   again and repeats the notification.
+   **Fallback: the forward cannot be opened** (MacBook unreachable, the port taken there, the open refused). The helper then
+   swaps the URL's redirect_uri for the platform's code page (`https://platform.claude.com/oauth/code/callback`, the manual
+   URL the CLI itself prints; state and PKCE challenge stay, so the code completes this very login) and opens that with
+   `ssh iumac open-url`. The page shows a code, and a native dialog with a text field opens on the MacBook right after
+   (gate verb `login-code`: title `Claude login <id>: paste the code from the page`, 15 min). What is pasted goes to the
+   login's prompt with `hc send --force relogin-<id> <code>`; it travels as stdin and argv only, is never logged or written to
+   a file, and a text that is no code (8-600 characters of `A-Za-z0-9._~#%/+=:-`) is dropped. A cancelled, empty or timed-out
+   dialog sends nothing and says so; `claude-relogin <id>` again reopens it. Pasting at the prompt in the tab `relogin <id>`
+   of the Herdr app works as well. The page and its URL file are the same for a repeated trigger, which opens the page (and
+   the dialog, in this mode) again.
 4. It then runs `claude-account refresh --ids <id>` and sends a native notification to the MacBook (locally there, over
    ssh from the mini): `Claude login me: renewed, valid until <date>`, or `Claude login me failed - retry with:
    claude-relogin me (log: <path>)`. The text is built from the id, a date and the log path only, never from CLI output.
@@ -545,21 +556,26 @@ A registered but **disabled** account is accepted: its first login is how a new 
 `expiry --ids <id>` reads it before `enabled` is flipped (§Adding an account).
 
 If ssh to the MacBook fails, the helper prints the code-paste URL and the CLI prompt is still there: open the URL
-yourself and paste the code. **Manual fallback** (no script at all): on the machine that owns the login, in a core terminal or Terminal,
+yourself and paste the code at the prompt in the tab `relogin <id>`. **Manual fallback** (no script at all): on the machine that owns the login, in a core terminal or Terminal,
 `CLAUDE_CONFIG_DIR=$HOME/.claude-me command claude` (`iu`: unset it), `/login`, press `c` to copy the URL, open it in the
 right profile, approve, paste the code, then `claude-account refresh --ids <id>` and `make claude-accounts-verify`.
 
-**The ask (keepalive path).** The hourly `claude-account refresh --all` asks for a re-login by itself, never runs one:
-when a refresh ends `auth-failed` for an account on this machine, or `login/<id>` has a known end of life within 7
-days (an unreadable item never asks), it runs `claude-relogin <id> --ask --reason …` detached. That shows a native
-dialog on the MacBook (through `scripts/ask-human.sh`: from the mini over `ssh iumac`, on the MacBook directly,
-`HUMAN_QUEUE_MAC_HOST=local`) whose command is `bash "$HOME/SourceRoot/dotfiles/scripts/claude-relogin.sh" <id> --machine
-<m>`; the owner reads it and clicks Run once. At most one ask per account per 24 h and one dialog per machine per hour. Both slots are claimed atomically
-(exclusive create of `~/.cache/claude-accounts/<id>.relogin-ask.json` and `relogin-ask.cap`, so two keepalive runs never ask
-twice) and given back when the ask process fails to start (logged `ask failed`, retried next run), so a 24 h mute only
-follows an ask that really started. One account's failure never stops the others; a second account due in the same hour
-is deferred to the next run. An unanswered dialog falls back to the
-human queue and its ntfy notification, as every `ask-human` request does.
+**The ask (keepalive path).** The hourly `claude-account refresh --all` asks for a re-login by itself: when a refresh ends
+`auth-failed` for an account on this machine, or `login/<id>` has a known end of life within 7 days (an unreadable item never
+asks), it runs `claude-relogin <id> --ask --reason …` detached. That waits until the MacBook is in use (the gate's `in-use`
+verb says `active`: screen unlocked and input within 5 minutes; `idle` or `locked` is waited out, polling every 2 minutes for
+at most 24 h, and a MacBook that cannot be asked is not waited for), then asks through `scripts/ask-human.sh`: from the mini
+over `ssh iumac`, on the MacBook directly (`HUMAN_QUEUE_MAC_HOST=local`). The command is `bash
+"$HOME/SourceRoot/dotfiles/scripts/claude-relogin.sh" <id> --machine <m>`, byte for byte a template of the auto-run class
+`claude-relogin` (`config/macbook-auto-classes.tsv`, `needs active`, slot `<ID>`): once the owner granted that class on the
+MacBook (`human-queue.sh consent grant claude-relogin`, remote-dev.md §Auto-run) the login starts with no dialog, the
+approval page is already open and one notification says what opened and why; without the grant the native dialog asks and one
+click on Run starts it. The MacBook's own keepalive does the same through the grant file, no ssh. At most one ask per account
+per 24 h and one dialog per machine per hour. Both slots are claimed atomically (exclusive create of
+`~/.cache/claude-accounts/<id>.relogin-ask.json` and `relogin-ask.cap`, so two keepalive runs never ask twice) and given back
+when the ask process fails to start (logged `ask failed`, retried next run), so a 24 h mute only follows an ask that really
+started. One account's failure never stops the others; a second account due in the same hour is deferred to the next run. An
+unanswered dialog falls back to the human queue and its ntfy notification, as every `ask-human` request does.
 
 **Adding an account**
 
@@ -608,8 +624,10 @@ The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one A
 | `auth/me` WARN, heartbeat `account me NOT logged in` | login revoked or aged out | `claude-relogin me` (§Re-login) |
 | `login/<id>` WARN or FAIL, heartbeat `<id> login valid until … (N d left)` | the 30-day refresh token is near its end | `claude-relogin <id>` on that machine; the keepalive has already asked once per 24 h |
 | `login/<id>` WARN `login expiry unreadable` | Keychain locked (headless session), or the item has no `refreshTokenExpiresAt` | unlock the GUI session and rerun; `claude-account expiry` shows the reason |
-| `claude-relogin` prints the URL and a paste hint | `iumac` sshd is down or its `open-url` refused, or `open` failed on the MacBook | open the URL in the account's browser yourself and paste the code at the CLI prompt |
-| the mini login waits at `Paste code here if prompted >` | the approval page was opened and approved, the code was not pasted into the tab | paste it into the tab `relogin <id>`; lost the page: `claude-relogin <id>` again opens it again and notifies where the code goes |
+| `claude-relogin` prints the URL and a paste hint | `iumac` sshd is down or its `open-url` refused, or `open` failed on the MacBook | open the URL in the account's browser yourself and paste the code at the CLI prompt in the tab `relogin <id>` |
+| the terminal says `could not forward the callback port … (port-busy)` | something already listens on that port on the MacBook, or its ssh to the mini failed (`forward`, `ssh`) | nothing to fix: the code dialog on the MacBook is the flow then; the reason word names the cause |
+| the mini login waits after the approve click, no dialog | the page showed a code (fallback) and the dialog was cancelled or timed out | `claude-relogin <id>` again reopens the page and the dialog |
+| a warn login did not start by itself | the MacBook was idle or locked (the ask waits for it), the class `claude-relogin` is not granted (a dialog asks instead), or `auto-run.off` exists | `human-queue.sh consent list` on the MacBook; `ssh iumac in-use` says what the gate sees |
 | no notification after a re-login, no window either | the windowless MacBook login is still waiting for your approval, or failed | `~/Library/Logs/claude-relogin.log` says which; a stuck one falls back to a Terminal window after 10 minutes without output, or run `claude-relogin <id> --visible` |
 | the re-login dialog never appears | MacBook asleep or unreachable | the request stays in the human queue (`make human-queue` on the MacBook) and ntfy; or run `claude-relogin <id>` there |
 | `plan/<id>` WARN "Keychain tier … says ultra, registry says 'max'" | the account was upgraded or the registry plan is wrong | set `"plan"` in `config/claude-accounts.json` (the default units follow it) |

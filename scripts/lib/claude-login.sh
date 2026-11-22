@@ -30,6 +30,83 @@ login_mac_notify() { # <title> <text>
   printf '%s\n%s\n' "${1-}" "${2-}" | "${CLAUDE_LOGIN_SSH:-ssh}" -o BatchMode=yes -o ConnectTimeout=8 "${CLAUDE_LOGIN_MAC_HOST:-iumac}" notify >/dev/null 2>&1 || true
 }
 
+# The port of an authorize URL's loopback redirect_uri (http://localhost:<port>/callback, percent-encoded or raw); empty when
+# it has none.
+login_redirect_port() { # <authorize-url>
+  printf '%s' "${1-}" | sed -nE 's#.*[?&]redirect_uri=http(%3[Aa]|:)(%2[Ff]|/)(%2[Ff]|/)(localhost|127\.0\.0\.1)(%3[Aa]|:)([0-9]{1,5})(%2[Ff]|/|&|$).*#\6#p' | head -n 1
+}
+
+# True for the code-paste variant of an authorize URL (login_paste_url's output): its redirect_uri is the platform's code page.
+login_url_is_paste() { # <url>
+  case "${1-}" in *platform.claude.com%2[Ff]oauth%2[Ff]code* | *platform.claude.com/oauth/code*) return 0 ;; *) return 1 ;; esac
+}
+
+# The MacBook forwards <port> to this machine's loopback and opens <url> in <app> (the gate's login-forward verb: stdin app,
+# port, URL), so the browser's callback to localhost:<port> lands in this machine's `claude auth login` and nothing is
+# pasted. The verb holds the forward while its stdin is open; that is kept open here for as long as <marker> exists (the
+# login's own file, gone when the login ends), or, without one, while the calling process lives. Returns 0 once the MacBook
+# says "forwarded"; otherwise 1 with a reason word in CLAUDE_LOGIN_FWD_WHY (port-busy, forward, open, ssh, timeout).
+# shellcheck disable=SC2034 # CLAUDE_LOGIN_FWD_WHY is the caller's to read
+login_forward_open() { # <app> <port> <url> <marker>
+  local out parent=$PPID marker="${4-}" pid i=0 first
+  CLAUDE_LOGIN_FWD_WHY=ssh
+  out=$(mktemp "${TMPDIR:-/tmp}/claude-login-fwd.XXXXXX") || return 1
+  {
+    printf '%s\n%s\n%s\n' "${1-}" "${2-}" "${3-}"
+    while if [[ -n "$marker" ]]; then [[ -e "$marker" ]]; else kill -0 "$parent" 2>/dev/null; fi; do sleep 2; done
+  } </dev/null 2>/dev/null | "${CLAUDE_LOGIN_SSH:-ssh}" -o BatchMode=yes -o ConnectTimeout=8 "${CLAUDE_LOGIN_MAC_HOST:-iumac}" login-forward >"$out" 2>/dev/null &
+  pid=$!
+  while (( i < 150 )); do
+    first=$(head -n 1 "$out" 2>/dev/null)
+    [[ -n "$first" ]] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.2; i=$((i + 1))
+  done
+  first=$(head -n 1 "$out" 2>/dev/null)
+  rm -f "$out"
+  case "$first" in
+    forwarded) CLAUDE_LOGIN_FWD_WHY=""; return 0 ;;
+    "failed: "*) CLAUDE_LOGIN_FWD_WHY="${first#failed: }" ;;
+    "") kill "$pid" 2>/dev/null; (( i >= 150 )) && CLAUDE_LOGIN_FWD_WHY=timeout ;;
+  esac
+  return 1
+}
+
+# The code dialog of a mini login in paste mode, started detached, one per account at a time (pid file next to <marker>):
+# the MacBook shows a native text field (the gate's login-code verb), and what is typed is sent to the login's prompt in its
+# terminal (hc send). It ends when the dialog is cancelled, empty or times out (asking again reopens it) or when the login is
+# over (<marker> gone). The code lives in one variable: never printed, logged or written to a file.
+login_code_dialog_start() { # <account> <terminal> <marker>
+  local lock pid
+  lock="$(dirname "${3:-${TMPDIR:-/tmp}/x}")/$1.dialog-pid"
+  if [[ -e "$lock" ]]; then
+    pid=$(cat "$lock" 2>/dev/null)
+    if [[ -n "$pid" ]]; then kill -0 "$pid" 2>/dev/null && return 0
+    elif [[ -n "$(find "$lock" -mmin -20 2>/dev/null)" ]]; then return 0; fi   # still starting
+  fi
+  : >"$lock" 2>/dev/null || true
+  # the subshell records its own pid (sh's parent), and its lock is gone when the dialog is over
+  ( sh -c 'echo $PPID' >"$lock" 2>/dev/null; login_code_dialog "$1" "$2" "${3-}"; rm -f "$lock" ) </dev/null >/dev/null 2>&1 &
+}
+login_code_dialog() { # <account> <terminal> <marker>
+  local acct=$1 term=$2 marker=$3 code
+  code=$(printf '%s\n' "$acct" | "${CLAUDE_LOGIN_SSH:-ssh}" -o BatchMode=yes -o ConnectTimeout=8 "${CLAUDE_LOGIN_MAC_HOST:-iumac}" login-code 2>/dev/null)
+  if [[ -z "$code" ]]; then
+    login_mac_notify "Claude login $acct" "No code entered. Run claude-relogin $acct again to open the dialog again."
+    return 0
+  fi
+  code=$(printf '%s' "$code" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  if [[ -n "$marker" && ! -e "$marker" ]]; then return 0; fi   # the login ended while the dialog was open
+  if (( ${#code} < 8 || ${#code} > 600 )) || ! [[ "$code" =~ ^[A-Za-z0-9._~#%/+=:-]+$ ]]; then
+    login_mac_notify "Claude login $acct" "That did not look like the code from the approval page. Run claude-relogin $acct again to paste it again."
+    return 0
+  fi
+  if ! perl -e 'alarm 20; exec @ARGV' -- "${CLAUDE_LOGIN_HC:-hc}" send --force "$term" "$code" >/dev/null 2>&1; then
+    login_mac_notify "Claude login $acct" "The code could not be sent to the login terminal $term. Run claude-relogin $acct again."
+  fi
+  return 0
+}
+
 # One argument as a single POSIX shell word ('…' with embedded quotes spelled '\''). The authorize URL carries & and
 # %, which a remote shell would otherwise split or expand.
 login_shquote() {

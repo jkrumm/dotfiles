@@ -34,9 +34,23 @@ export CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
 # ── stubs: record argv as `name[a][b]…`, behaviour by STUB_* env ───────────────────────────────
 rec='l=${0##*/}; for a in "$@"; do l="$l[$a]"; done; printf "%s\n" "$l" >> "$LOG"'
 mk() { printf '#!/bin/bash\n%s\n%s\n' "$rec" "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
+# The gate's verbs on the MacBook: login-forward (stdin app, port, URL; STUB_FWD ok|busy|down; "ok" answers "forwarded" and then
+# holds until its stdin closes, like the real verb, and notes up/closed in fwd-state), in-use (STUB_INUSE, or the next line of
+# STUB_INUSE_SEQ_FILE), login-code (stdin the account; STUB_CODE is what the dialog returns, empty = cancelled).
 mk ssh 'case " $* " in
   *" open-url "*) cat >> "$TMP_DIR/ssh-open-stdin"; [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
   *" notify "*) cat >> "$TMP_DIR/ssh-stdin"; exit 0 ;;
+  *" login-forward "*) [ "${STUB_OPEN:-ok}" = fail ] && exit 1
+    { IFS= read -r a; IFS= read -r p; IFS= read -r u; printf "%s\n%s\n%s\n" "$a" "$p" "$u" > "$TMP_DIR/ssh-fwd-stdin"; }
+    case "${STUB_FWD:-ok}" in
+      ok) echo forwarded; echo up > "$TMP_DIR/fwd-state"; cat > /dev/null; echo closed > "$TMP_DIR/fwd-state"; exit 0 ;;
+      busy) echo "failed: port-busy"; exit 1 ;;
+      *) exit 255 ;;
+    esac ;;
+  *" in-use "*) v="${STUB_INUSE:-active}"
+    if [ -n "${STUB_INUSE_SEQ_FILE:-}" ] && [ -s "$STUB_INUSE_SEQ_FILE" ]; then v=$(head -1 "$STUB_INUSE_SEQ_FILE"); sed -i "" 1d "$STUB_INUSE_SEQ_FILE"; fi
+    [ "$v" = fail ] && exit 255; echo "$v" ;;
+  *" login-code "*) cat >> "$TMP_DIR/ssh-code-stdin"; [ "${STUB_OPEN:-ok}" = fail ] && exit 1; [ -n "${STUB_CODE:-}" ] || exit 1; echo "$STUB_CODE" ;;
   *) [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
 esac'
 mk open '[ "${STUB_OPENBIN:-ok}" = fail ] && exit 1; exit 0'
@@ -64,6 +78,8 @@ chmod +x "$TMP/bin/osascript"
 # (STUB_HC_GET: live default | finished | gone | fail | garbage).
 cat > "$TMP/bin/hc" <<'STUB'
 #!/bin/bash
+# `send` carries the login's code: only its fact is recorded in the call log, the text goes to a file of its own
+if [ "$1" = send ]; then printf '%s\n' "$*" > "$TMP_DIR/hc-send"; echo "hc[send]" >> "$LOG"; exit "${STUB_SEND_RC:-0}"; fi
 printf 'hc' >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"
 case "$1" in
   connect)
@@ -121,6 +137,16 @@ mk ps 'if [ "${STUB_CORE:-running}" = running ]; then echo "    1 /x/Herdr Core.
 # the core's socket answers (lib/core-up.sh's second half) unless STUB_SOCK=down
 mk nc '[ "${STUB_SOCK:-up}" = up ]'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
+# the gate's ioreg (it runs in-process for a MacBook's own --ask): STUB_IDLE_NS input idle time, STUB_LOCKED=1 a locked screen
+cat > "$TMP/bin/ioreg" <<'STUB'
+#!/bin/bash
+case "$*" in
+  *IOHIDSystem*) echo "    | |   \"HIDIdleTime\" = ${STUB_IDLE_NS:-1000000000}" ;;
+  *) if [ "${STUB_LOCKED:-0}" = 1 ]; then echo "<dict><key>CGSSessionScreenIsLocked</key><true/></dict>"; else echo "<dict><key>CGSSessionScreenIsLocked</key><false/></dict>"; fi ;;
+esac
+STUB
+chmod +x "$TMP/bin/ioreg"
+export IUMAC_GATE_IOREG="$TMP/bin/ioreg" CLAUDE_RELOGIN_AUTO_CONSENT="$TMP/auto-run.consent" CLAUDE_RELOGIN_ASK_POLL_S=1 CLAUDE_RELOGIN_ASK_MAX_WAIT_S=4
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH" PS_BIN="$TMP/bin/ps"
 mkdir -p "$TMP/space-repo"; export CLAUDE_RELOGIN_SPACE_DIR="$TMP/space-repo"
 export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_RELOGIN_STATE_DIR="$TMP/state"
@@ -131,7 +157,10 @@ for c in ssh open hc osascript claude claude-account launchctl nc; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
-reset() { : > "$LOG"; : > "$TMP/msgs"; rm -rf "$TMP/hc-killed" "$TMP/ssh-stdin" "$TMP/ssh-open-stdin" "$TMP/claude.runs" "$TMP/doc-sets.jsonl" "$TMP/state"; }
+reset() { : > "$LOG"; : > "$TMP/msgs"; rm -rf "$TMP/hc-killed" "$TMP/ssh-stdin" "$TMP/ssh-open-stdin" "$TMP/ssh-fwd-stdin" "$TMP/ssh-code-stdin" "$TMP/hc-send" "$TMP/fwd-state" "$TMP/claude.runs" "$TMP/doc-sets.jsonl" "$TMP/state"; find "$TMP" -name '*.dialog-pid' -delete 2>/dev/null; }
+# The code dialog and the forward hold their own background processes: wait until they have ended (their pid files are gone)
+wait_dialog() { local _; for _ in $(seq 1 60); do [[ -z "$(find "$TMP" -name '*.dialog-pid' 2>/dev/null)" ]] && return 0; sleep 1; done; }
+wait_for() { local _; for _ in $(seq 1 60); do [[ "$(cat "$1" 2>/dev/null)" == "$2" ]] && return 0; sleep 1; done; return 1; }
 calls() { grep -v -e "^launchctl\[print\]" -e "^nc\[" "$LOG"; }
 
 URL='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
@@ -183,20 +212,59 @@ reset; bash "$BROWSER_SH" "$URL"
 assert_contains "no account at all: default browser, says so" "no CLAUDE_LOGIN_ACCOUNT" "$(cat "$TMP/msgs")"
 bash "$BROWSER_SH" >/dev/null 2>&1; assert_eq "no URL: usage error" 2 "$?"
 
-echo "helper on the mini: the code-paste page is opened on the MacBook, the owner is told where the code goes"
-reset; export CLAUDE_LOGIN_URL_FILE="$TMP/approval-url"; rm -f "$CLAUDE_LOGIN_URL_FILE"
+echo "helper on the mini: the callback port is forwarded, the original URL is opened, nothing is pasted"
+reset; export CLAUDE_LOGIN_URL_FILE="$TMP/approval-url"; rm -f "$CLAUDE_LOGIN_URL_FILE"; : > "$CLAUDE_LOGIN_URL_FILE"
 CLAUDE_LOGIN_ACCOUNT=iu CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; rc=$?
 assert_eq "rc 0" 0 "$rc"
-assert_not_contains "no reverse forward is attempted any more" "[-N]" "$(calls)"
-assert_eq "exactly two ssh calls: open-url and notify" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][open-url]|ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][notify]" "$(calls | paste -sd'|' -)"
+assert_eq "two ssh calls: login-forward and notify (no open-url, no code page)" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][login-forward]|ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][notify]" "$(calls | paste -sd'|' -)"
+assert_eq "login-forward stdin: the app, the port of the redirect_uri, the ORIGINAL URL" "Google Chrome|58876|$URL" "$(paste -sd'|' "$TMP/ssh-fwd-stdin")"
+assert_eq "the original URL is kept for a repeated trigger" "$URL" "$(cat "$CLAUDE_LOGIN_URL_FILE")"
+assert_eq "the notification says to approve and that nothing is pasted" "Claude login iu|Approve in Google Chrome: the approval page is open and the login finishes by itself." "$(paste -sd'|' "$TMP/ssh-stdin")"
+assert_contains "the terminal says nothing is pasted" "there is nothing to paste" "$(cat "$TMP/msgs")"
+assert_eq "no code dialog, nothing sent to the terminal" "0/no" "$(grep -c 'login-code' "$LOG")/$([[ -e "$TMP/hc-send" ]] && echo yes || echo no)"
+assert_eq "the forward is up while the login's marker file exists" "up" "$(cat "$TMP/fwd-state")"
+sleep 3
+assert_eq "...and still up a while later" "up" "$(cat "$TMP/fwd-state")"
+rm -f "$CLAUDE_LOGIN_URL_FILE"
+wait_for "$TMP/fwd-state" closed; assert_eq "...closed once the marker file is gone (the login is over)" "closed" "$(cat "$TMP/fwd-state")"
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
+assert_eq "me: Helium" "Helium|58876|$URL" "$(paste -sd'|' "$TMP/ssh-fwd-stdin")"
+rm -f "$CLAUDE_LOGIN_URL_FILE"; wait_for "$TMP/fwd-state" closed
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; CLAUDE_LOGIN_ACCOUNT=nob CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
+assert_eq "no loginBrowser: the default browser (empty app line)" "|58876|$URL" "$(paste -sd'|' "$TMP/ssh-fwd-stdin")"
+rm -f "$CLAUDE_LOGIN_URL_FILE"; wait_for "$TMP/fwd-state" closed
+
+echo "helper on the mini: the forward cannot be opened, the code goes into a dialog on the MacBook"
+reset; : > "$CLAUDE_LOGIN_URL_FILE"
+STUB_FWD=busy STUB_CODE='abcdef123456#zzstate99' CLAUDE_LOGIN_ACCOUNT=iu CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_TERMINAL=relogin-iu bash "$BROWSER_SH" "$URL"; rc=$?
+wait_dialog
+assert_eq "rc 0: the fallback is the flow" 0 "$rc"
+assert_eq "ssh calls: login-forward (refused), open-url, notify, login-code" "login-forward|open-url|notify|login-code" "$(calls | grep '^ssh' | sed -E 's/.*\]\[iumac\]\[([a-z-]+)\].*/\1/' | paste -sd'|' -)"
 assert_eq "open-url stdin: the app, then the code-paste URL (not the localhost one)" "Google Chrome|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
-assert_eq "the URL is kept for a repeated trigger" "$PASTE" "$(cat "$CLAUDE_LOGIN_URL_FILE")"
-assert_eq "the notification names the account, the browser and the tab the code goes to" "Claude login iu|Approve in Google Chrome, then paste the code into the tab 'relogin iu' (terminal relogin-iu) in the Herdr app on the mini." "$(paste -sd'|' "$TMP/ssh-stdin")"
-assert_contains "the terminal says where to paste" "paste it at the prompt below, in THIS terminal" "$(cat "$TMP/msgs")"
-reset; CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
-assert_contains "me: Helium on the MacBook" "Helium|" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
-reset; CLAUDE_LOGIN_ACCOUNT=nob CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
-assert_eq "no loginBrowser: the default browser (empty app line)" "|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_eq "the code-paste URL is kept for a repeated trigger" "$PASTE" "$(cat "$CLAUDE_LOGIN_URL_FILE")"
+assert_contains "the terminal says why" "could not forward the callback port to this machine (port-busy)" "$(cat "$TMP/msgs")"
+assert_contains "...and where the code goes" "into the dialog on the MacBook" "$(cat "$TMP/msgs")"
+assert_contains "the notification points at the dialog, not at a terminal" "paste the code the page shows into the dialog on this MacBook." "$(cat "$TMP/ssh-stdin")"
+assert_eq "the dialog is asked for this account" "iu" "$(cat "$TMP/ssh-code-stdin")"
+assert_eq "what was typed reaches the login prompt: hc send into the login terminal" "send --force relogin-iu abcdef123456#zzstate99" "$(cat "$TMP/hc-send")"
+for f in "$LOG" "$TMP/msgs" "$TMP/ssh-stdin" "$TMP/ssh-open-stdin" "$CLAUDE_RELOGIN_LOG"; do
+  case "$(cat "$f" 2>/dev/null)" in *abcdef123456*|*zzstate99*) bad "the code is in $f" ;; *) ok "the code is in no log or message: ${f##*/}" ;; esac
+done
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; STUB_FWD=busy STUB_CODE='' CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; wait_dialog
+assert_eq "a cancelled or empty dialog sends nothing" "no" "$([[ -e "$TMP/hc-send" ]] && echo yes || echo no)"
+assert_contains "...and the owner is told how to reopen it" "No code entered. Run claude-relogin me again" "$(cat "$TMP/ssh-stdin")"
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; STUB_FWD=busy STUB_CODE='hello world not a code' CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; wait_dialog
+assert_eq "text that is no code is not sent" "no" "$([[ -e "$TMP/hc-send" ]] && echo yes || echo no)"
+assert_contains "...and the owner is told" "did not look like the code" "$(cat "$TMP/ssh-stdin")"
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; STUB_FWD=busy STUB_CODE='abcdef123456#zzstate99' STUB_SEND_RC=1 CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; wait_dialog
+assert_contains "a code that cannot be sent is reported, without the code" "could not be sent to the login terminal relogin-me" "$(cat "$TMP/ssh-stdin")"
+case "$(cat "$TMP/ssh-stdin" "$TMP/msgs")" in *abcdef123456*) bad "the code leaked into a message" ;; *) ok "...the code is in no message" ;; esac
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; STUB_FWD=busy STUB_CODE='abcdef123456#zzstate99' CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"
+rm -f "$CLAUDE_LOGIN_URL_FILE"; wait_dialog
+assert_eq "the login ended while the dialog was open: nothing is sent" "no" "$([[ -e "$TMP/hc-send" ]] && echo yes || echo no)"
+reset; : > "$CLAUDE_LOGIN_URL_FILE"; STUB_FWD=down CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" "$URL"; rc=$?; wait_dialog
+assert_eq "forward dead (ssh 255) but open-url works: fallback, rc 0" 0 "$rc"
+assert_eq "...the page is the code page" "$PASTE" "$(cat "$CLAUDE_LOGIN_URL_FILE")"
 unset CLAUDE_LOGIN_URL_FILE
 
 echo "helper on the mini: failures print the code-paste URL"
@@ -205,7 +273,8 @@ assert_eq "remote open failed: rc 1" 1 "$rc"
 assert_contains "the URL that works from the MacBook is printed" "$PASTE" "$(cat "$TMP/msgs")"
 assert_contains "tells to paste the code" "paste the code" "$(cat "$TMP/msgs")"
 assert_eq "no notification for a page that did not open" 0 "$(grep -c 'iumac\]\[notify' "$LOG")"
-reset; CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" 'https://claude.ai/oauth/authorize?state=1'; rc=$?
+reset; export CLAUDE_LOGIN_URL_FILE="$TMP/approval-url"; : > "$CLAUDE_LOGIN_URL_FILE"
+CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" 'https://claude.ai/oauth/authorize?state=1'; rc=$?; wait_dialog; unset CLAUDE_LOGIN_URL_FILE
 assert_eq "a URL without a loopback redirect is opened as it is" "0/Helium|https://claude.ai/oauth/authorize?state=1&code=true" "$rc/$(paste -sd'|' "$TMP/ssh-open-stdin")"
 
 echo "helper: open fails on the MacBook, unusable registry, unwritable terminal"
@@ -231,9 +300,11 @@ assert_contains "prints the notify step" "login_mac_notify 'Claude login me'" "$
 echo "relogin --ask"
 as mini; reset
 bash "$RELOGIN" me --ask --reason "login dead" >/dev/null; rc=$?
-line=$(sed -n 1p "$LOG")
+line=$(grep '^ask-human\[ask\]' "$LOG" | head -n 1)
 assert_eq "ask-human called with ask" "ask-human[ask]" "${line:0:14}"
 assert_contains "text names account, machine and reason" "Claude login 'me' on the mini needs a new /login (login dead)" "$line"
+assert_contains "...what opens and that nothing is pasted" "approve there and the login finishes by itself" "$line"
+assert_eq "the MacBook's state is asked first (the gate's in-use verb)" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][in-use]" "$(sed -n 1p "$LOG")"
 assert_contains "the command runs the relogin for that machine" '[--cmd][bash "$HOME/SourceRoot/dotfiles/scripts/claude-relogin.sh" me --machine mini]' "$line"
 assert_contains "mini: default push (no MAC_HOST override)" "hm=unset" "$(calls)"
 reset; bash "$RELOGIN" me --machine macbook --ask >/dev/null
@@ -242,6 +313,31 @@ as macbook; reset; bash "$RELOGIN" iu --ask >/dev/null
 assert_contains "MacBook: dialog shown locally" "hm=local" "$(calls)"
 assert_contains "MacBook: command for the macbook" "iu --machine macbook]" "$(calls)"
 assert_contains "iu text names Chrome" "Google Chrome" "$(calls)"
+
+echo "relogin --ask waits while the MacBook is not in use"
+as mini; reset; printf 'idle\nlocked\nactive\n' > "$TMP/inuse.seq"
+STUB_INUSE_SEQ_FILE="$TMP/inuse.seq" bash "$RELOGIN" me --ask --reason x >/dev/null 2>&1
+assert_eq "idle, locked, then active: three probes, then exactly one ask" "3/1" "$(grep -c 'iumac\]\[in-use' "$LOG")/$(grep -c '^ask-human\[ask\]' "$LOG")"
+reset; STUB_INUSE=idle bash "$RELOGIN" me --ask >/dev/null 2>"$TMP/err"; rc=$?
+assert_eq "never in use: nothing asked, nothing opened, rc 0" "0/0" "$rc/$(grep -c '^ask-human' "$LOG")"
+assert_contains "...and it says so" "no ask made" "$(cat "$TMP/err")"
+reset; STUB_INUSE=fail bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "MacBook unreachable: asked as before, the queue keeps it" "1" "$(grep -c '^ask-human\[ask\]' "$LOG")"
+as macbook; reset; STUB_IDLE_NS=900000000000 bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "MacBook itself, 15 min without input: nothing asked" "0" "$(grep -c '^ask-human' "$LOG")"
+reset; STUB_LOCKED=1 bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "MacBook itself, screen locked: nothing asked" "0" "$(grep -c '^ask-human' "$LOG")"
+printf 'claude-relogin\n' > "$TMP/auto-run.consent"; chmod 600 "$TMP/auto-run.consent"
+reset; bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "MacBook itself, in use, class granted: the login starts, no dialog" "yes/0" "$([[ -e "$TMP/claude.runs" ]] && echo yes || echo no)/$(grep -c '^ask-human' "$LOG")"
+chmod 664 "$TMP/auto-run.consent"; reset; bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "...a grant file others can write counts for nothing: the dialog" "no/1" "$([[ -e "$TMP/claude.runs" ]] && echo yes || echo no)/$(grep -c '^ask-human\[ask\]' "$LOG")"
+chmod 600 "$TMP/auto-run.consent"; : > "$TMP/auto-run.off"; reset; bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "...nor with the kill switch on" "no/1" "$([[ -e "$TMP/claude.runs" ]] && echo yes || echo no)/$(grep -c '^ask-human\[ask\]' "$LOG")"
+rm -f "$TMP/auto-run.off"; chmod 600 "$TMP/auto-run.consent"; printf 'secrets-seed\n' > "$TMP/auto-run.consent"
+reset; bash "$RELOGIN" me --ask >/dev/null 2>&1
+assert_eq "...nor with another class granted" "no/1" "$([[ -e "$TMP/claude.runs" ]] && echo yes || echo no)/$(grep -c '^ask-human\[ask\]' "$LOG")"
+rm -f "$TMP/auto-run.consent"
 
 echo "relogin opens the login terminal in the mini's core"
 as mini; reset
@@ -427,8 +523,17 @@ STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
 c=$(calls)
 assert_eq "waiting login: rc 0, not a refusal" 0 "$rc"
 assert_eq "...its approval page is opened again (same code-paste URL, the account's browser)" "Helium|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
-assert_contains "...the owner is notified where the code goes" "paste the code into the tab 'relogin me' (terminal relogin-me, t5) in the Herdr app" "$(cat "$TMP/ssh-stdin")"
-assert_contains "...and the caller is told the same" "already waits in the tab 'relogin me'" "$(cat "$TMP/out")"
+wait_dialog
+assert_contains "...the owner is notified where the code goes: the dialog" "paste the code the page shows into the dialog on this MacBook" "$(cat "$TMP/ssh-stdin")"
+assert_contains "...and the caller is told the same" "already waits: its approval page is open again in Helium; the code goes into the dialog on the MacBook" "$(cat "$TMP/out")"
+assert_eq "...the code dialog is open again (a cancelled one is reopened by asking again)" "1" "$(grep -c 'iumac\]\[login-code' "$LOG")"
+reset; mkdir -p "$TMP/state"; echo "$URL" > "$TMP/state/me.relogin-url"
+STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
+assert_eq "waiting login with a forwarded callback: rc 0" 0 "$rc"
+assert_eq "...its approval page is opened again (the original URL)" "Helium|$URL" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_contains "...the owner is told to approve, nothing to paste" "the login finishes by itself" "$(cat "$TMP/ssh-stdin")"
+assert_contains "...and the caller is told the same" "approve there, nothing to paste" "$(cat "$TMP/out")"
+assert_eq "...no code dialog, no new forward" "0/0" "$(grep -c 'login-code' "$LOG")/$(grep -c 'login-forward' "$LOG")"
 assert_not_contains "...nothing new started, nothing killed" "hc[run]" "$c"
 assert_eq "...the waiting terminal is left alone" 0 "$(count 'hc\[kill\]')"
 reset; mkdir -p "$TMP/state"; : > "$TMP/state/me.relogin-url"
@@ -569,14 +674,15 @@ echo "the approval URL file lives exactly as long as the login"
 as mini; reset; export STUB_URL="$URL"
 STUB_CLAUDE_BROWSER=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
 assert_eq "login finished: rc 0" 0 "$rc"
-assert_eq "...the helper was handed the code-paste flow (URL opened on the MacBook)" "Helium|$PASTE" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_eq "...the helper had the callback port forwarded and the original URL opened on the MacBook" "Helium|58876|$URL" "$(paste -sd'|' "$TMP/ssh-fwd-stdin")"
+wait_for "$TMP/fwd-state" closed; assert_eq "...and the forward is closed with the login" "closed" "$(cat "$TMP/fwd-state")"
 assert_eq "...the URL file is gone" "" "$(ls "$TMP/state" 2>/dev/null)"
 reset; STUB_CLAUDE_BROWSER=1 STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1; rc=$?
 assert_eq "failed login: rc 1" 1 "$rc"
 assert_eq "...the URL file is gone too (a later trigger sees a dead login and replaces it)" "" "$(ls "$TMP/state" 2>/dev/null)"
 reset; STUB_CLAUDE_BROWSER=1 STUB_CLAUDE_HANG=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1 &
 pane=$!; for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$TMP/state/me.relogin-url" ]] && break; sleep 1; done
-assert_eq "while the login waits the file holds the URL" "$PASTE" "$(cat "$TMP/state/me.relogin-url" 2>/dev/null)"
+assert_eq "while the login waits the file holds the URL" "$URL" "$(cat "$TMP/state/me.relogin-url" 2>/dev/null)"
 assert_eq "...and is private (mode 600)" "600" "$(stat -f %Lp "$TMP/state/me.relogin-url" 2>/dev/null)"
 kill "$pane" 2>/dev/null; wait "$pane" 2>/dev/null
 unset STUB_URL
@@ -587,7 +693,8 @@ for a in me iu; do
   assert_eq "$a: no stub called" "" "$(calls)"
   assert_contains "$a: prints the hc step" "would run: 'hc' 'run'" "$out"
   assert_contains "$a: prints the login command" "'claude' 'auth' 'login' '--claudeai'" "$out"
-  assert_contains "$a: prints the code-paste open step" "login_open_on_mac" "$out"
+  assert_contains "$a: prints the forward step" "login_forward_open" "$out"
+  assert_contains "$a: prints the code-paste fallback" "login_open_on_mac" "$out"
 done
 as macbook; reset; out=$(bash "$RELOGIN" me --machine macbook --dry-run 2>&1)
 assert_eq "macbook dry run: no stub called" "" "$(calls)"

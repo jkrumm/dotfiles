@@ -9,19 +9,23 @@
 #
 # Where the login runs decides how the approval page is reached:
 #   macbook  `open -a <app> <url>` — the browser's callback lands on localhost here, no code to paste.
-#   mini     the browser is on the MacBook, whose localhost is not the mini's, and the mini's key grants no reverse
-#            forward. So the code-paste path is the designed one: the same URL with its redirect_uri swapped for the
-#            platform's code page (what the CLI itself prints as the manual URL) is opened with `ssh iumac open-url`
-#            (stdin: the app name, then the URL); the page shows a code, the owner pastes it at the CLI's prompt in
-#            the login terminal. The owner is told so on the MacBook (notification via `ssh iumac notify`) and in the
-#            terminal, naming the tab. The URL is also written to CLAUDE_LOGIN_URL_FILE, so a repeated
-#            `claude-relogin` can open the same page again instead of refusing.
-# Any failure (ssh down, open refused) prints the URL: opening it by hand and pasting the code stays the fallback.
+#   mini     the browser is on the MacBook, whose localhost is not the mini's. So the MacBook forwards that port to the
+#            mini's loopback for the life of the login and opens the ORIGINAL URL (`ssh iumac login-forward`, stdin: the
+#            app, the port, the URL): the browser's callback to localhost:<port> reaches the mini's listener and the login
+#            finishes on the approve click, no code exists. The URL is also written to CLAUDE_LOGIN_URL_FILE, so a repeated
+#            `claude-relogin` can open the same page again.
+#            When the forward cannot be opened (MacBook unreachable, port taken there) the same URL with its redirect_uri
+#            swapped for the platform's code page (what the CLI itself prints as the manual URL) is opened with
+#            `ssh iumac open-url`; the page shows a code, and a native dialog with a text field on the MacBook takes it
+#            (`ssh iumac login-code`) and sends it to the login prompt (`hc send`, never logged or written to a file).
+#            Pasting it at the prompt in the login terminal works as well.
+# Any failure (ssh down, open refused) prints the URL: opening it by hand and pasting the code stays the last resort.
 #
 # Environment: CLAUDE_LOGIN_ACCOUNT (registry id), CLAUDE_LOGIN_MACHINE (mini|macbook; default: detected),
-# CLAUDE_LOGIN_URL_FILE (where the mini's approval URL is kept while the login waits), CLAUDE_ACCOUNTS_REGISTRY.
-# Test seams: CLAUDE_LOGIN_OPEN, CLAUDE_LOGIN_SSH, CLAUDE_LOGIN_MAC_HOST, CLAUDE_LOGIN_MSG_FILE (default /dev/tty,
-# else stderr).
+# CLAUDE_LOGIN_URL_FILE (where the mini's approval URL is kept while the login waits; the forward lives while it exists),
+# CLAUDE_LOGIN_TERMINAL (the login terminal's hc name, where the code goes), CLAUDE_ACCOUNTS_REGISTRY.
+# Test seams: CLAUDE_LOGIN_OPEN, CLAUDE_LOGIN_SSH, CLAUDE_LOGIN_MAC_HOST, CLAUDE_LOGIN_HC, CLAUDE_LOGIN_MSG_FILE (default
+# /dev/tty, else stderr).
 set -u
 HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 # shellcheck source=lib/claude-login.sh
@@ -83,19 +87,34 @@ if [[ "$machine" != mini ]]; then
   exit 0
 fi
 
-# ── the mini: the browser lives on the MacBook, the code is pasted here ─────────────────────────
-shown=$(login_paste_url "$url")
-tab="relogin ${account:-<id>}"
-where="the tab '$tab' (terminal relogin-${account:-<id>}) in the Herdr app"
+# ── the mini: the browser lives on the MacBook, the callback is forwarded to this machine ────────
+term="${CLAUDE_LOGIN_TERMINAL:-relogin-${account:-<id>}}"
+port=$(login_redirect_port "$url")
 if (( dry )); then
-  say "claude-login: dry run, code-paste URL, browser ${app:-system default}"
-  printf '%s\n' "would run: login_open_on_mac ${app:-<default>} <code-paste URL> (ssh $MAC_HOST open-url)"
-  printf '%s\n' "would run: login_mac_notify 'Claude login ${account:-?}' <where the code goes> (ssh $MAC_HOST notify)"
+  say "claude-login: dry run, browser ${app:-system default}"
+  printf '%s\n' "would run: login_forward_open ${app:-<default>} ${port:-<port>} <authorize URL> (ssh $MAC_HOST login-forward: the MacBook forwards that port here and opens the page)"
+  printf '%s\n' "would run: login_mac_notify 'Claude login ${account:-?}' <approve there, nothing to paste> (ssh $MAC_HOST notify)"
+  printf '%s\n' "if the forward cannot be opened: login_open_on_mac ${app:-<default>} <code-paste URL> (ssh $MAC_HOST open-url), then a code dialog on the MacBook (ssh $MAC_HOST login-code) whose text goes to the login prompt (hc send $term)"
   exit 0
 fi
+if [[ -n "$port" ]]; then
+  [[ -z "$URL_FILE" ]] || { ( umask 077; printf '%s\n' "$url" >"$URL_FILE" ) 2>/dev/null; }
+  if login_forward_open "$app" "$port" "$url" "$URL_FILE"; then
+    say "claude-login: approval page opened in ${app:-the default browser} on $MAC_HOST. Approve there: the callback is forwarded to this login, so there is nothing to paste."
+    login_mac_notify "Claude login ${account:-?}" "Approve in ${app:-your browser}: the approval page is open and the login finishes by itself."
+    exit 0
+  fi
+  say "claude-login: could not forward the callback port to this machine (${CLAUDE_LOGIN_FWD_WHY:-unknown}); the approval page will show a code instead"
+else
+  say "claude-login: the authorize URL has no loopback redirect_uri to forward; the approval page will show a code instead"
+fi
+
+# ── fallback: the code page, the code typed into a dialog on the MacBook ───────────────────────
+shown=$(login_paste_url "$url")
 [[ -z "$URL_FILE" ]] || { ( umask 077; printf '%s\n' "$shown" >"$URL_FILE" ) 2>/dev/null; }
 login_open_on_mac "$app" "$shown" || { fallback "could not open the URL on $MAC_HOST"; exit 1; }
 say "claude-login: approval page opened in ${app:-the default browser} on $MAC_HOST."
-say "  Approve there, copy the code the page shows, and paste it at the prompt below, in THIS terminal."
-login_mac_notify "Claude login ${account:-?}" "Approve in ${app:-your browser}, then paste the code into $where on the mini."
+say "  Approve there and paste the code the page shows into the dialog on the MacBook (or at the prompt below, in THIS terminal)."
+login_mac_notify "Claude login ${account:-?}" "Approve in ${app:-your browser}, then paste the code the page shows into the dialog on this MacBook."
+login_code_dialog_start "${account:-x}" "$term" "$URL_FILE"
 exit 0
