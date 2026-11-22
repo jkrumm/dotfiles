@@ -94,6 +94,21 @@ check "node-cache: summary counts two files" sh -c 'printf "%s" "$1" | grep -q "
 out_nc2=$(DISK_SWEEP_TMPDIR="$TMP/no-such-tmp" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc2=$?
 check "node-cache: no cache dir: skipped, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "node-cache: skipped"' _ "$rc_nc2" "$out_nc2"
 
+# Kept, whatever their age: a directory holding a live socket (a daemon's), a lock file in the shared root, and a
+# directory find cannot read in full (judged recent, so a partial listing never removes its readable siblings).
+mkdir -p "$T/sock-dir" "$T/unread/locked"
+(cd "$T/sock-dir" && perl -MSocket -e 'socket(S, PF_UNIX, SOCK_STREAM, 0) or die; bind(S, pack_sockaddr_un($ARGV[0])) or die "bind: $!"' s.sock)
+echo x > "$SH/iris.lock"; echo x > "$T/unread/locked/f"
+old 5 "$T/sock-dir/s.sock" "$T/sock-dir" "$SH/iris.lock" "$T/unread/locked/f" "$T/unread/locked" "$T/unread"
+if [ "$(id -u)" -ne 0 ]; then chmod 000 "$T/unread/locked"; fi
+out_k=$(DISK_SWEEP_LSOF="$FAKE/lsof-none" bash "$HERE/disk-sweep.sh" tmpdir 2>&1)
+chmod 755 "$T/unread/locked" 2>/dev/null
+check "fixture: a socket exists" test -S "$T/sock-dir/s.sock"
+check "tmpdir: the run prints its summary line" sh -c 'printf "%s" "$1" | grep -q "^tmpdir: "' _ "$out_k"
+check "tmpdir: a directory holding a live socket is kept" test -S "$T/sock-dir/s.sock"
+check "tmpdir: a lock file in the shared root is kept" test -f "$SH/iris.lock"
+if [ "$(id -u)" -ne 0 ]; then check "tmpdir: a directory find cannot read in full is kept" test -d "$T/unread"; else echo "  skip  tmpdir: unreadable directory (root reads mode 000)"; fi
+
 # -user only on the shared root; $TMPDIR keeps its reach. Sockets are excluded from both. A recording find shows the argv.
 mkdir -p "$TMP/argvlog"
 cat > "$TMP/argvlog/find" <<'FIND2'
@@ -113,11 +128,12 @@ check "tmpdir: sockets are never candidates" grep -q -- '! -type s' "$FAKE_FIND_
 NC2="$TMP/nodecache-locked"; mkdir -p "$NC2/node-compile-cache/locked" "$NC2/node-compile-cache/other"
 echo x > "$NC2/node-compile-cache/locked/f"; echo x > "$NC2/node-compile-cache/other/stale"
 old 5 "$NC2/node-compile-cache/locked/f" "$NC2/node-compile-cache/other/stale"
-chmod 000 "$NC2/node-compile-cache/locked"
+if [ "$(id -u)" -ne 0 ]; then chmod 000 "$NC2/node-compile-cache/locked"
 out_nc3=$(DISK_SWEEP_TMPDIR="$NC2" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc3=$?
 chmod 755 "$NC2/node-compile-cache/locked"
 check "node-cache: unlistable subdirectory fails the step" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "node-cache: FAILED: find over"' _ "$rc_nc3" "$out_nc3"
 check "node-cache: nothing removed when the listing is partial" test -f "$NC2/node-compile-cache/other/stale"
+fi
 
 # (c) find loses an entry mid-listing (exit 1, "No such file or directory"): not a failure, the rest still goes.
 # Any other find error still fails the step with nothing removed.

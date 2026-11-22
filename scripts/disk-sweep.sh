@@ -136,11 +136,13 @@ tmp_sweep_root() {
   rm -f "$find_err"
   while IFS= read -r -d '' entry; do
     name=${entry##*/}
-    # Apple-owned entries (sockets, launchd and dirhelper state) are not ours to remove.
-    case "$name" in com.apple.*) continue ;; esac
+    # Apple-owned entries (launchd and dirhelper state) and lock files (state a flock holder reuses, not stock) are not ours to remove.
+    case "$name" in com.apple.*|*.lock) continue ;; esac
     case $'\n'"$open"$'\n' in *$'\n'"$name"$'\n'*) continue ;; esac
     # A directory's own mtime only moves when a direct child does: stale means nothing beneath it is recent.
-    if [ -d "$entry" ] && [ ! -L "$entry" ] && [ -n "$(find "$entry" -mmin -4320 -print -quit 2>/dev/null)" ]; then continue; fi
+    # A socket beneath it (a daemon's, live whatever its age) is recent too, and so is a tree find cannot read in
+    # full: its error text is the output, so the test is non-empty and the entry is kept.
+    if [ -d "$entry" ] && [ ! -L "$entry" ] && [ -n "$(find "$entry" \( -mmin -4320 -o -type s \) -print -quit 2>&1)" ]; then continue; fi
     printf '%s\0' "$entry"
   done < "$cand_list" > "$list"
   total=$(count_listed "$list")
