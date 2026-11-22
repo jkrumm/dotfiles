@@ -151,7 +151,6 @@ setup:
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory disk-sweep-fstrim-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
-	@$(MAKE) --no-print-directory icloud-photos-export-setup
 	@$(MAKE) --no-print-directory photos-analysis-off
 	@$(MAKE) --no-print-directory ext-mirror-setup
 	@$(MAKE) --no-print-directory shared-chrome-setup
@@ -879,7 +878,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test icloud-photos-export-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Order is the cost of a red run: the cheap suites go first so a failure there stops within
@@ -3283,36 +3282,6 @@ hc-reap-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.hc-reap.json"; \
 	echo "  ✓ hc-reap torn down (unloaded, plist and jobrun state removed)"
 
-# Nightly iCloud Photos archive on the HomeLab (scripts/icloud-photos-export.py), mini only: osxphotos (pinned) reads the
-# signed-in library, `hl` uploads new and changed assets to Bilder/iCloud, nothing is deleted. docs/storage.md §iCloud Photos export.
-.PHONY: icloud-photos-export-setup icloud-photos-export-teardown icloud-photos-export-run icloud-photos-export-status icloud-photos-export-test
-icloud-photos-export-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — icloud-photos-export skipped"; exit 0; fi; \
-	if [ "$$(uv tool list 2>/dev/null | awk '$$1=="osxphotos"{print $$2}')" = "v$(OSXPHOTOS_VERSION)" ]; then \
-		echo "    · osxphotos $(OSXPHOTOS_VERSION) (ok)"; \
-	else \
-		uv tool install --force "osxphotos==$(OSXPHOTOS_VERSION)" >/dev/null 2>&1 \
-			&& echo "    ✓ osxphotos $(OSXPHOTOS_VERSION) installed" \
-			|| { echo "    ✗ osxphotos install failed — uv tool install osxphotos==$(OSXPHOTOS_VERSION)"; exit 1; }; \
-	fi; \
-	chmod +x "$(DOTFILES_DIR)/scripts/icloud-photos-export.py"; \
-	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
-	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.icloud-photos-export" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
-	echo "    ↳ 01:30 daily → new and changed Photos assets to homelab:ssd/Bilder/iCloud (hl); log: ~/Library/Logs/icloud-photos-export.log"
-icloud-photos-export-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.icloud-photos-export.plist"; \
-	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.icloud-photos-export.json"; \
-	echo "  ✓ icloud-photos-export torn down (unloaded, plist and jobrun state removed; the export and its ledger stay)"
-icloud-photos-export-run: ## Run the iCloud Photos export once now (the nightly job's own run, foreground)
-	@python3 $(DOTFILES_DIR)/scripts/icloud-photos-export.py
-icloud-photos-export-status: ## Last iCloud Photos export: the status file with counts, then the jobs-grade row
-	@python3 $(DOTFILES_DIR)/scripts/icloud-photos-export.py --status; \
-	jobs-grade 2>/dev/null | jq -r '.[] | select(.label=="com.jkrumm.icloud-photos-export") | "grade: \(.grade)"' 2>/dev/null || true
-icloud-photos-export-test: ## Hermetic suite for icloud-photos-export.py (fake osxphotos and hl, no Photos, no network)
-	@python3 -W ignore $(DOTFILES_DIR)/scripts/icloud-photos-export.test.py
 
 # Nightly second local copy of the HomeLab's SSD share, HDD/fuji and HDD/Videos on the external volume
 # (scripts/ext-mirror.py), mini only: `hl` (S3) pulls into <volume>/mirror/{ssd,fuji,videos}, behind the volume gate.
@@ -4182,7 +4151,6 @@ help:
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
 	@echo "  make shared-chrome-status        The shared headless Chrome behind /browse: up/down, supervisor, contexts (shared-chrome-setup, shared-chrome-teardown)"
 	@echo "  make browser-reap-setup         Load the 30-min reaper for orphaned Playwright/puppeteer Chrome trees (browser-reap-run ARGS=--dry-run, browser-reap-teardown)"
-	@echo "  make icloud-photos-export-setup Load the 01:30 iCloud Photos archive to the HomeLab (mini; -run, -status, -test, -teardown)"
 	@echo "  make host-waste-check          Host waste checks, one line each (orphaned sleeps, tailscaled CPU, Photos analysis, sshd); photos-analysis-off keeps mediaanalysisd off"
 	@echo "  make host-waste-test           Hermetic suite for host-waste-check.sh (ps, launchctl, tailscale stubs)"
 	@echo "  make photos-analysis-off       Dev host: disable Photos analysis (mediaanalysisd); make setup runs it"

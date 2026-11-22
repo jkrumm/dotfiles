@@ -20,15 +20,15 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | `EXT` volume (external USB SSD, APFS + FileVault, 931 GiB, 526 used, 406 free, measured 2026-11-14 by issue 1238: `Bilder` 169, `weatherorb` 167, `Videos` 110, `usb-rescue` 11, `Steuer` 7, `mirror` 3) | 0 internal | `weatherorb/` (weatherorb's working data), `mirror/` (the nightly pulled HomeLab copy, row `ext-mirror`); the other top-level folders are the owner's and leave in rows `storage-consolidate` and `ext-mirror` | **external**. Not part of the 926 GiB; it is on the internal budget's relief side. Read and written only behind the volume gate: `docs/external-ssd.md` |
 | `~/.local` | 25 | usage-tracker 3.8, opencode 3.7, fnm 3.3 (16 node versions), IU `prometheus-scripts` state backups 6.8 (hourly 48 h + daily 30 d, bounded by `com.iu.prometheus-state-backup`) | needed |
 | `/private/var` | 20 | `$TMPDIR` 17 (Chrome code-sign clones, test-suite tmp dirs), system | swept |
-| `~/Pictures/Photos Library` | 105 (measured 2026-11-20, Issue 2566; 19 at the 2026-10-20 audit) | the signed-in iCloud Photos client, the source of the nightly export (`docs/storage.md` §iCloud Photos export) | needed. Grows by about 15 GiB a year; the export job refuses to start below 40 GiB free. Measured before the toggle, 2026-11-14: Data volume 292 GiB free of 926 (68 % used). Measured 2026-11-20: 74 GiB free, 92 % used, with the library at 105 GiB; the 77 % projection for after the download is superseded |
-| `~/.claude` | 16 | Claude Code transcripts (`projects/`; argo 6.8) | needed (Claude Code prunes by `cleanupPeriodDays`, 7 days; see §Sweeps) |
+| `~/Pictures/Photos Library` | 105 (measured 2026-11-20, Issue 2566; 19 at the 2026-10-20 audit) | the signed-in iCloud Photos client; no job reads it since the export was retired (`docs/storage.md` §iCloud Photos export) | needed. Grows by about 15 GiB a year; the export job refuses to start below 40 GiB free. Measured before the toggle, 2026-11-14: Data volume 292 GiB free of 926 (68 % used). Measured 2026-11-20: 74 GiB free, 92 % used, with the library at 105 GiB; the 77 % projection for after the download is superseded |
+| `~/.claude` | 16 | Claude Code transcripts (`projects/`; argo 6.8) | needed (Claude Code prunes by `cleanupPeriodDays`) |
 | `/opt/homebrew` | 16 | Cellar 8.6, postgresql@18 data 6.0: the mini's one Postgres (`docs/postgres.md`), stays on this disk; grows by about 4 GB with the Docker and Athena databases at the cutover, and lost 1 GB of leaked weatherorb test databases on 2026-11-14 | needed |
 | `~/IuRoot` | 13 | IU repos. `prometheus-scripts/analysis` 4.6 (`kafka-snapshots` 3.4) | ask owner (IU data, below) |
-| `/private/tmp` | 12 | agent scratch (`basalt-briefs`, `pytest-of-root`, wave logs) | swept by the `tmpdir` step (entries > 3 days) |
+| `/private/tmp` | 12 | agent scratch (`basalt-briefs`, `pytest-of-root`, wave logs) | macOS periodic cleanup |
 | `/Applications` | 11 | apps | needed |
 | `/Library` | 7.5 | system-wide | needed |
 | `~/.hermes` | 7.2 | Hermes agent: install, `state.db` 1.6 | needed |
-| `~/cache/<repo>/seed` | ~9 per Rust repo | cargo-target-seed seeds (`docs/cargo-target-seed.md`); an old one goes a day after its successor | pruned by the tool and by the sweep's `seeds` step |
+| `~/cache/<repo>/seed` | ~9 per Rust repo | cargo-target-seed seeds (`docs/cargo-target-seed.md`); an old one goes a day after its successor | pruned by the tool |
 | `~/.cache` | 4.5 | uv 2.3, puppeteer, … | swept |
 | everything else | ~15 | `~/go` 2.7, `.rustup` 2.1, … | needed |
 
@@ -55,37 +55,15 @@ One alert, in ClickStack (vps registry): `Infra mini filesystem >= 93% (15m)` on
 
 ## Sweeps: what keeps it this way
 
-Two LaunchAgents run `scripts/disk-sweep.sh`; every step is one bounded rule that prints one `<step>: …, free space +N MB` line to
-`~/Library/Logs/disk-sweep.log`.
-
-| Job | Cadence | Runs |
+| Job | Cadence | Bounds |
 |-|-|-|
-| `com.jkrumm.disk-sweep-fstrim` (`disk-sweep.sh colima-trim`) | every 4 h, at :15 | `colima-trim` alone: returns what the Colima data disk regrows between the daily sweeps (20+ GiB within hours, Issue 2315). Its log line reads `disk-sweep: 1 steps` |
-| `com.jkrumm.disk-sweep` (`disk-sweep.sh`) | 04:40 daily | every step below, in this order |
-| `com.jkrumm.log-rotate` | every 15 min | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 2 h (one `lsof`, background priority, 4 rm workers, at most 1500 removals or 300 s per run, counted from script start; the lsof is bounded at 90 s). Agents launch ~300-600 Chrome/h; the 24 h gate at 400/h grew the stock to 14k clones (a clone is mostly shared APFS blocks, ~0.5 MB real, so the stock is a load and inode burden more than a disk one; the 16-49 GB/h disk page of issue 839 recovered on its own to 86.6% within the hour, consistent with the weatherorb round-build transient of ~22 GiB above; the writer was not caught in the act, see "Round-build page" below) |
+| `com.jkrumm.disk-sweep-fstrim` (`scripts/disk-sweep.sh colima-trim`) | every 4 h, at :15 | `colima ssh -- sudo fstrim -a` alone: returns what the Colima data disk regrows between the daily sweeps (20+ GiB within hours, Issue 2315). Its log line reads `disk-sweep: 1 steps` |
+| `com.jkrumm.disk-sweep` (`scripts/disk-sweep.sh`) | 04:40 daily | Docker build cache LRU-capped at 15 GB and dangling images removed (never tagged images, volumes or containers), `colima ssh -- sudo fstrim -a`, top-level entries > 3 days that nothing holds open in `$TMPDIR` and this user's `/private/tmp`, `node-cache` files in `$TMPDIR/node-compile-cache` not written for 3 days, Lima IPSW downloads (`~/Library/Caches/lima/download`) untouched for a day (not while a `limactl create/start/clone` runs), `uv cache prune` (probes the cache lock for 20 s; a lock still held after that is pruned past with `--force`, since a `uv run` can hold it for days; the holder is named in the log) and `brew cleanup -s`, npm and bun caches over 3 / 5 GB, unavailable simulators, closed Issues' factory worktree `target/` (beside a `Cargo.toml`) and `node_modules/` (`worktrees` step: only where `factory issue show` says `closed`; the source stays); `scratch` step: `~/cache/<repo>/<issue>` where `factory issue show` says `closed`, `~/.cache/cloud-wave` directories untouched 14 days, sccache over `DISK_SWEEP_SCCACHE_MAX_GB` (5) |
+| `com.jkrumm.log-rotate` | every 15 min | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 2 h (one `lsof`, background priority, 4 rm workers, at most 1500 removals or 300 s per run, counted from script start; the lsof is bounded at 90 s). Agents launch ~300-600 Chrome/h; the 24 h gate at 400/h grew the stock to 14k clones (a clone is mostly shared APFS blocks, ~0.5 MB real, so the stock is a load and inode burden more than a disk one; the 16-49 GB/h disk page of issue 839 recovered on its own to 86.6% within the hour, consistent with the weatherorb round-build transient of ~22 GB above; the writer was not caught in the act, see "Round-build page" below) |
 
-| Step | Removes | Never |
-|-|-|-|
-| `tmpdir` | top-level entries > 3 days in `$TMPDIR` and in this user's `/private/tmp` (macOS does not clear it) that nothing holds open and nothing beneath is recent | Apple-owned, `.lock`, sockets, `sunlnk` entries; with no `lsof` answer it removes nothing |
-| `node-cache` | files in `$TMPDIR/node-compile-cache` not written for 3 days | |
-| `pkg-caches` | `uv cache prune` (probes the lock 20 s, then `--force`; the holder is named), `brew cleanup -s`, npm cache over 3 GB, bun cache over 5 GB | |
-| `lima-cache` | Lima IPSW downloads untouched for a day | while a `limactl create/start/clone` runs |
-| `sim-runtimes` | simulator runtimes: per platform the newest version stays, every other deletable one goes (iOS 27.0 beside 27.1 is 8 GB) | the newest per platform; a runtime `simctl` calls not deletable |
-| `simulators` | `simctl delete unavailable` (the devices a removed runtime orphaned) | |
-| `worktrees` | a closed Issue's factory worktree `target/` (beside a `Cargo.toml`) and `node_modules/`, where `factory issue show` says `closed` | the source; an Issue the factory cannot show |
-| `seeds` | in `~/cache/<repo>/seed`, every seed a day old except the seed of the key `cargo-target-seed` prints for the repo's main checkout and the newest. The key's options are the ones the tool recorded in `seed/.args` on its last clone or build | a seed of the current key; any seed of a repo whose key cannot be computed (no `.args`, no checkout, no tool): the line names it. `.args` is written by the next clone or build, so seeds a repo made before that keep until then |
-| `scratch` | (1) `~/cache/<repo>/<issue>` of a closed Issue; (2) any directory in `~/cache/<repo>/` or `~/cache/` whose name carries Issue ids (runs of 3-6 digits, leading zeros dropped: `scratch2802`, `e028-rerun`, `weatherorb-2171`) that are all closed, once nothing beneath is under 2 days old; (3) anything else directly in `~/cache/<repo>/` (a repo under `~/SourceRoot` or `~/IuRoot`) untouched 14 days; (4) `~/.cache/cloud-wave` directories untouched 14 days; (5) sccache over `DISK_SWEEP_SCCACHE_MAX_GB` (5) | `seed`; top-level files of `~/cache`; a name with an id the factory cannot show, or one Issue still open (an epic number such as `e233` that is no Issue keeps the dir for the 14-day rule) |
-| `docker` | build cache LRU-capped at 5 GB (`--all`, or the cap is not honoured), dangling images, tagged images no container uses and built over 48 h ago (the VPS cron's rule), unused anonymous volumes (a 64-hex name, removed by name) | a volume with a name: unused ones are only listed in the log with their size; containers; an image a container references |
-| `colima-trim` | `colima ssh -- sudo fstrim -a`: returns the pruned blocks to the host | |
-
-Run it once with `make disk-sweep-run`. That target is also the sanctioned route for the docker prunes, because the `docker-makefile`
-hook blocks raw docker in this repo.
-
-**Claude Code transcripts** are bounded by Claude Code itself, not the sweep: `cleanupPeriodDays` is 7 in `config/settings.template.json`
-(Issue 2845; the default is 30, the minimum 1, and 0 is a validation error). At startup it deletes `~/.claude/projects/*/*.jsonl`
-with their subagent and tool-result spills, `file-history`, `plans`, `debug` and other session data older than that; auto-memory
-files stay. `projects/` was 31.6 GB with 21 MB older than 14 days, growing 2.2 GB a day. Every account home that shares `projects/`
-must carry the same value (`docs/claude-accounts.md`). A session older than 7 days cannot be resumed.
+Each step writes one `free space +N MB` line to `~/Library/Logs/disk-sweep.log`. Run it once
+with `make disk-sweep-run`. That target is also the sanctioned route for the docker prunes,
+because the `docker-makefile` hook blocks raw docker in this repo.
 
 ## Round-build page ("disk filling fast")
 
