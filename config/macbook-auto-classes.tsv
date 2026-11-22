@@ -6,8 +6,7 @@
 # the request stays pending). `active` = the command opens something on the screen, so the gate runs it only while the MacBook
 # is in use: unlocked and input within IUMAC_GATE_ACTIVE_MAX seconds (exit 75 otherwise, nothing runs). Several rows may share a class (variants of one shape). Add a row only for a shape that
 # repeats with no refusal; never sudo, a restart, the deploy gate's release, a recursive delete, hc server/hc update.
-# The factory mirrors the class names in domains/checkpoints/triage.ts: add them in both. A row reaches the MacBook with
-# the next `dotfiles-sync`.
+# A row reaches the MacBook with the next `dotfiles-sync`.
 secrets-seed	cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'	biometric	1200
 secrets-seed	git -C ~/SourceRoot/dotfiles-private pull --ff-only && cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'	biometric	1200
 secrets-seed	git -C ~/SourceRoot/dotfiles-private pull -q --ff-only; cd ~/SourceRoot/dotfiles && hc run --timeout <N> 'make secrets-seed'	biometric	1200
