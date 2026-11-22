@@ -14,7 +14,7 @@ when it does not, like sccache.
 
 Options come before the verb, paths are relative to the repo root: `--workspace DIR` (default: the root), `--own PATH` (repeat;
 **required** for `clone` and `build`), `--key-path PATH` (repeat), `--name N` (default: the main repo's directory name, the same
-from every worktree). Seeds live in `~/cache/<name>/seed/<key>` (`CARGO_SEED_ROOT` overrides).
+from every worktree). Seeds live in `~/cache/<name>/seed/<key>` (`CARGO_SEED_ROOT` overrides). `clone` and `build` also write the key-deciding options (`--workspace`, `--key-path`, one argument per line) to `seed/.args`: the disk sweep's `seeds` step runs `cargo-target-seed $(cat .args) key` in the repo's main checkout to learn the default branch's key.
 
 ## The touch rule
 
@@ -46,7 +46,7 @@ target-seed: ; cargo-target-seed $(SEED_ARGS) build -- sh -c 'cargo clippy --wor
 
 `build` runs the repo's own gate commands, so the seed holds exactly the artifacts the gates use (clippy's check artifacts and the
 test builds differ: seed both) and a broken master never becomes a seed. Whoever lands a change to a key input runs
-`target-seed`; an old seed goes a day after its successor exists. A seed is about the size of `target/`; a clone costs no disk
+`target-seed`; an old seed goes a day after its successor exists, and `disk-sweep.sh seeds` (daily) removes every seed a day old except the current key's and the newest, for a repo nobody builds again (`docs/disk.md` §Sweeps). A seed is about the size of `target/`; a clone costs no disk
 until files change.
 
 ## Not here

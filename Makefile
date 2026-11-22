@@ -2896,7 +2896,7 @@ log-rotate-test:
 disk-sweep-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ daily at 04:40 → prune build cache + dangling images, fstrim colima, stale tmp entries, package caches, Lima IPSWs, closed Issues' worktree build dirs, closed Issues' ~/cache dirs, 14-day wave clones, sccache over cap; log: ~/Library/Logs/disk-sweep.log"
+	@echo "    ↳ daily at 04:40 → docker (5 GB cache cap, 48 h unused images, anonymous volumes), fstrim colima, stale tmp entries, package caches, Lima IPSWs, old simulator runtimes, closed Issues' worktree build dirs, stale cargo seeds, closed and idle ~/cache scratch, 14-day wave clones, sccache over cap; log: ~/Library/Logs/disk-sweep.log"
 disk-sweep-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.disk-sweep.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -4085,7 +4085,7 @@ help:
 	@echo "  make cli-refs           quoted CLI commands/flags in agent texts the live CLI lacks, CLI index rows, injected commands (ARGS=\"--root <dir> --json\")"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
-	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir step)"
+	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (every step that needs no live host)"
 	@echo "  make volume-gate-test   Hermetic suite for the external volume gate, unlock job and check"
 	@echo "  make cargo-target-seed-test Hermetic suite for cargo-target-seed (the touch rule, key, clone, build, prune)"
 	@echo "  make smb-keepalive-test Hermetic suite for smb/smb-keepalive.sh (hung-stat remount path)"
@@ -4175,7 +4175,7 @@ help:
 	@echo "  make log-rotate-setup           Load the 15-min copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
-	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, tmp, package caches, Lima IPSWs, closed worktrees' build dirs, closed Issues' ~/cache dirs, sccache cap)"
+	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (docker, colima fstrim, tmp, package caches, Lima IPSWs, simulator runtimes, closed worktrees' build dirs, cargo seeds, ~/cache scratch, sccache cap)"
 	@echo "  make disk-sweep-fstrim-setup    Load the 4-hourly fstrim of the Colima data disk (the sweep's colima-trim step alone)"
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"
