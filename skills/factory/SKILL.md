@@ -55,6 +55,8 @@ File no seat. The factory seats the Issue itself: the light row (haiku, high) wh
 | A few changes with an order | file the first, then the next with `--after <id>` (`609` or `issue_609`); `--after` names only open Issues |
 | A program of rows in one repo, or rows waiting on another repo | rows in that repo's `docs/plan.yaml`, pushed to its default branch; the factory files each row when its `after` rows closed. Format: software-factory's `docs/plan.md` |
 
+Size a row to what its repo's merge costs. Every row pays one CI run inside a merge window that takes one pull request at a time, plus a rebase when master moved (weatherorb, 2026-11-22: 16 minutes of CI a merge, so about 90 merges a day at best; its Issues took 27 working minutes and 3.3 hours to close). Work under an hour, or rows that all edit one shared file (a budget, a registry, a lockfile, a plan), go into one row.
+
 Give every filing a `--key` when a retry could run it twice. State the edges you know when filing; an Issue filed without
 them is settled by triage, which may add some.
 
