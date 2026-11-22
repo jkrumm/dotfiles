@@ -17,4 +17,6 @@ a Postgres or cache image in a container). `make mini-ps` and `make doctor` FAIL
 `debt: { <rule>: <plan row> }` or `exception: { <rule>: <reason> }` on the entry, FAILs once stale, and prints with
 `mini-registry debt`. The doctor never reads compose files; the factory's weekly hygiene probe does.
 
+`config/mini/disk-budget.yaml` is the disk budget (owner, cap, class per path; `docs/disk.md`): `com.jkrumm.disk-budget` measures it daily and files a signal on a row over its cap; edit a row, then `make disk-budget-docs` and `make disk-budget-test`.
+
 `make mini-ps` (`FORMAT=json`) · `make mini-up NAME=` · `make mini-down NAME=` (core needs `FORCE=1`) · `make mini-profile NAME=work|dev-db UP=1|0`.

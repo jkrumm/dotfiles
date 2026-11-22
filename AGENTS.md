@@ -85,7 +85,7 @@ Each row holds the rule that applies before you read the file.
 | The Kuma door | Monitors are generated, never hand-edited | `kuma-door/AGENTS.md` |
 | Collie | It is remote shell access by design: treat its URL like a root login | `docs/collie.md` |
 | MacBook-only jobs (opbackup, battery, db-tunnel, smb-keepalive) | They cost every mini agent context for no benefit, so they stay out of mini docs | `docs/macbook.md` |
-| Disk, external volume, storage, HomeLab files (`hl`) | Never format or erase the external drive; one home per data class | `docs/disk.md`, `docs/external-ssd.md`, `docs/storage.md` |
+| Disk, external volume, storage, HomeLab files (`hl`) | Never format or erase the external drive; one home per data class; the budget is `config/mini/disk-budget.yaml`, an over-cap row files a signal on its owner | `docs/disk.md`, `docs/external-ssd.md`, `docs/storage.md` |
 | Theme | Zinc `#1f1f23` / `#f2f2f5`, never black or white; `make theme` | `docs/theme.md` |
 | Obsidian on the mini | It must keep running, or `/brain` and Hermes lose their door | `docs/brain-access.md` |
 | MCP servers | None at user scope: each costs an `npx` and `node` pair in every session; the browser is `shared-chrome` | `docs/browser.md` §MCP servers |

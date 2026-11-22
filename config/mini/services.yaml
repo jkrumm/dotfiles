@@ -42,6 +42,7 @@ services:
   - { name: claude-accounts-keepalive, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.claude-accounts-keepalive, memory_mib: 50 }
   - { name: collie, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.collie, process_type: interactive, memory_mib: 300 }
   - { name: devhost-health, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.devhost-health, memory_mib: 50 }
+  - { name: disk-budget, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-budget, memory_mib: 100, note: "06:15 daily; du against config/mini/disk-budget.yaml, one factory signal per row over its cap" }
   - { name: disk-sweep, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-sweep, memory_mib: 50 }
   - { name: disk-sweep-fstrim, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.disk-sweep-fstrim, memory_mib: 50 }
   - { name: ext-mirror, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.ext-mirror, memory_mib: 200, note: "05:00 nightly, hourly to 22:00 while skipped or red; rclone pulls the HomeLab into <volume>/mirror behind the volume gate, a skipped run is exit 3" }

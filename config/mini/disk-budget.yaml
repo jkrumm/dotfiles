@@ -1,0 +1,41 @@
+# The mini's disk budget (docs/disk.md): one row per path, measured daily by scripts/disk-budget.ts (job com.jkrumm.disk-budget).
+# A row over its cap files ONE factory signal on its owner; a path over unknown_gib that no row covers files one on dotfiles.
+# The caps plus system_gib must stay under max_commit_pct of volume_gib (make disk-budget-test). After an edit: make disk-budget-docs.
+#
+# path         ~/… or absolute, no trailing slash; a row never contains another row; sizes are du -xk (allocated blocks, GiB)
+# owner        the repo that answers for the row (a factory signal goes there)
+# class        data (state to keep) | cache (regenerable) | build (build output, worktrees) | history (logs, backups, transcripts)
+# enforced_by  what holds the cap: a sweep step (scripts/disk-sweep.sh), the factory, or the app itself
+# system_gib   the share no row covers: repos under 5 GiB, ~/.local rest, swap, snapshots and what du cannot read (Trash, Mail)
+volume: /System/Volumes/Data
+volume_gib: 894
+system_gib: 45
+max_commit_pct: 80
+unknown_gib: 5
+scan_depth: 4
+scan: ["~", /private, /opt, /Applications, /Library]
+
+rows:
+  - { path: ~/SourceRoot/weatherorb, owner: weatherorb, cap_gib: 115, class: data, enforced_by: "the app (retention); a blend round in flight adds ~22 GiB" }
+  - { path: ~/cache/weatherorb, owner: weatherorb, cap_gib: 40, class: build, enforced_by: "sweep: scratch, seeds" }
+  - { path: ~/SourceRoot/shutterflow, owner: shutterflow, cap_gib: 50, class: build, enforced_by: "sweep: worktrees; a live lead bounds its own target/" }
+  - { path: ~/cache/shutterflow, owner: shutterflow, cap_gib: 15, class: build, enforced_by: "cargo-target-seed; sweep: seeds" }
+  - { path: ~/ShutterflowLab, owner: shutterflow, cap_gib: 10, class: data, enforced_by: "shutterflow: make lab-clean" }
+  - { path: ~/SourceRoot/basalt-ui, owner: basalt-ui, cap_gib: 18, class: build, enforced_by: "sweep: worktrees" }
+  - { path: ~/SourceRoot/argo, owner: argo, cap_gib: 10, class: build, enforced_by: "sweep: worktrees" }
+  - { path: ~/SourceRoot/iris, owner: iris, cap_gib: 6, class: build, enforced_by: "sweep: worktrees" }
+  - { path: ~/.colima, owner: dotfiles, cap_gib: 80, class: cache, enforced_by: "sweep: docker, colima-trim; named volumes are data" }
+  - { path: ~/Library, owner: dotfiles, cap_gib: 70, class: cache, enforced_by: "sweep: sim-runtimes, simulators, lima-cache; app state" }
+  - { path: ~/.cache, owner: dotfiles, cap_gib: 14, class: cache, enforced_by: "sweep: pkg-caches, scratch" }
+  - { path: ~/.claude, owner: dotfiles, cap_gib: 15, class: history, enforced_by: "Claude Code: cleanupPeriodDays 7" }
+  - { path: ~/.hermes, owner: hermes-agent, cap_gib: 10, class: data, enforced_by: "the app" }
+  - { path: ~/.local/share/factory, owner: software-factory, cap_gib: 7, class: history, enforced_by: "the factory (archive, spikes)" }
+  - { path: ~/.local/share/teamchat, owner: epos-ai-teamchat-athena, cap_gib: 9, class: history, enforced_by: "the app (backups)" }
+  - { path: ~/.local/state/prometheus-scripts/backups, owner: prometheus-scripts, cap_gib: 16, class: history, enforced_by: "its backup job; retention is the owner's call (338 hourly, 212 daily dirs)" }
+  - { path: ~/tmp, owner: dotfiles, cap_gib: 8, class: cache, enforced_by: "the owner's scratch" }
+  - { path: ~/IuRoot, owner: dotfiles, cap_gib: 38, class: data, enforced_by: "the owner (.archive, clones)" }
+  - { path: /opt/homebrew, owner: dotfiles, cap_gib: 30, class: data, enforced_by: "sweep: pkg-caches; Postgres data ~15" }
+  - { path: /private/var, owner: dotfiles, cap_gib: 50, class: cache, enforced_by: "sweep: tmpdir, node-cache; log-rotate" }
+  - { path: /private/tmp, owner: dotfiles, cap_gib: 10, class: cache, enforced_by: "sweep: tmpdir (entries over 3 days)" }
+  - { path: /Applications, owner: dotfiles, cap_gib: 18, class: data, enforced_by: "the owner" }
+  - { path: /Library, owner: dotfiles, cap_gib: 10, class: data, enforced_by: "macOS" }

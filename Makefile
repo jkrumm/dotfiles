@@ -149,6 +149,7 @@ setup:
 	@$(MAKE) --no-print-directory log-rotate-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory disk-sweep-fstrim-setup
+	@$(MAKE) --no-print-directory disk-budget-setup
 	@$(MAKE) --no-print-directory browser-reap-setup
 	@$(MAKE) --no-print-directory photos-analysis-off
 	@$(MAKE) --no-print-directory ext-mirror-setup
@@ -880,7 +881,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Order is the cost of a red run: the cheap suites go first so a failure there stops within
@@ -2910,6 +2911,31 @@ disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 
+# The daily disk budget check (docs/disk.md, scripts/disk-budget.ts): config/mini/disk-budget.yaml measured with du, one factory signal
+# per row over its cap. Dev host only: the table describes the mini. `disk-budget-test` lints the committed table (caps under the
+# commit limit, docs/disk.md in sync) and runs the suite; `disk-budget-run` measures once now and files signals.
+.PHONY: disk-budget-setup disk-budget-teardown disk-budget-run disk-budget-test disk-budget-docs
+disk-budget-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — disk-budget skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/disk-budget.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-budget" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ daily at 06:15 → du against config/mini/disk-budget.yaml, status file ~/.local/state/disk-budget/status.json, one signal per row over cap; log: ~/Library/Logs/disk-budget.log"
+disk-budget-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.disk-budget.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.disk-budget.json"; \
+	echo "  ✓ disk-budget torn down (unloaded, plist and jobrun state removed)"
+disk-budget-run:
+	@bun $(DOTFILES_DIR)/scripts/disk-budget.ts check
+disk-budget-docs: ## Re-render the disk budget table into docs/disk.md after an edit of config/mini/disk-budget.yaml
+	@bun $(DOTFILES_DIR)/scripts/disk-budget.ts table --write
+disk-budget-test:
+	@bun $(DOTFILES_DIR)/scripts/disk-budget.ts lint
+	@bun test $(DOTFILES_DIR)/scripts/disk-budget.test.ts
+
 # The 4-hourly fstrim (docs/disk.md): the sweep's colima-trim step alone, between the daily 04:40 runs.
 disk-sweep-fstrim-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
@@ -4058,6 +4084,7 @@ help:
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (every step that needs no live host)"
+	@echo "  make disk-budget-test   Lint config/mini/disk-budget.yaml (caps under the commit limit, docs/disk.md in sync) + the check's suite"
 	@echo "  make volume-gate-test   Hermetic suite for the external volume gate, unlock job and check"
 	@echo "  make cargo-target-seed-test Hermetic suite for cargo-target-seed (the touch rule, key, clone, build, prune)"
 	@echo "  make smb-keepalive-test Hermetic suite for smb/smb-keepalive.sh (hung-stat remount path)"
@@ -4161,6 +4188,10 @@ help:
 	@echo "  make ext-mirror-setup           Load the 05:00 mirror of the HomeLab onto the external volume (mini; -run, -status, -test, -teardown)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
+	@echo "  make disk-budget-setup          Load the daily 06:15 disk budget check (du against config/mini/disk-budget.yaml, one signal per row over cap)"
+	@echo "  make disk-budget-run            Measure the budget once now (files signals for rows over cap)"
+	@echo "  make disk-budget-docs           Re-render the budget table into docs/disk.md"
+	@echo "  make disk-budget-teardown       Unload + remove the disk-budget agent"
 	@echo "  make disk-sweep-fstrim-teardown Unload + remove the 4-hourly fstrim agent"
 	@echo "  make storage-status             Shares, mounts, free space, mirror and backup age (ARGS=--json; docs/storage.md §Status)"
 	@echo "  make external-volume-check      Read-only state of the external volume (mini; silent while attached=false)"
