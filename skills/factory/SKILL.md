@@ -26,6 +26,7 @@ Settle every open point in this session before `factory issue new`: look, decide
 - `--checkpoint spec` makes the lead write its plan first; nobody waits on it, and the owner reads it only if he comments. It is no sign-off. Its cases are in `factory issue schema`.
 - `--checkpoint gate` is the one way to hold a chain for the owner: a product gate, rare.
 - A question for the owner that survives this session is one sentence under an `Ask the owner` fact, with its options. The lead raises it as a Decision.
+- File what can be built. An Issue whose output is a plan, a Spec, a concept or a choice is planning left undone here: a lead works it with less than this session knows, and its chain waits for it. What only running code can answer is a spike: its facts say what it measures and what each result means for the next row. A `Replan: <project>` Issue is the factory's own repair of a held plan, never a way to plan.
 - Give `--after` only where the Issue needs another Issue's output or the owner's answer. A row that could start today gets no edge (`--alone`), even when its chain sits behind a gate.
 
 ## The seat
