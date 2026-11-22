@@ -115,7 +115,9 @@ step_colima-trim() {
 # One tmp root against the lsof output in $2. Counts into TMP_TOTAL and TMP_REMOVED; a failure is appended to
 # TMP_REASONS. Always returns 0, so one root's failure never stops the other.
 tmp_sweep_root() {
-  local root raw=$2 open cand_list list find_err entry name total removed
+  local root raw=$2 open cand_list list find_err entry name total removed owner_args=""
+  # "owned" (the shared /private/tmp) limits the sweep to this user's entries: it also holds root's. $TMPDIR keeps its reach.
+  if [ "${3:-}" = owned ]; then owner_args="-user $(id -u)"; fi
   root=$(cd "$1" 2>/dev/null && pwd -P) || { TMP_REASONS+="${TMP_REASONS:+; }cannot resolve $1"; return 0; }
   # lsof reports resolved paths (/private/var/...), so match against the resolved root.
   open=$(awk -v p="$root/" 'index($0, "n" p) == 1 {s = substr($0, length(p) + 2); sub(/\/.*/, "", s); if (s != "") print s}' <<<"$raw" | sort -u) \
@@ -126,8 +128,8 @@ tmp_sweep_root() {
   # find exits 1 when an entry vanishes between readdir and stat — routine in a tmp dir that live
   # processes churn (2026-11-21: a `.package` dotfile). A vanished entry needs no removing, so
   # "No such file or directory" alone is not a failure; any other error still is.
-  # -user: this user's entries only. /private/tmp also holds root's (pytest-of-root, daemon state), not ours.
-  if ! find "$root" -mindepth 1 -maxdepth 1 -user "$(id -u)" -mmin +4320 ! -flags +sunlnk -print0 > "$cand_list" 2> "$find_err" \
+  # Sockets are never candidates: a bound socket can be older than 3 days and still live (a server's /tmp socket).
+  if ! find "$root" -mindepth 1 -maxdepth 1 $owner_args -mmin +4320 ! -type s ! -flags +sunlnk -print0 > "$cand_list" 2> "$find_err" \
     && grep -qv ': No such file or directory$' "$find_err"; then
     rm -f "$cand_list" "$list" "$find_err"; TMP_REASONS+="${TMP_REASONS:+; }find over $root — nothing removed"; return 0
   fi
@@ -169,8 +171,8 @@ step_tmpdir() {
   fi
   before=$(free_kb "$HOME")
   TMP_TOTAL=0; TMP_REMOVED=0; TMP_REASONS=""
-  tmp_sweep_root "$root" "$raw"
-  if [ -n "$shared" ] && [ "$shared" != "$root" ] && [ -d "$shared" ]; then tmp_sweep_root "$shared" "$raw"; fi
+  tmp_sweep_root "$root" "$raw" any
+  if [ -n "$shared" ] && [ "$shared" != "$root" ] && [ -d "$shared" ]; then tmp_sweep_root "$shared" "$raw" owned; fi
   after=$(free_kb "$HOME")
   if [ -n "$TMP_REASONS" ]; then
     echo "tmpdir: FAILED: $TMP_REASONS, $(delta "$before" "$after")"
@@ -185,11 +187,17 @@ step_tmpdir() {
 step_node-cache() {
   local root=${DISK_SWEEP_TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)}
   root=${root%/}
-  local dir="$root/node-compile-cache" before after list total removed
+  local dir="$root/node-compile-cache" before after list find_err total removed
   [ -n "$root" ] && [ -d "$dir" ] || { skip node-cache "no node compile cache at $dir"; return 0; }
   before=$(free_kb "$HOME")
   list=$(mktemp) || { echo "node-cache: FAILED: mktemp"; return 1; }
-  find "$dir" -type f -mmin +4320 -print0 > "$list" 2>/dev/null || true
+  find_err=$(mktemp) || { rm -f "$list"; echo "node-cache: FAILED: mktemp"; return 1; }
+  # A find that cannot read part of the directory would give a partial list: judged before anything is removed.
+  find "$dir" -type f -mmin +4320 -print0 > "$list" 2> "$find_err" || true
+  if grep -qv ': No such file or directory$' "$find_err"; then
+    rm -f "$list" "$find_err"; echo "node-cache: FAILED: find over $dir — nothing removed"; return 1
+  fi
+  rm -f "$find_err"
   total=$(count_listed "$list")
   xargs -0 rm -f -- < "$list" || true # judged by the re-test below, not by rm's exit
   removed=$(count_gone "$list")

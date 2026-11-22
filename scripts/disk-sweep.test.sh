@@ -94,6 +94,31 @@ check "node-cache: summary counts two files" sh -c 'printf "%s" "$1" | grep -q "
 out_nc2=$(DISK_SWEEP_TMPDIR="$TMP/no-such-tmp" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc2=$?
 check "node-cache: no cache dir: skipped, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "node-cache: skipped"' _ "$rc_nc2" "$out_nc2"
 
+# -user only on the shared root; $TMPDIR keeps its reach. Sockets are excluded from both. A recording find shows the argv.
+mkdir -p "$TMP/argvlog"
+cat > "$TMP/argvlog/find" <<'FIND2'
+#!/bin/sh
+case " $* " in *" -mmin +4320 "*) printf '%s\n' "$*" >> "$FAKE_FIND_ARGV" ;; esac
+exec /usr/bin/find "$@"
+FIND2
+chmod +x "$TMP/argvlog/find"
+export FAKE_FIND_ARGV="$TMP/find-argv.log"; : > "$FAKE_FIND_ARGV"
+PATH="$TMP/argvlog:$PATH" DISK_SWEEP_LSOF="$FAKE/lsof-none" bash "$HERE/disk-sweep.sh" tmpdir >/dev/null 2>&1
+SHR=$(cd "$SH" && pwd -P); TR=$(cd "$T" && pwd -P)   # the script searches the resolved roots (/private/var/...)
+check "tmpdir: the shared root's find is limited to this user" sh -c 'grep -F "$1 -mindepth" "$2" | grep -q -- "-user"' _ "$SHR" "$FAKE_FIND_ARGV"
+check "tmpdir: the TMPDIR find keeps its reach (no -user)" sh -c 'grep -F "$1 -mindepth" "$2" | grep -vq -- "-user"' _ "$TR" "$FAKE_FIND_ARGV"
+check "tmpdir: sockets are never candidates" grep -q -- '! -type s' "$FAKE_FIND_ARGV"
+
+# node-cache: a subdirectory it cannot list fails the step, and nothing is removed.
+NC2="$TMP/nodecache-locked"; mkdir -p "$NC2/node-compile-cache/locked" "$NC2/node-compile-cache/other"
+echo x > "$NC2/node-compile-cache/locked/f"; echo x > "$NC2/node-compile-cache/other/stale"
+old 5 "$NC2/node-compile-cache/locked/f" "$NC2/node-compile-cache/other/stale"
+chmod 000 "$NC2/node-compile-cache/locked"
+out_nc3=$(DISK_SWEEP_TMPDIR="$NC2" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc3=$?
+chmod 755 "$NC2/node-compile-cache/locked"
+check "node-cache: unlistable subdirectory fails the step" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "node-cache: FAILED: find over"' _ "$rc_nc3" "$out_nc3"
+check "node-cache: nothing removed when the listing is partial" test -f "$NC2/node-compile-cache/other/stale"
+
 # (c) find loses an entry mid-listing (exit 1, "No such file or directory"): not a failure, the rest still goes.
 # Any other find error still fails the step with nothing removed.
 cat > "$FAKE/find" <<'FIND'
