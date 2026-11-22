@@ -4,7 +4,7 @@
 # config/ssh/authorized_keys.iumac pins this script with `command=`, so every
 # connection that key makes lands here with the requested command in
 # $SSH_ORIGINAL_COMMAND. The key's job is a short list of named operations
-# (reachability probe, human-queue dialogs, notifications, claude re-login,
+# (reachability probe, human-queue dialogs, notifications, claude re-login (with its callback-port forward and its code dialog),
 # account snapshots, a granted catalogue command with no dialog (auto-run), a dotfiles pull with its link targets, the Herdr glance and claude-account pulls, agent notes (term-ls, term-note), a read-only report, a repo fast-forward,
 # usage-tracker pulls); this gate maps each verb to its one
 # fixed action and refuses everything else. Least privilege: the mini's
@@ -23,7 +23,10 @@
 # Test seams (tests only; sshd never sets them): IUMAC_GATE_HOME replaces $HOME
 # for every path below so a temp tree of stub scripts can stand in for the real
 # repo; IUMAC_GATE_RSYNC / IUMAC_GATE_GIT replace the rsync and git binaries; IUMAC_GATE_IOREG replaces ioreg (the auto-run lock probe); IUMAC_GATE_REPORT_TIMEOUT /
-# IUMAC_GATE_PULL_TIMEOUT replace the `report` (60 s) and `repo-pull` (300 s) limits.
+# IUMAC_GATE_PULL_TIMEOUT replace the `report` (60 s) and `repo-pull` (300 s) limits; IUMAC_GATE_SSH / IUMAC_GATE_MINI_HOST /
+# IUMAC_GATE_LSOF stand in for the ssh binary, its mini alias and lsof of `login-forward`, IUMAC_GATE_FORWARD_MAX (3600 s) is its
+# helper timeout, IUMAC_GATE_DIALOG_SECONDS (900) the one of `login-code`, IUMAC_GATE_ACTIVE_MAX (300 s) the input idle time
+# under which the MacBook counts as in use.
 #
 # Runs on the MacBook under /bin/bash 3.2: no associative arrays, no mapfile.
 unset SSH_AUTH_SOCK
@@ -157,16 +160,38 @@ auto_screen_locked() {
   printf '%s' "$out" | tr -d '\n\t ' | grep -q '<key>CGSSessionScreenIsLocked</key><true/>'
 }
 
-# A template as an anchored ERE: the literal text escaped, the one slot <N> = 1 to 4 digits; rc 1 on any other <slot>.
+# Seconds since the last keyboard or mouse input (HIDIdleTime is nanoseconds); rc 1 when it cannot be read.
+auto_idle_seconds() {
+  local out ns
+  out="$("${IUMAC_GATE_IOREG:-/usr/sbin/ioreg}" -c IOHIDSystem 2>/dev/null)" || return 1
+  ns="$(printf '%s' "$out" | sed -n 's/.*"HIDIdleTime" = \([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  [ -n "$ns" ] || return 1
+  printf '%s' "$((ns / 1000000000))"
+}
+
+# The MacBook as its owner uses it: active (screen unlocked and input within IUMAC_GATE_ACTIVE_MAX seconds), idle (no recent
+# input, or the idle time cannot be read) or locked. The `in-use` verb prints it; a class that `needs active` runs only on active.
+in_use_state() {
+  local idle
+  if auto_screen_locked; then echo locked; return; fi
+  idle="$(auto_idle_seconds)" || { echo idle; return; }
+  if [ "$idle" -lt "${IUMAC_GATE_ACTIVE_MAX:-300}" ]; then echo active; else echo idle; fi
+}
+
+# A template as an anchored ERE: the literal text escaped, the slots <N> = 1 to 4 digits and <ID> = an account id
+# ([a-z0-9][a-z0-9_-]{0,31}); rc 1 on any other <slot>.
 auto_template_regex() {
-  local t="$1" esc slot='[0-9]{1,4}'
-  case "${t//<N>/}" in *'<'* | *'>'*) return 1 ;; esac
+  local t="$1" esc rest slot='[0-9]{1,4}' id='[a-z0-9][a-z0-9_-]{0,31}'
+  rest="${t//<N>/}"
+  rest="${rest//<ID>/}"
+  case "$rest" in *'<'* | *'>'*) return 1 ;; esac
   esc="$(printf '%s' "$t" | sed 's/[][\\.*^$+?(){}|]/\\&/g')"
-  printf '^%s$' "${esc//<N>/$slot}"
+  esc="${esc//<N>/$slot}"
+  printf '^%s$' "${esc//<ID>/$id}"
 }
 
 auto_run() {
-  local req id text cmd tsv class="" needs="" limit="" c t n l re consent mode
+  local req id text cmd tsv class="" needs="" limit="" c t n l re consent mode st
   [ -e "$AUTO_DIR/auto-run.off" ] && auto_refuse 77 killswitch
   req="$(head -c 20000)"
   die() { auto_refuse 77 input; }
@@ -183,7 +208,7 @@ auto_run() {
   while IFS=$'\t' read -r c t n l _; do
     case "$c" in '' | '#'*) continue ;; esac
     [[ "$c" =~ ^[a-z0-9][a-z0-9-]*$ ]] || continue
-    case "$n" in none | biometric) ;; *) continue ;; esac
+    case "$n" in none | biometric | active) ;; *) continue ;; esac
     [[ "$l" =~ ^[0-9]{1,4}$ ]] || continue
     re="$(auto_template_regex "$t")" || continue
     if [[ "$cmd" =~ $re ]]; then class="$c" needs="$n" limit="$l"; break; fi
@@ -194,8 +219,12 @@ auto_run() {
   # Granted: listed, owned by this user, and writable by nobody else.
   { [ -f "$consent" ] && [ -O "$consent" ] && ! case "$mode" in ?[2367]? | ??[2367]) true ;; *) false ;; esac && grep -qxF -- "$class" "$consent"; } || auto_refuse 77 notgranted
   if [ "$needs" = biometric ] && auto_screen_locked; then auto_refuse 75 locked; fi
+  if [ "$needs" = active ]; then
+    st="$(in_use_state)"
+    [ "$st" = active ] || auto_refuse 75 "$st"
+  fi
 
-  local tmp tmp2 rc terminal="" st ran_at output_tail
+  local tmp tmp2 rc terminal="" ran_at output_tail
   ran_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   text="$(json_field "$req" text)"
   export PATH="$H/.local/bin:/opt/homebrew/bin:/usr/local/bin:$H/.bun/bin:$PATH"
@@ -272,6 +301,93 @@ end run' | exec osascript - "$title" "$text"
     fi
     log "$verb" allow
     exec open "$url"
+    ;;
+
+  in-use)
+    # active | idle | locked: whether the MacBook is in use (unlocked, input within IUMAC_GATE_ACTIVE_MAX seconds). Read only.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    log "$verb" allow
+    in_use_state
+    exit 0
+    ;;
+
+  login-forward)
+    # The mini's login finishes on the approve click: the browser here calls back to localhost:<port>, where the mini's
+    # `claude auth login` listens. This opens a forward of exactly that port, 127.0.0.1 here to 127.0.0.1 on the mini
+    # (our own key to the mini, never the caller's), opens the approval page in the account's browser and holds the
+    # forward until stdin closes (the login is over: the mini closes the pipe) or IUMAC_GATE_FORWARD_MAX seconds pass.
+    # stdin: app (may be empty), port, URL. Prints "forwarded" once it is up and the page is open; any failure prints
+    # "failed: <word>" and exits 1, which tells the mini to use the code dialog instead.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    IFS= read -r app || true
+    IFS= read -r port || true
+    IFS= read -r url || true
+    [[ "$url" =~ ^https://[^[:space:]]+$ ]] || refuse "$verb"
+    [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || refuse "$verb"
+    redir_re='[?&]redirect_uri=http(%3[Aa]|:)(%2[Ff]|/)(%2[Ff]|/)(localhost|127\.0\.0\.1)(%3[Aa]|:)([0-9]{1,5})(%2[Ff]|/|&|$)'
+    [[ "$url" =~ $redir_re ]] && [ "${BASH_REMATCH[6]}" = "$port" ] || refuse "$verb"
+    if [ -n "$app" ]; then
+      [[ "$app" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._-]{0,60}$ ]] || refuse "$verb"
+    fi
+    log "$verb" allow
+    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+    LSOF="${IUMAC_GATE_LSOF:-/usr/sbin/lsof}"
+    if "$LSOF" -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+      echo "failed: port-busy"
+      exit 1
+    fi
+    # No ControlMaster: a forward added to a shared master would outlive this verb.
+    "${IUMAC_GATE_SSH:-ssh}" -N -o BatchMode=yes -o ConnectTimeout=8 -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
+      -o ServerAliveCountMax=3 -o ControlMaster=no -o ControlPath=none \
+      -L "127.0.0.1:$port:127.0.0.1:$port" "${IUMAC_GATE_MINI_HOST:-mini}" </dev/null >/dev/null 2>&1 &
+    fpid=$!
+    trap 'kill "$fpid" 2>/dev/null' EXIT
+    trap 'exit 143' TERM HUP INT
+    up=0
+    i=0
+    while [ "$i" -lt 50 ]; do
+      kill -0 "$fpid" 2>/dev/null || break
+      if "$LSOF" -nP -a -p "$fpid" -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then up=1; break; fi
+      sleep 0.2
+      i=$((i + 1))
+    done
+    if [ "$up" -ne 1 ]; then
+      echo "failed: forward"
+      exit 1
+    fi
+    # stdin stays ours: it is how the mini says the login is over
+    if [ -n "$app" ]; then open -a "$app" "$url" </dev/null || { echo "failed: open"; exit 1; }
+    else open "$url" </dev/null || { echo "failed: open"; exit 1; }; fi
+    echo forwarded
+    deadline=$(($(date +%s) + ${IUMAC_GATE_FORWARD_MAX:-3600}))
+    while kill -0 "$fpid" 2>/dev/null && [ "$(date +%s)" -lt "$deadline" ]; do
+      # bash 3.2 answers a timeout like an EOF (rc 1): only a read that came back at once is the end of stdin
+      t0=$(date +%s)
+      if ! IFS= read -r -t 2 _held; then
+        [ "$(($(date +%s) - t0))" -ge 2 ] || break
+      fi
+    done
+    exit 0
+    ;;
+
+  login-code)
+    # The code dialog, for a mini login whose callback cannot be forwarded: a native text field on this MacBook. stdin:
+    # the account id. Prints what was typed (one line) and nothing else; cancelled, empty or timed out prints nothing and
+    # exits 1. The text and the answer are never logged; the log line has the verb only.
+    [ "$argc" -eq 1 ] || refuse "$verb"
+    IFS= read -r acct || true
+    [[ "$acct" =~ ^[a-z0-9_-]{1,32}$ ]] || refuse "$verb"
+    log "$verb" allow
+    ans="$(printf '%s\n' 'on run argv
+  set r to display dialog (item 2 of argv) with title (item 1 of argv) default answer "" buttons {"Cancel", "OK"} default button "OK" giving up after ((item 3 of argv) as integer)
+  if gave up of r then return ""
+  return text returned of r
+end run' | osascript - "Claude login $acct: paste the code from the page" "Approve in the browser, then paste the code the approval page shows here." "${IUMAC_GATE_DIALOG_SECONDS:-900}" 2>/dev/null)" || exit 1
+    ans="$(printf '%s' "$ans" | tr -d '\000-\037\177')"
+    ans="${ans:0:600}"
+    [ -n "$ans" ] || exit 1
+    printf '%s\n' "$ans"
+    exit 0
     ;;
 
   relogin)

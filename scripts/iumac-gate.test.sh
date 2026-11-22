@@ -516,6 +516,201 @@ run_gate "true"
 assert_eq "log failure never fails the command" "0" "$RC"
 chmod 755 "$H/Library/Logs"
 
+echo "== in-use and the active class"
+IOREG_ACTIVE="$BIN/ioreg-active"; IOREG_IDLE="$BIN/ioreg-idle"; IOREG_ACTIVE_LOCKED="$BIN/ioreg-active-locked"; IOREG_NOHID="$BIN/ioreg-nohid"
+mkioreg() { # <path> <idle ns or -> <locked true|false>
+  { printf '#!/bin/sh\ncase "$*" in\n'
+    if [ "$2" = "-" ]; then printf '  *IOHIDSystem*) exit 1 ;;\n'; else printf '  *IOHIDSystem*) echo "    | |   \\"HIDIdleTime\\" = %s" ;;\n' "$2"; fi
+    printf '  *) echo "<dict><key>CGSSessionScreenIsLocked</key><%s/></dict>" ;;\nesac\n' "$3"; } >"$1"
+  chmod +x "$1"
+}
+mkioreg "$IOREG_ACTIVE" 5000000000 false
+mkioreg "$IOREG_IDLE" 900000000000 false
+mkioreg "$IOREG_ACTIVE_LOCKED" 1000000000 true
+mkioreg "$IOREG_NOHID" - false
+GOUT=""
+# gate_out <command> <ioreg stub> [stdin] — GOUT = stdout, RC = exit code
+gate_out() {
+  reset
+  GOUT="$(printf '%s' "${3:-}" | SSH_ORIGINAL_COMMAND="$1" IUMAC_GATE_HOME="$H" IUMAC_GATE_IOREG="$2" PATH="$BIN:$PATH" /bin/bash "$GATE" 2>/dev/null)"
+  RC=$?
+}
+gate_out "in-use" "$IOREG_ACTIVE"; assert_eq "in-use: unlocked, input 5 s ago: active" "0/active" "$RC/$GOUT"
+gate_out "in-use" "$IOREG_IDLE"; assert_eq "in-use: unlocked, 15 min without input: idle" "0/idle" "$RC/$GOUT"
+gate_out "in-use" "$IOREG_ACTIVE_LOCKED"; assert_eq "in-use: locked screen: locked" "0/locked" "$RC/$GOUT"
+gate_out "in-use" "$IOREG_NOHID"; assert_eq "in-use: idle time unreadable: idle, never active" "0/idle" "$RC/$GOUT"
+gate_out "in-use" "$IOREG_BROKEN"; assert_eq "in-use: nothing readable: locked, never active" "0/locked" "$RC/$GOUT"
+reset; GOUT="$(SSH_ORIGINAL_COMMAND=in-use IUMAC_GATE_HOME="$H" IUMAC_GATE_IOREG="$IOREG_IDLE" IUMAC_GATE_ACTIVE_MAX=1000 PATH="$BIN:$PATH" /bin/bash "$GATE" 2>/dev/null)"
+assert_eq "in-use: the threshold is IUMAC_GATE_ACTIVE_MAX" "active" "$GOUT"
+expect_refused "in-use with an argument" "in-use now"
+expect_refused "in-use chained" "in-use; id"
+
+CAT="$H/SourceRoot/dotfiles/config/macbook-auto-classes.tsv"
+mkdir -p "$H/SourceRoot/dotfiles/config" "$H/.config/jk"
+cp "$HERE/../config/macbook-auto-classes.tsv" "$CAT"
+printf '%s\t%s\t%s\t%s\n' "echo-active" "echo active-<ID>" "active" "5" >>"$CAT"
+CONSENT="$H/.config/jk/auto-run.consent"
+grant() { mkdir -p "$H/.config/jk"; printf '%s\n' "$@" >"$CONSENT"; chmod 600 "$CONSENT"; rm -f "$H/.config/jk/auto-run.off"; }
+run_auto() { # <command> [ioreg stub]
+  local req
+  req="$(jq -cn --arg id "20261119T000000-2" --arg text "renew the login" --arg cmd "$1" '{id: $id, text: $text, cmd: $cmd}')"
+  reset
+  AUTO_OUT="$(printf '%s' "$req" | SSH_ORIGINAL_COMMAND=auto-run IUMAC_GATE_HOME="$H" IUMAC_GATE_IOREG="${2:-$IOREG_ACTIVE}" PATH="$BIN:$PATH" /bin/bash "$GATE" 2>"$TMP/auto.err")"
+  RC=$?
+}
+grant echo-active
+run_auto "echo active-me" "$IOREG_ACTIVE"
+assert_eq "active class, MacBook in use: runs" "0/active-me" "$RC/$(jq -r .output_tail <<<"$AUTO_OUT")"
+run_auto "echo active-me" "$IOREG_IDLE"
+assert_eq "active class, no input for 15 min: 75, nothing runs, no output" "75/" "$RC/$AUTO_OUT"
+assert_contains "...the reason word is idle" "idle" "$(cat "$TMP/auto.err")"
+run_auto "echo active-me" "$IOREG_ACTIVE_LOCKED"
+assert_eq "active class, screen locked: 75" "75/" "$RC/$AUTO_OUT"
+assert_contains "...the reason word is locked" "locked" "$(cat "$TMP/auto.err")"
+run_auto "echo active-me" "$IOREG_NOHID"
+assert_eq "active class, idle time unreadable: 75" "75" "$RC"
+run_auto "echo active-Me" "$IOREG_ACTIVE"; assert_eq "<ID> takes no upper case" "77" "$RC"
+run_auto "echo active-" "$IOREG_ACTIVE"; assert_eq "<ID> is not empty" "77" "$RC"
+run_auto "echo active-$(printf 'a%.0s' $(seq 1 33))" "$IOREG_ACTIVE"; assert_eq "<ID> is at most 32 characters" "77" "$RC"
+run_auto "echo active-a b" "$IOREG_ACTIVE"; assert_eq "<ID> takes no space" "77" "$RC"
+run_auto "echo active-a;id" "$IOREG_ACTIVE"; assert_eq "<ID> takes no metacharacter" "77" "$RC"
+run_auto "echo active-a_b-9" "$IOREG_ACTIVE"; assert_eq "<ID> takes digits, _ and -" "0" "$RC"
+
+RELOGIN_CMD='bash "$HOME/SourceRoot/dotfiles/scripts/claude-relogin.sh"'
+grant claude-relogin
+run_auto "$RELOGIN_CMD me --machine mini" "$IOREG_ACTIVE"
+assert_eq "claude-relogin <id> --machine mini: runs the script with exactly those arguments" "0/relogin|me|--machine|mini" "$RC/$(calls | grep '^relogin')"
+assert_eq "...result carries via and class" "auto-run claude-relogin" "$(jq -r '.via + " " + .class' <<<"$AUTO_OUT")"
+run_auto "$RELOGIN_CMD iu --machine macbook" "$IOREG_ACTIVE"
+assert_eq "claude-relogin <id> --machine macbook: runs" "0/relogin|iu|--machine|macbook" "$RC/$(calls | grep '^relogin')"
+run_auto "$RELOGIN_CMD me --machine mini" "$IOREG_IDLE"
+assert_eq "claude-relogin with the MacBook idle: nothing runs, 75" "75/no" "$RC/$([[ -e "$REC/calls" ]] && echo yes || echo no)"
+for bad in "$RELOGIN_CMD me --machine laptop" "$RELOGIN_CMD me --machine mini --visible" "$RELOGIN_CMD me" "$RELOGIN_CMD Me --machine mini" "$RELOGIN_CMD me --machine mini; id" "$RELOGIN_CMD me --ask --machine mini" "bash $H/SourceRoot/dotfiles/scripts/claude-relogin.sh me --machine mini"; do
+  run_auto "$bad" "$IOREG_ACTIVE"
+  assert_eq "claude-relogin class refuses: $bad" "77/no" "$RC/$([[ -e "$REC/calls" ]] && echo yes || echo no)"
+done
+grant echo-active
+run_auto "$RELOGIN_CMD me --machine mini" "$IOREG_ACTIVE"
+assert_eq "claude-relogin not granted: 77 (the dialog)" "77" "$RC"
+rm -rf "$H/.config" "$CAT"
+
+echo "== login-forward: one loopback port of one login"
+FSSH="$BIN/fwd-ssh"; FLSOF="$BIN/fwd-lsof"; FPID="$TMP/fwd-ssh.pid"
+cat >"$FSSH" <<STUB
+#!/bin/bash
+{ printf 'ssh'; for a in "\$@"; do printf '|%s' "\$a"; done; printf '\n'; } >>"$REC/calls"
+echo \$\$ >"$FPID"
+exec sleep 30
+STUB
+cat >"$FLSOF" <<'STUB'
+#!/bin/bash
+case " $* " in
+  *" -a "*) [ "${STUB_LSOF_UP:-1}" = 1 ] ;;
+  *) [ "${STUB_LSOF_BUSY:-0}" = 1 ] ;;
+esac
+STUB
+chmod +x "$FSSH" "$FLSOF"
+FURL='https://claude.com/cai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=user%3Ainference&state=x%y'
+# run_fwd <stdin> [command] — GOUT = stdout, RC; the ssh and lsof stubs stand in, PATH has the open stub
+run_fwd() {
+  reset; rm -f "$FPID"
+  GOUT="$(printf '%s' "$1" | SSH_ORIGINAL_COMMAND="${2:-login-forward}" IUMAC_GATE_HOME="$H" IUMAC_GATE_SSH="$FSSH" IUMAC_GATE_LSOF="$FLSOF" IUMAC_GATE_FORWARD_MAX=5 PATH="$BIN:$PATH" /bin/bash "$GATE" 2>/dev/null)"
+  RC=$?
+}
+fwd_in() { printf '%s\n%s\n%s\n' "$1" "$2" "$3"; } # app port url
+nothing_ran() { [[ -e "$REC/calls" ]] && echo no || echo yes; }
+run_fwd "$(fwd_in Helium 58876 "$FURL")"
+assert_eq "login-forward: rc 0, answers forwarded" "0/forwarded" "$RC/$GOUT"
+assert_eq "...forward of exactly 127.0.0.1:<port> to the mini's 127.0.0.1:<port>, nothing else" "ssh|-N|-o|BatchMode=yes|-o|ConnectTimeout=8|-o|ExitOnForwardFailure=yes|-o|ServerAliveInterval=15|-o|ServerAliveCountMax=3|-o|ControlMaster=no|-o|ControlPath=none|-L|127.0.0.1:58876:127.0.0.1:58876|mini" "$(grep '^ssh' "$REC/calls")"
+assert_eq "...the ORIGINAL URL is opened in the account's browser" "open|-a|Helium|$FURL" "$(grep '^open' "$REC/calls")"
+if [[ -s "$FPID" ]] && ! kill -0 "$(cat "$FPID")" 2>/dev/null; then ok "...the forward is closed when the verb ends"; else bad "...the forward is closed when the verb ends"; fi
+run_fwd "$(fwd_in "" 58876 "$FURL")"
+assert_eq "no app: the default browser" "forwarded/open|$FURL" "$GOUT/$(grep '^open' "$REC/calls")"
+run_fwd "$(fwd_in Helium 58876 "$FURL")" "login-forward now"
+assert_eq "an argument is refused" "126/yes" "$RC/$(nothing_ran)"
+refuse_fwd() { # <label> <app> <port> <url>
+  run_fwd "$(fwd_in "$2" "$3" "$4")"
+  assert_eq "login-forward refuses ($1): rc 126, nothing started" "126/yes" "$RC/$(nothing_ran)"
+}
+refuse_fwd "http URL" Helium 58876 "http://claude.com/cai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback"
+refuse_fwd "no URL" Helium 58876 ""
+refuse_fwd "URL with a space" Helium 58876 "https://x/a b?redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback"
+refuse_fwd "non-numeric port" Helium abc "$FURL"
+refuse_fwd "port with a suffix" Helium 58876x "$FURL"
+refuse_fwd "port with a leading zero" Helium 058876 "$FURL"
+refuse_fwd "port 443" Helium 443 "$FURL"
+refuse_fwd "port 1023" Helium 1023 "https://c/a?redirect_uri=http%3A%2F%2Flocalhost%3A1023%2Fcallback"
+refuse_fwd "port above 65535" Helium 70000 "https://c/a?redirect_uri=http%3A%2F%2Flocalhost%3A70000%2Fcallback"
+refuse_fwd "empty port" Helium "" "$FURL"
+refuse_fwd "a port that differs from the redirect_uri" Helium 58877 "$FURL"
+refuse_fwd "port only a prefix of the redirect_uri's" Helium 5887 "$FURL"
+refuse_fwd "no redirect_uri" Helium 58876 "https://claude.com/cai/oauth/authorize?client_id=abc"
+refuse_fwd "redirect_uri on another host" Helium 58876 "https://claude.com/a?redirect_uri=http%3A%2F%2Fevil.example%3A58876%2Fcallback"
+refuse_fwd "redirect_uri on https" Helium 58876 "https://claude.com/a?redirect_uri=https%3A%2F%2Flocalhost%3A58876%2Fcallback"
+refuse_fwd "app with a metacharacter" "Hel;ium" 58876 "$FURL"
+refuse_fwd "app with a path" "../Helium" 58876 "$FURL"
+run_fwd "$(fwd_in Helium 58876 'https://claude.com/a?x=1&redirect_uri=http://localhost:58876/callback&y=2')"
+assert_eq "a raw (unescaped) loopback redirect_uri of the same port is accepted" "0/forwarded" "$RC/$GOUT"
+STUB_LSOF_BUSY=1 run_fwd "$(fwd_in Helium 58876 "$FURL")"
+assert_eq "port already taken on the MacBook: failed: port-busy, rc 1, no ssh, nothing opened" "1/failed: port-busy/yes" "$RC/$GOUT/$(nothing_ran)"
+STUB_LSOF_UP=0 run_fwd "$(fwd_in Helium 58876 "$FURL")"
+assert_eq "forward that does not come up: failed: forward, rc 1, nothing opened" "1/failed: forward/0" "$RC/$GOUT/$(grep -c '^open' "$REC/calls")"
+if [[ -s "$FPID" ]] && ! kill -0 "$(cat "$FPID")" 2>/dev/null; then ok "...and the ssh is killed again"; else bad "...and the ssh is killed again"; fi
+STUB_RC=1 run_fwd "$(fwd_in Helium 58876 "$FURL")"
+assert_eq "open fails: failed: open, rc 1" "1/failed: open" "$RC/$(printf '%s' "$GOUT" | tail -n 1)"
+case "$(cat "$H/Library/Logs/iumac-gate.log")" in *58876*|*claude.com*|*Helium*) bad "log: no port, URL or app" ;; *) ok "log: no port, URL or app" ;; esac
+assert_contains "log: the verb is recorded" "login-forward allow" "$(cat "$H/Library/Logs/iumac-gate.log")"
+assert_contains "log: refusals are recorded" "login-forward refuse" "$(cat "$H/Library/Logs/iumac-gate.log")"
+# the verb holds while its stdin is open and ends with it; a helper timeout ends it otherwise
+reset; rm -f "$FPID"; SECONDS=0
+( fwd_in Helium 58876 "$FURL"; sleep 4 ) | SSH_ORIGINAL_COMMAND=login-forward IUMAC_GATE_HOME="$H" IUMAC_GATE_SSH="$FSSH" IUMAC_GATE_LSOF="$FLSOF" IUMAC_GATE_FORWARD_MAX=60 PATH="$BIN:$PATH" /bin/bash "$GATE" >/dev/null 2>&1
+held=$SECONDS
+if (( held >= 3 && held <= 9 )); then ok "login-forward holds while stdin is open and ends when it closes (${held} s)"; else bad "login-forward holds while stdin is open and ends when it closes" "took ${held} s"; fi
+reset; rm -f "$FPID"
+( fwd_in Helium 58876 "$FURL"; sleep 8 ) | { t0=$(date +%s); SSH_ORIGINAL_COMMAND=login-forward IUMAC_GATE_HOME="$H" IUMAC_GATE_SSH="$FSSH" IUMAC_GATE_LSOF="$FLSOF" IUMAC_GATE_FORWARD_MAX=2 PATH="$BIN:$PATH" /bin/bash "$GATE" >/dev/null 2>&1; echo $(($(date +%s) - t0)) >"$TMP/held"; }
+held=$(cat "$TMP/held")
+if (( held <= 6 )); then ok "...and the helper timeout ends it with stdin still open (${held} s)"; else bad "...and the helper timeout ends it with stdin still open" "took ${held} s"; fi
+
+echo "== login-code: the dialog on the MacBook"
+cat >"$BIN/osascript" <<'STUB'
+#!/bin/bash
+{ printf 'osascript'; for a in "$@"; do printf '|%s' "$a"; done; printf '\n'; } >>"$REC_DIR/calls"
+cat >/dev/null
+[ "${STUB_CANCEL:-0}" = 1 ] && exit 1
+printf '%b' "${STUB_ANSWER-}"
+STUB
+chmod +x "$BIN/osascript"
+# run_code <stdin> [command] — GOUT = stdout, RC
+run_code() {
+  reset
+  GOUT="$(printf '%s' "$1" | REC_DIR="$REC" SSH_ORIGINAL_COMMAND="${2:-login-code}" IUMAC_GATE_HOME="$H" PATH="$BIN:$PATH" /bin/bash "$GATE" 2>/dev/null)"
+  RC=$?
+}
+STUB_ANSWER='abcdef123456#zzstate99\n' run_code "me
+"
+assert_eq "login-code: what was typed comes back, nothing else" "0/abcdef123456#zzstate99" "$RC/$GOUT"
+assert_eq "...the dialog is titled with the account and says where the code goes" "osascript|-|Claude login me: paste the code from the page|Approve in the browser, then paste the code the approval page shows here.|900" "$(calls)"
+STUB_CANCEL=1 run_code "me
+"; assert_eq "cancelled: rc 1, nothing printed" "1/" "$RC/$GOUT"
+STUB_ANSWER='\n' run_code "me
+"; assert_eq "empty: rc 1, nothing printed" "1/" "$RC/$GOUT"
+STUB_ANSWER='ab\001cd\033ef\n' run_code "me
+"; assert_eq "control characters are stripped" "0/abcdef" "$RC/$GOUT"
+STUB_ANSWER="$(printf 'x%.0s' $(seq 1 700))" run_code "me
+"; assert_eq "an answer is cut at 600 characters" "600" "$(printf '%s' "$GOUT" | wc -c | tr -d ' ')"
+for badid in "Me" "a b" "x;y" "" "$(printf 'a%.0s' $(seq 1 33))" '$(id)'; do
+  STUB_ANSWER='abc\n' run_code "$badid
+"
+  assert_eq "login-code refuses the account '$badid'" "126/yes" "$RC/$(nothing_ran)"
+done
+STUB_ANSWER='abc\n' run_code "me
+" "login-code now"; assert_eq "login-code with an argument is refused" "126" "$RC"
+STUB_ANSWER='secretcode12345\n' run_code "me
+"
+case "$(cat "$H/Library/Logs/iumac-gate.log")" in *secretcode12345*) bad "log: never the answer" ;; *) ok "log: never the answer" ;; esac
+assert_contains "log: the verb is recorded" "login-code allow" "$(cat "$H/Library/Logs/iumac-gate.log")"
+mkstub "$BIN/osascript" osascript
+
 echo "== ssh-agent.zsh: incoming ssh session gets no 1Password socket"
 if ! command -v zsh >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
   echo "  skip: zsh or python3 missing"
