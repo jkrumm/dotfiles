@@ -321,6 +321,7 @@ assert_eq "30d pending: up" "$(push_status)" up
 assert_eq "30d pending: exit 0" "$RC" 0
 assert_contains "30d: the msg names the wait" "$(push_msg)" "waiting for a restart window: macOS update pending: Safari 26.1 (needs a restart window) [30d]"
 assert_not_contains "30d: it is not STALE" "$(push_msg)" "STALE"
+assert_contains "30d: the terminal report names the wait" "$OUT" "… macOS update pending: Safari 26.1 (needs a restart window) [30d]"
 assert_not_contains "30d: the terminal reports no filing" "$OUT" "filed"
 pend; printf 'Safari 26.1\n' > "$DRIFT_STATE_DIR/macos-window-signal"; first_seen macos:20; run
 assert_eq "a leftover stamp is deleted on the next run" "$([ -e "$DRIFT_STATE_DIR/macos-window-signal" ] && echo yes || echo no)" no
