@@ -94,10 +94,12 @@ check "node-cache: summary counts two files" sh -c 'printf "%s" "$1" | grep -q "
 out_nc2=$(DISK_SWEEP_TMPDIR="$TMP/no-such-tmp" bash "$HERE/disk-sweep.sh" node-cache 2>&1); rc_nc2=$?
 check "node-cache: no cache dir: skipped, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "node-cache: skipped"' _ "$rc_nc2" "$out_nc2"
 
+if [ "$(id -u)" -ne 0 ]; then
 # A read-only tree is emptied: its entries are made writable first (the Go module cache is written 0555).
 mkdir -p "$T/ro/sub"; echo x > "$T/ro/sub/f"; old 5 "$T/ro/sub/f" "$T/ro/sub" "$T/ro"; chmod 555 "$T/ro/sub"
 out_ro=$(DISK_SWEEP_LSOF="$FAKE/lsof-none" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc_ro=$?
 check "tmpdir: a read-only tree is removed, exit 0" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/ro" ] && printf "%s" "$3" | grep -q "^tmpdir: [0-9]* entries"' _ "$rc_ro" "$T" "$out_ro"
+else echo "  skip  tmpdir: read-only tree (root ignores mode bits)"; fi
 
 # Kept, whatever their age: a directory holding a live socket (a daemon's), a lock file in the shared root, and a
 # directory find cannot read in full (judged recent, so a partial listing never removes its readable siblings).
