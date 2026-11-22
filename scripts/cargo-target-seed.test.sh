@@ -182,6 +182,17 @@ rm -rf "$SEEDS"; mkseed "old-key" "$OLD"; mkseed "$K1" "$MID"; touch "$SEEDS/$K1
 S build -- false >/dev/null 2>&1
 [ -d "$SEEDS/old-key" ] && ok "an old seed stays while its successor is under a day old" || bad "pruned too early"
 
+echo "args: build and clone record the key options beside the seeds"
+rm -rf "$SEEDS"; rm -f "$R/ws/target"
+S build -- true >/dev/null 2>&1
+eq "build writes .args" "--workspace ws --key-path ws/vendor" "$(tr '\n' ' ' < "$SEEDS/.args" 2>/dev/null | sed 's/ $//')"
+rm -f "$SEEDS/.args"; rm -rf "$R/ws/target"
+S clone >/dev/null 2>&1
+eq "clone writes .args too" "--workspace ws --key-path ws/vendor" "$(tr '\n' ' ' < "$SEEDS/.args" 2>/dev/null | sed 's/ $//')"
+eq "the recorded options reproduce the key" "$(S key)" "$(cd "$R" && xargs "$SEED" key < "$SEEDS/.args" 2>/dev/null || true)"
+rm -rf "$R/ws/target"
+[ -d "$SEEDS/.args" ] && bad ".args is not a seed" || ok ".args is a file, never listed as a seed"
+
 echo "name and root"
 unset CARGO_SEED_ROOT
 (cd "$R" && G worktree add -q "$T/wt" -b wt >/dev/null 2>&1)

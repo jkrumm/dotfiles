@@ -21,6 +21,9 @@
 #   --key-path PATH    an extra tree that is part of the key (a vendored dependency tree), repeatable
 #   --name NAME        seeds live under ~/cache/NAME/seed (default: the main repo's directory name, the same from every worktree)
 #
+# `clone` and `build` write the key-deciding options (--workspace, --key-path) to <seeds>/.args, so the disk sweep can print the key
+# of the repo's default branch (cd <main checkout> && cargo-target-seed $(cat .args) key) and keep that seed when it prunes.
+#
 # Environment: CARGO_SEED_ROOT (the seeds' directory), CARGO_SEED_JOBS (the job cap), CARGO_SEED_TOOLCHAIN (replaces `rustc -V`
 # in the key; tests), CARGO_TARGET_DIR (set: clone does nothing, CI keeps its own persistent target).
 #
@@ -169,7 +172,17 @@ relocate() {
         '
 }
 
+# The options that decide the key, kept beside the seeds (one argument per line) so a tool that is not in the repo's Makefile can
+# compute the key it would print: scripts/disk-sweep.sh's `seeds` step keeps the seed of the current key and removes the rest.
+# Written by clone and build; a root that does not exist yet gets none (the first build creates it and writes it).
+record_args() {
+    [ -d "$root" ] || return 0
+    { printf '%s\n' --workspace "$workspace"; local k; for k in ${keypaths[@]+"${keypaths[@]}"}; do printf '%s\n' --key-path "$k"; done; } >"$root/.args.$$" \
+        && mv "$root/.args.$$" "$root/.args" || rm -f "$root/.args.$$"
+}
+
 clone() {
+    record_args
     if [ -n "${CARGO_TARGET_DIR:-}" ]; then return 0; fi # CI's persistent target, or a caller's own
     if [ -e "$target" ]; then return 0; fi               # the worktree's own target: never replaced
     local want seed started tmp list
@@ -216,6 +229,8 @@ prune() {
 build() {
     [ ${#cmd[@]} -gt 0 ] || { echo "cargo-target-seed: build needs \`-- <command...>\`" >&2; usage; }
     local want seed tmp from list
+    mkdir -p "$root"
+    record_args
     want=$(key)
     seed=$root/$want
     if [ -d "$seed" ]; then
