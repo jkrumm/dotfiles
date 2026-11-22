@@ -146,6 +146,8 @@ tmp_sweep_root() {
     printf '%s\0' "$entry"
   done < "$cand_list" > "$list"
   total=$(count_listed "$list")
+  # A read-only tree (a Go module cache writes its directories 0555) cannot be emptied as it is: make the entries writable first.
+  xargs -0 chmod -R u+w -- < "$list" 2>/dev/null || true
   xargs -0 rm -rf -- < "$list" || true # judged by the re-test below, not by rm's exit
   removed=$(count_gone "$list")
   rm -f "$cand_list" "$list"
