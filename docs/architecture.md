@@ -200,6 +200,7 @@ the weatherorb session workflow.
 | `com.jkrumm.iris-testflight-crashes` | iris | 3600s — `scripts/testflight-crashes.ts` from the deploy clone under `jobrun`: reads new TestFlight crash reports from App Store Connect and files one factory Issue per crash signature (`factory issue new --repo iris`) |
 | `com.jkrumm.finances` | finances | KeepAlive — the app from a release dir `~/.finances/releases/<sha>`, started through its `scripts/launch.sh` |
 | `com.jkrumm.finances-backup-push` | finances | 3600s — `scripts/backup-push.sh` from the release dir, pushes the vault backups |
+| `com.jkrumm.finances-market` | finances | 86400s — `jobrun` runs `bin/fin.ts market sync --json` from the release dir, log `~/Library/Logs/finances-market.log` |
 | `com.jkrumm.soloist` | home | KeepAlive — the audio tool `tools/audio/soloist.sh` under `secrets-run` |
 | `com.jkrumm.software-factory` | software-factory | KeepAlive (:7793, loopback; the Console on :7795, loopback, same process — read-only plus the owner's answer verbs, never starts a session; door `factory.test` / `https://factory.<DEV_DOMAIN>`, `config/Caddyfile`) — the factory server (`factory` CLI) from a release dir `~/.software-factory/releases/<sha>`, started through its `scripts/launch.sh` (`secrets-run`, fails closed) |
 | `com.jkrumm.homebridge` | home | KeepAlive — Homebridge for Apple Home, installed by `make homebridge` in the home repo |
