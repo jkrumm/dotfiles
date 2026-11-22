@@ -2,6 +2,8 @@
 
 Hooks are symlinked live into `~/.claude/hooks/`, so a change applies on the next tool call with no install step. Run `make hooks-test` (`bun test hooks/`) after any edit. The map of every hook: `docs/hooks.md`.
 
+The Bash and Write|Edit guards also run under OpenCode (`config/opencode/plugins/claude-guards.js`, `docs/opencode.md` §Parity): they must keep reading the Claude Code payload on stdin and answering with `hookSpecificOutput` (`permissionDecision: "deny"` or `updatedInput`), and a hook that crashes blocks the call there.
+
 ## broad-kill-guard
 
 `hooks/broad-kill-guard.ts` denies pattern kills (`pkill -f`, `killall`, `kill` fed by `pgrep -f`) because they reach other agents' sessions. Kill by pid.

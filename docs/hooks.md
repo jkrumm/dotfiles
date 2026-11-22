@@ -68,6 +68,10 @@ Tests: `scripts/factory-hooks.test.sh`.
 
 Run `make hooks-test` (`bun test hooks/`) after any hook edit.
 
+## Under OpenCode
+
+`oc` runs six of the Bash guards and the Write/Edit one: `config/opencode/plugins/claude-guards.js` feeds each hook the Claude Code payload from the PreToolUse groups of `~/.claude/settings.json` and throws on a deny (`protect-branches` has its own plugin). A hook added to a Bash or Write|Edit matcher in the template reaches OpenCode on the next call; `claude-guards.test.ts` fails until the new hook is named there. What does not run, and why: `docs/opencode.md` §Parity.
+
 ## Debug Logs
 
 `session-env.ts` writes structured JSONL to `~/.claude/logs/YYYY-MM-DD.jsonl`
