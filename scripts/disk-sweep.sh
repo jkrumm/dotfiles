@@ -86,7 +86,9 @@ docker_volumes() {
   VOL_SUMMARY=""
   names=$(with_timeout 60 docker volume ls -q -f dangling=true 2>&1) \
     || { VOL_SUMMARY="volume list FAILED: $(tail -n 1 <<<"$names")"; return 1; }
-  sizes=$(with_timeout 120 docker system df -v --format json 2>/dev/null | with_timeout 10 jq -r '.Volumes[]? | "\(.Name) \(.Size)"' 2>/dev/null) || sizes=""
+  # df -v takes ~10 s on the mini: read it whole first, so jq's own timeout does not run while it waits for docker.
+  sizes=$(with_timeout 120 docker system df -v --format json 2>/dev/null) || sizes=""
+  sizes=$(with_timeout 10 jq -r '.Volumes[]? | "\(.Name) \(.Size)"' <<<"$sizes" 2>/dev/null) || sizes=""
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     if [[ $name =~ ^[0-9a-f]{64}$ ]]; then
