@@ -26,7 +26,7 @@
   <dict>
     <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
-  <!-- 05:00 is the night's run, after the HomeLab's 03:30 restic run and the 01:30 iCloud export, so the night's photos are in the copy.
+  <!-- 05:00 is the night's run, after the HomeLab's 03:30 restic run, so the night's archive is in the copy.
        The same job fires every hour until 22:00 with --if-due: a run that was skipped (volume unreadable or HomeLab away, exit 3) or
        failed is tried again within the hour it can work, and once the copy is clean (younger than 18 h; 6 h while red) a trigger is a
        one-second no-op that never reads the volume (decided from the local last-run record, before the gate). Calendar intervals, so a fire missed asleep runs on wake. Not RunAtLoad: nothing here belongs on the boot path. -->

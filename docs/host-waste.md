@@ -28,7 +28,7 @@ no real run uses (7311 and 7312 s) and fails on a surviving sleep with either; i
 
 Photos runs scene, face and text analysis over the library in the background and throttles it only while the Mac is busy. The mini never is idle in
 that sense, and since iCloud Photos was set to Download Originals the analysis had 78 GiB to work through. Nothing on the host uses the result (no one
-searches Photos on the mini); the nightly export reads `Photos Library.photoslibrary` through osxphotos and needs no analysis.
+searches Photos on the mini); no job reads `Photos Library.photoslibrary` since the nightly export was retired, so it needs no analysis.
 
 `launchctl disable gui/$(id -u)/com.apple.mediaanalysisd` is launchd's own switch for a user-domain agent. It needs no sudo, survives reboots and
 updates of the plist, and `launchctl enable` undoes it. **It takes effect when the user session next loads, not at once**: the agent was loaded

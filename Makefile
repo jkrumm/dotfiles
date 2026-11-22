@@ -102,7 +102,6 @@ CHROME_DEVTOOLS_VERSION := 1.13.0
 # core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
 # xcodes (Xcode manager) ships from scripts/install-xcodes.sh (pinned, sha256 + signature).
 PYMOBILEDEVICE3_VERSION := 11.50.0
-OSXPHOTOS_VERSION := 0.78.1
 
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
