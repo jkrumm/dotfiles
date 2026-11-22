@@ -243,5 +243,4 @@ make planned-restart               # TTY prompt, or YES=1
 
 A failure before step 4 undrains the queue (nothing happened); from step 4 on it never does, because a half-restarted host with
 leads running into it is worse than a held queue. Not run by an agent: it reboots the host every agent runs on, and a lead's
-own session is one of the terminals it ends. A pending update older than 14 days files one signal asking for this window
-(drift-check, once per set of updates), never a nightly install.
+own session is one of the terminals it ends. A pending update past 14 days stays a `waiting for a restart window` line in the drift report: no signal, no page, never a nightly install.

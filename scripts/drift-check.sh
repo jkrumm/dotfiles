@@ -75,7 +75,6 @@ DEFAULTS_BIN="${DEFAULTS_BIN:-/usr/bin/defaults}"
 PMSET_BIN="${PMSET_BIN:-/usr/bin/pmset}"
 SYSADMINCTL_BIN="${SYSADMINCTL_BIN:-/usr/sbin/sysadminctl}"
 BACKEND_FILE="${BACKEND_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend}"
-FACTORY_BIN="${FACTORY_BIN:-$HOME/.local/bin/factory}"
 SU_DOMAIN="/Library/Preferences/com.apple.SoftwareUpdate"
 
 STATE_DIR="${DRIFT_STATE_DIR:-$HOME/.local/state/drift-check}"
@@ -103,7 +102,6 @@ drift_add() { DRIFTED="${DRIFTED}${1}	${2}
 # pages on its first sight instead of after DRIFT_GRACE_DAYS (the 2026-11-15 restart came the night the
 # setting was found on, not two weeks later).
 IMMEDIATE_KEYS=""
-MACOS_PENDING=""
 STALE_KEYS=""
 drift_now_add() { IMMEDIATE_KEYS="${IMMEDIATE_KEYS}${1}
 "; drift_add "$1" "$2"; }
@@ -208,7 +206,6 @@ check_macos() {
   if [[ -z "$names" ]]; then
     info_add "macOS: no pending updates"
   else
-    MACOS_PENDING="$names"
     drift_add "macos" "macOS update pending: $names (needs a restart window)"
   fi
 }
@@ -347,6 +344,7 @@ check_power_posture
 # never the version — keying on the version would let a fast-releasing upstream
 # reset the clock to zero forever and the grace would never expire.
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
+/bin/rm -f "$STATE_DIR/macos-window-signal" 2>/dev/null || true
 NEW_FIRST_SEEN=""
 STALE=""
 FRESH=""
@@ -366,8 +364,7 @@ while IFS=$'\t' read -r key desc; do
     STALE_KEYS="${STALE_KEYS}${key}
 "
     if [[ "$key" == macos ]]; then
-      # Waiting for the owner's restart window (install is off by policy, the signal below asks for it):
-      # reported, never a page.
+      # Waiting for the owner's restart window (install is off by policy): reported, never a page or a signal.
       WAITING="${WAITING}${desc} [${age_d}d]
 "
     else
@@ -383,31 +380,6 @@ $DRIFTED
 EOF
 
 printf '%s' "$NEW_FIRST_SEEN" >"$FIRST_SEEN_FILE" 2>/dev/null || true
-
-# --- A restart window, asked for once ------------------------------------------
-# A pending macOS update that has outlived the grace asks the owner for a window: ONE signal per set of
-# pending updates (a new update replaces the old ask), never one per night. Only the scheduled run files it
-# (--no-push is the on-demand doctor), only on the dev host, and a refused filing is not stamped, so the next
-# daily run tries again. The window itself is `make planned-restart` (docs/recovery-drill.md §4).
-file_window_signal() {
-  local backend stamp="$STATE_DIR/macos-window-signal" text
-  (( NO_PUSH )) && return 0
-  printf '%s' "$STALE_KEYS" | /usr/bin/grep -qxF -- macos || return 0
-  [[ -n "$MACOS_PENDING" ]] || return 0
-  backend=$(/usr/bin/tr -d '[:space:]' < "$BACKEND_FILE" 2>/dev/null || true)
-  [[ "$backend" == "cache" ]] || return 0
-  [[ "$(/bin/cat "$stamp" 2>/dev/null || true)" == "$MACOS_PENDING" ]] && return 0
-  [[ -x "$FACTORY_BIN" ]] || { skip_add "restart-window signal (factory CLI missing)"; return 0; }
-  text="Pending for ${DRIFT_GRACE_DAYS}+ days: ${MACOS_PENDING}. Automatic install is off by policy, so it needs a planned restart. Pick a quiet hour and run, from the MacBook: make -C ~/SourceRoot/dotfiles planned-restart (DRY_RUN=1 prints the steps first). Procedure: docs/recovery-drill.md section 4."
-  if /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' 20 "$FACTORY_BIN" signal file --from agent:dotfiles --repo dotfiles \
-       --title "macOS update pending ${DRIFT_GRACE_DAYS}+ days: the mini needs a restart window" --text "$text" >/dev/null 2>&1; then
-    printf '%s' "$MACOS_PENDING" > "$stamp" 2>/dev/null || true
-    info_add "restart-window signal filed ($MACOS_PENDING)"
-  else
-    skip_add "restart-window signal (factory refused or unreachable)"
-  fi
-}
-file_window_signal
 
 # --- Report ------------------------------------------------------------------
 join_lines() { printf '%s' "$1" | /usr/bin/grep -v '^$' | /usr/bin/tr '\n' ';' | /usr/bin/sed 's/;$//; s/;/; /g'; }

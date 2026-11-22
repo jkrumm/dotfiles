@@ -84,7 +84,7 @@ esac
 [ -f "$ST/defaults_none" ] && exit 1
 cat "$ST/defaults_out"
 EOF
-# The factory CLI: records its argv one per line, then a marker; fails when $ST/factory_fail exists.
+# The factory CLI on PATH: records its argv one per line, then a marker, so a test can prove no call was made; fails when $ST/factory_fail exists.
 cat > "$BIN/factory" <<'EOF'
 #!/bin/sh
 [ -f "$ST/factory_fail" ] && exit 1
@@ -132,7 +132,6 @@ unset TAILSCALE_BIN TAILSCALE_SOCKET DRIFT_PUSH_URL
 export DOTFILES_DIR="$TMP/dotfiles"
 export DRIFT_MAKEFILE="$TMP/Makefile"
 export GIT_BIN="$BIN/git" BREW_BIN="$BIN/brew" DATE_BIN="$BIN/date"
-export FACTORY_BIN="$BIN/factory"
 export DEFAULTS_BIN="$BIN/defaults" PMSET_BIN="$BIN/pmset" SYSADMINCTL_BIN="$BIN/sysadminctl"
 PYTHON_BIN=$(command -v python3); export PYTHON_BIN
 export DRIFT_STATE_DIR="$TMP/state" BREW_UPGRADE_STAMP="$TMP/brew-stamp"
@@ -307,39 +306,26 @@ assert_eq "not the dev host: the setting is not asserted" "$(push_msg)" "everyth
 dev; printf '1\n' > "$ST/AutomaticallyInstallMacOSUpdates"; run --no-push
 assert_eq "--no-push still exits 1 on auto install" "$RC" 1
 
-echo "a pending update past the grace asks for a window, once"
+echo "a pending macOS update is a report line: never a factory call, never a page"
 SAFARI_261='(\n  {\n  "Display Name" = "Safari 26.1";\n  Identifier = "MSU_UPDATE_26.1_patch";\n },\n)\n'
-SAFARI_262='(\n  {\n  "Display Name" = "Safari 26.2";\n  Identifier = "MSU_UPDATE_26.2_patch";\n },\n)\n'
 pend() { dev; rm "$ST/defaults_none"; printf "$SAFARI_261" > "$ST/defaults_out"; }
 nsignals() { if [ -f "$ST/factory.log" ]; then grep -c -- '--end--' "$ST/factory.log" || true; else echo 0; fi; }
-pend; first_seen macos:13; run
-assert_eq "13d: no signal yet" "$(nsignals)" 0
 pend; first_seen macos:14; run
-assert_eq "14d: exactly one signal filed" "$(nsignals)" 1
-assert_contains "signal goes out from agent:dotfiles to dotfiles" "$(tr '\n' ' ' < "$ST/factory.log")" "signal file --from agent:dotfiles --repo dotfiles --title macOS update pending 14+ days: the mini needs a restart window --text Pending for 14+ days: Safari 26.1."
-assert_contains "signal names the procedure" "$(cat "$ST/factory.log")" "planned-restart"
-assert_contains "signal reported in the terminal" "$OUT" "restart-window signal filed (Safari 26.1)"
-rm -f "$ST/factory.log"; first_seen macos:15; run
-assert_eq "next night, same update: no second signal" "$(nsignals)" 0
-printf "$SAFARI_262" > "$ST/defaults_out"; first_seen macos:16; run
-assert_eq "a different pending update asks again" "$(nsignals)" 1
-pend; rm -f "$DRIFT_STATE_DIR/macos-window-signal"; first_seen macos:20; touch "$ST/factory_fail"; run
-assert_contains "factory refused: skipped, not drift" "$(push_msg)" "restart-window signal (factory refused or unreachable)"
-rm "$ST/factory_fail"; rm -f "$ST/factory.log"; run
-assert_eq "a refused filing is not stamped: the next run files it" "$(nsignals)" 1
-pend; rm -f "$ST/factory.log"; first_seen macos:20; run --no-push
-assert_eq "--no-push (doctor) never files" "$(nsignals)" 0
-reset; rm -f "$BACKEND_FILE"; rm "$ST/defaults_none"; printf "$SAFARI_261" > "$ST/defaults_out"; first_seen macos:30; run
-assert_eq "not the dev host: no signal" "$(nsignals)" 0
+assert_eq "14d pending: up" "$(push_status)" up
+assert_eq "14d pending: exit 0" "$RC" 0
+assert_eq "14d: no factory call" "$(nsignals)" 0
+assert_contains "14d: the msg names the wait" "$(push_msg)" "waiting for a restart window: macOS update pending: Safari 26.1 (needs a restart window) [14d]"
+pend; rm -f "$ST/factory.log"; first_seen macos:30; run
+assert_eq "pending update at 30 days files nothing" "$(nsignals)" 0
+assert_eq "30d pending: up" "$(push_status)" up
+assert_eq "30d pending: exit 0" "$RC" 0
+assert_contains "30d: the msg names the wait" "$(push_msg)" "waiting for a restart window: macOS update pending: Safari 26.1 (needs a restart window) [30d]"
+assert_not_contains "30d: it is not STALE" "$(push_msg)" "STALE"
+assert_not_contains "30d: the terminal reports no filing" "$OUT" "filed"
+pend; printf 'Safari 26.1\n' > "$DRIFT_STATE_DIR/macos-window-signal"; first_seen macos:20; run
+assert_eq "a leftover stamp is deleted on the next run" "$([ -e "$DRIFT_STATE_DIR/macos-window-signal" ] && echo yes || echo no)" no
 
 echo "a pending macOS update never pages, whatever its age"
-pend; rm -f "$ST/factory.log"; first_seen macos:19; run
-assert_eq "macOS pending 19d, all else current: push up" "$(push_status)" up
-assert_eq "macOS pending 19d: exit 0" "$RC" 0
-assert_contains "the msg names the pending update and the wait" "$(push_msg)" "waiting for a restart window: macOS update pending: Safari 26.1 (needs a restart window) [19d]"
-assert_not_contains "it is not STALE" "$(push_msg)" "STALE"
-assert_contains "the terminal report names it" "$OUT" "… macOS update pending: Safari 26.1 (needs a restart window) [19d]"
-assert_eq "the restart-window signal is still filed" "$(nsignals)" 1
 pend; first_seen macos:19 xcaddy:15
 printf 'COLLIE_REF := bbbbbbb2222222222222222222222222222222bb\nXCADDY_VERSION = v0.4.1\nCADDY_DNS_MODULE_VERSION = v0.0.3\n' > "$DRIFT_MAKEFILE"; run
 assert_eq "a pin stale 14d+ still pushes down beside a pending macOS update" "$(push_status)" down
