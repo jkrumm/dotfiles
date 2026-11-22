@@ -69,7 +69,6 @@ flags one that is ad-hoc signed (`codesign -dv`) or on a versioned path. A flagg
 `config/tcc-programs.json` fails the check. A job that runs `op` (`OP_JOBS` in the script) must run through the launcher.
 
 
-
 **A LaunchAgent that reads protected folders without a grant of its own: run the reading step through the core.** Its program is `jobrun` and python3, neither of which holds Full Disk Access, so the reading steps run as `hc exec` children of the herdr core and take the bundle's grant (proved 2026-11-14 with `com.jkrumm.icloud-photos-export`, retired 2026-11-22; the pattern stays for the next such job). The job checks `scripts/lib/core-up.sh` before any `hc` call, so a core that is not up at its run time fails that run. The fallback, if `hc exec` ever stops inheriting the grant, is the launcher pattern above (`ProgramArguments` = launcher, then the script) plus one Full Disk Access click on the mini.
 
 Mini, 2026-10-31 (68 agents; the unified log of the last 7 days holds no `AUTHREQ_PROMPTING` from any of them, only from the scratch cores of this work):
