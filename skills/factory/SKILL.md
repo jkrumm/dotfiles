@@ -36,9 +36,11 @@ File no seat. The factory seats the Issue itself: the light row (haiku, high) wh
 
 | Seat | File it when | Per started Issue, 2026-11-22 |
 |-|-|-|
-| none | the default, also for a large feature whose facts carry exact paths and acceptance | lead row 3.81 dollars, 40 min; light row 0.52 |
-| `{"role":"light","moveUp":true}` | a mechanical sweep the light rule would not name: one pattern over many files, proven by a check | |
-| `{"tier":"opus","effort":"high"}` | a design other rows build on (a contract, a data model, an architecture cut), or novel hard logic where a wrong first attempt is costly to undo | 24.78 dollars, 119 min |
+| none | the default, also for a large feature whose facts carry exact paths and acceptance. Example: "add `--json` to `factory read seats`, paths and acceptance in the brief" | lead row 3.81 dollars, 40 min; light row 0.52 |
+| `{"role":"lead","moveUp":true}` | you doubt the lead row finishes it alone; it starts on the lead row and a struggling lead hands over to opus. Example: "a refactor across a shared module with flaky tests" | |
+| `{"tier":"opus","effort":"high"}` | a design other rows build on, or novel hard logic where a wrong first attempt is costly to undo. Example: "the seat record schema three later rows read", with `Seat: opus because ...` in the facts | 24.78 dollars, 119 min |
+
+A mechanical sweep the light rule would not name (one pattern over many files, proven by a check) files `{"role":"light","moveUp":true}`.
 
 - Size is no reason for opus. When a row looks too hard for the lead row, first sharpen its facts or split it.
 - Opus-seated Issues were an eighth of the Issues, over half of the leads' cost and a third of the weekly quota. Say why in the
