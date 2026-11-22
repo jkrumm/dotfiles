@@ -76,7 +76,7 @@ HomeLab, age-encrypted, the recovery root for everything else) is not a source.
 
 ## iCloud Photos export (retired 2026-11-22)
 
-The nightly export (`com.jkrumm.icloud-photos-export`) is retired. The owner chose that over rebuilding the mini's Photos library, which lost its database and originals between 2026-11-20 and 2026-11-22 (about 105 GiB, `docs/disk.md`). Nothing deletes the archive.
+The nightly export (`com.jkrumm.icloud-photos-export`) is retired. The owner chose that over rebuilding the mini's Photos library, which lost its database and originals between 2026-11-20 and 2026-11-22 (about 105 GiB). Nothing deletes the archive.
 
 | Piece | State |
 |-|-|

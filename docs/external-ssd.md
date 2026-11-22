@@ -135,7 +135,7 @@ data directory (`docs/postgres.md`), anything the boot path reads. Spotlight off
 **Docker.** The VM disk and named volumes stay internal. A container bind of a volume directory is allowed only behind the gate, and
 is blocked today by a second constraint: `colima/mounts.mini.txt` is the VM's virtiofs list, and a path in it that is absent at
 `colima start` makes the VM, which is on the boot path, depend on the volume. No volume path goes in that list until a follow-up
-designs it. Candidates for later (sizes from `docs/disk.md`), a question and not a task: `student-enrolment_mysql-data` 29 GiB (IU data,
+designs it. Candidates for later (sizes measured 2026-11-14), a question and not a task: `student-enrolment_mysql-data` 29 GiB (IU data,
 the owner's call), `vps_clickstack-ch-data` 9 GiB (likely waste), and outside Docker `~/.local/state/athena-poc` 22 GiB and
 `~/.cache/cloud-wave` 10 GiB.
 

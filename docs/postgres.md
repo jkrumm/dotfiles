@@ -161,7 +161,7 @@ nightly dump is proven. Both held on 2026-11-21.
   data directory `~/.local/state/athena/pg18` (its `com.iu.athena-postgres` plist was already gone;
   `pgsock/` stays, the bare server serves it), and the cutover dumps under
   `~/.local/state/pg-cutover/*/dumps`. Weatherorb's data and the `colima-athena-poc` disk
-  (`docs/disk.md`, the owner's call) were not touched.
+  (the owner's call) were not touched.
 - **No rollback to the old copies any more.** The bare server is the only copy of what was written
   since the cutover; recovery is the nightly dump (`docs/recovery-drill.md`). `make pg-rollback-drill`
   and `make pg-cutover` need the old container and Athena's data directory and no longer run.
