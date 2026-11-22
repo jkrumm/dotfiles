@@ -705,8 +705,9 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 - **Where it runs:** in a GUI-session terminal on that machine (a herdr-core terminal on the mini, Terminal on the MacBook);
   the login Keychain is only reachable from the GUI session; never `ssh mini 'claude …'`. `claude-relogin` opens it.
 - **Browser:** the registry's `loginBrowser` names the app signed in to the account (`iu` Chrome, the work session; `me`
-  Helium and `me2` Safari, the personal ones). It lives on the MacBook, so a login on the mini opens the code-paste page there
-  and you paste the code into the login terminal (§Re-login); there is no reverse tunnel.
+  Helium and `me2` Safari, the personal ones). It lives on the MacBook, so a login on the mini has the MacBook forward the login's
+  callback port to the mini (`login-forward`) and ends on the approve click; only when that fails the code page opens and a
+  dialog on the MacBook takes the code (§Re-login).
 - **How often:** the access token (8 h) is renewed by the keepalive, but the refresh token ends 30 days after the login
   (`refreshTokenExpiresAt`, not extended by rotation; what the server does past that date is unproven, one report says 55
   days). Plan a re-login every ~30 days, or sooner after a revoke. `claude-account expiry` and the `login/<id>` rows say

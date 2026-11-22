@@ -650,7 +650,19 @@ if [[ "$machine" == mini ]]; then
             echo "claude-relogin: the login terminal for '$id' ($old) is still starting: its approval page opens in a moment, approve there"
             exit 0
           fi
-          if ! login_open_on_mac "$app" "$waiting_url"; then
+          # A forwarded login: the forward may have ended while the login waits (the MacBook slept, the network flapped). Ask for
+          # it again: the page opens with it; "port-busy" means the old one still lives and only the page is opened again.
+          # Without a forward the code page and its dialog take over, the same login completes with the code.
+          opened=0
+          if ! login_url_is_paste "$waiting_url"; then
+            fport=$(login_redirect_port "$waiting_url")
+            if [[ -n "$fport" ]] && login_forward_open "$app" "$fport" "$waiting_url" "$url_file"; then opened=1
+            elif [[ "${CLAUDE_LOGIN_FWD_WHY:-}" != port-busy ]]; then
+              waiting_url=$(login_paste_url "$waiting_url")
+              ( umask 077; printf '%s\n' "$waiting_url" >"$url_file" ) 2>/dev/null
+            fi
+          fi
+          if (( ! opened )) && ! login_open_on_mac "$app" "$waiting_url"; then
             notify "The login for $id still waits for you, but the approval page could not be opened. See the terminal."
             die "the login for '$id' waits in $where; could not open its approval page on the MacBook. Open it yourself ($waiting_url) and approve; if the page shows a code, paste it at the prompt there"
           fi

@@ -528,12 +528,22 @@ assert_contains "...the owner is notified where the code goes: the dialog" "past
 assert_contains "...and the caller is told the same" "already waits: its approval page is open again in Helium; the code goes into the dialog on the MacBook" "$(cat "$TMP/out")"
 assert_eq "...the code dialog is open again (a cancelled one is reopened by asking again)" "1" "$(grep -c 'iumac\]\[login-code' "$LOG")"
 reset; mkdir -p "$TMP/state"; echo "$URL" > "$TMP/state/me.relogin-url"
-STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
-assert_eq "waiting login with a forwarded callback: rc 0" 0 "$rc"
+STUB_FWD=busy STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
+assert_eq "waiting login with a forwarded callback, the forward still alive (port-busy): rc 0" 0 "$rc"
 assert_eq "...its approval page is opened again (the original URL)" "Helium|$URL" "$(paste -sd'|' "$TMP/ssh-open-stdin")"
 assert_contains "...the owner is told to approve, nothing to paste" "the login finishes by itself" "$(cat "$TMP/ssh-stdin")"
 assert_contains "...and the caller is told the same" "approve there, nothing to paste" "$(cat "$TMP/out")"
-assert_eq "...no code dialog, no new forward" "0/0" "$(grep -c 'login-code' "$LOG")/$(grep -c 'login-forward' "$LOG")"
+assert_eq "...no code dialog" "0" "$(grep -c 'login-code' "$LOG")"
+reset; mkdir -p "$TMP/state"; echo "$URL" > "$TMP/state/me.relogin-url"
+STUB_HC_EXISTING=live bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?
+assert_eq "waiting login whose forward has ended: the forward is asked for again, its verb opens the page" "0/Helium|58876|$URL/no" "$rc/$(paste -sd'|' "$TMP/ssh-fwd-stdin")/$([[ -e "$TMP/ssh-open-stdin" ]] && echo yes || echo no)"
+assert_contains "...and the owner is told to approve" "the login finishes by itself" "$(cat "$TMP/ssh-stdin")"
+rm -rf "$TMP/state"; wait_for "$TMP/fwd-state" closed
+reset; mkdir -p "$TMP/state"; echo "$URL" > "$TMP/state/me.relogin-url"
+STUB_FWD=down STUB_HC_EXISTING=live STUB_CODE='abcdef123456#zzstate99' bash "$RELOGIN" me >"$TMP/out" 2>"$TMP/err"; rc=$?; wait_dialog
+assert_eq "waiting login with no forward to be had: the code page opens and the dialog takes over" "0/Helium|$PASTE" "$rc/$(paste -sd'|' "$TMP/ssh-open-stdin")"
+assert_eq "...the page is kept as the code page" "$PASTE" "$(cat "$TMP/state/me.relogin-url")"
+assert_eq "...what is typed reaches the login's terminal" "send --force relogin-me abcdef123456#zzstate99" "$(cat "$TMP/hc-send")"
 assert_not_contains "...nothing new started, nothing killed" "hc[run]" "$c"
 assert_eq "...the waiting terminal is left alone" 0 "$(count 'hc\[kill\]')"
 reset; mkdir -p "$TMP/state"; : > "$TMP/state/me.relogin-url"
