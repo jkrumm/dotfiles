@@ -8,3 +8,4 @@
 ~/IuRoot/worktrees/prometheus-dashboard ro
 ~/.local/state/prometheus-scripts rw
 ~/SourceRoot/basalt-ui-obsidian ro
+~/SourceRoot/vps/clickstack ro
