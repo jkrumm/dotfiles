@@ -161,6 +161,15 @@ Chrome 157 on `127.0.0.1:9223`; CLI reference: [docs/cli.md](https://github.com/
 - **Page ids are shared** by every agent using the daemon, so an agent finds its page as the id that is new after its own `tab-new`
   and addresses only that one.
 
+### A slow start is not a dead start
+
+On 2026-11-20, -21 and -22 the shared Chrome failed to start in runs of three ("Chrome never answered on its DevTools port"). On 2026-11-22 the mini was
+overloaded (load average 16 to 31 on 12 cores, swap 3.8 of 5.1 GB used) and Chrome's launch steps took seconds each, so it needed
+more than the old 20 s to open its port; on an idle machine it answers in 0.5 s. The supervisor now waits `SHARED_CHROME_START_MS`
+(120 s) before it kills a Chrome that has not answered, and `ensure` and `devtools` wait `SHARED_CHROME_ENSURE_MS` (90 s, capped
+1 s below the start limit so `ensure` never prints the URL of a Chrome the supervisor is about to kill). A start slower than 5 s
+logs `Chrome answered after <n> s`; when `ensure` gives up first, the supervisor is still waiting and a retry may find Chrome up.
+
 ## Strict MCP
 
 Proved 2026-11-16 on Claude Code 2.1.325, interactive sessions in `hc run` terminals (never `claude -p`), scratch dirs, a `.mcp.json` server that writes a marker file on start:

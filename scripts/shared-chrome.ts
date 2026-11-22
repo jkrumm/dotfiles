@@ -27,7 +27,7 @@ const HOME = env.HOME ?? ""
 
 /** Every verb the dispatch accepts, in help order; `caller` set = meant for a job, not for agents. */
 export const VERB_HELP: { name: string; summary: string; caller?: string }[] = [
-  { name: "ensure", summary: "start Chrome if it is not answering, print its DevTools URL on stdout, exit 0 (1 when it did not come up in 25 s)" },
+  { name: "ensure", summary: "start Chrome if it is not answering, print its DevTools URL on stdout, exit 0 (1 when it did not come up in 90 s)" },
   { name: "devtools", summary: "ensure Chrome, then the chrome-devtools daemon attached to it (starts it when none runs): the one verb to run before `chrome-devtools` traces, Lighthouse and CSS; exit 1 when the daemon is attached elsewhere (--autoConnect), which it never touches" },
   { name: "status", summary: "chrome up/down, supervisor pid, the chrome-devtools daemon, one line per browser context; exit 0 when up, 1 when down" },
   { name: "stop", summary: "stop the supervisor and with it Chrome and the chrome-devtools daemon; prints `stopped` (exit 0) or `still answering` (exit 1)" },
@@ -49,7 +49,8 @@ No verb takes a flag. Chrome listens on 127.0.0.1 only; every agent works in its
 The chrome-devtools daemon is one per user and shared-chrome owns it: agents never run its \`start\` or \`stop\`; it stops with Chrome.
 Environment (defaults in CONFIG): SHARED_CHROME_PORT (9223), SHARED_CHROME_BIN, SHARED_CHROME_PROFILE, SHARED_CHROME_STATE,
 SHARED_CHROME_LABEL, SHARED_CHROME_LOG, SHARED_CHROME_IDLE_MS, SHARED_CHROME_GRACE_MS, SHARED_CHROME_POLL_MS,
-SHARED_CHROME_DEVTOOLS_BIN (chrome-devtools), SHARED_CHROME_PROBE_MS (15000).
+SHARED_CHROME_DEVTOOLS_BIN (chrome-devtools), SHARED_CHROME_PROBE_MS (15000), SHARED_CHROME_START_MS (120000: how long the
+supervisor waits for a new Chrome to answer), SHARED_CHROME_ENSURE_MS (90000: how long ensure and devtools wait; capped 1 s below START_MS).
 Exit: 0 ok · 1 verb failed or Chrome down (status) · 2 unknown verb.
 `
 
@@ -65,6 +66,9 @@ export const CONFIG = {
   pollMs: Number(env.SHARED_CHROME_POLL_MS ?? 30_000),
   devtoolsBin: env.SHARED_CHROME_DEVTOOLS_BIN ?? "chrome-devtools",
   probeMs: Number(env.SHARED_CHROME_PROBE_MS ?? 15_000), // a daemon busy with another agent's trace answers late, not never
+  startMs: Number(env.SHARED_CHROME_START_MS ?? 120_000), // how long the supervisor waits for a new Chrome to answer before it kills it; a loaded machine starts Chrome in tens of seconds
+  // ensureMs must stay below startMs, so `ensure` never hands out a Chrome the supervisor is about to kill
+  ensureMs: Number(env.SHARED_CHROME_ENSURE_MS ?? 90_000),
 }
 
 // ---- chrome-devtools daemon (pure) ----------------------------------------------------------------------------
@@ -384,11 +388,17 @@ async function run(): Promise<number> {
       process.exit(0)
     })
   }
-  if (!adopted && !(await waitFor(async () => (await version()) !== null, 20_000))) {
-    log("Chrome never answered on its DevTools port")
-    await stopChrome()
-    rmSync(pidFile(), { force: true })
-    return 1
+  if (!adopted) {
+    const startedAt = Date.now()
+    const answered = await waitFor(async () => (await version()) !== null, CONFIG.startMs)
+    const seconds = Math.round((Date.now() - startedAt) / 1000)
+    if (!answered) {
+      log(`Chrome never answered on its DevTools port in ${seconds} s`)
+      await stopChrome()
+      rmSync(pidFile(), { force: true })
+      return 1
+    }
+    if (seconds > 5) log(`Chrome answered after ${seconds} s`)
   }
 
   let state: PlanState = { units: {}, emptySince: Date.now() }
@@ -463,8 +473,11 @@ async function ensureChrome(): Promise<boolean> {
     const out = openSync(CONFIG.log, "a")
     spawn(process.execPath, [import.meta.path, "run"], { detached: true, stdio: ["ignore", out, out], env }).unref()
   }
-  if (!(await waitFor(async () => (await version()) !== null && supervisorPid() !== null, 25_000, 250))) {
-    console.error(`shared Chrome did not come up; see ${CONFIG.log}`)
+  const waitMs = Math.max(1000, Math.min(CONFIG.ensureMs, CONFIG.startMs - 1000))
+  if (!(await waitFor(async () => (await version()) !== null && supervisorPid() !== null, waitMs, 250))) {
+    console.error(
+      `shared Chrome did not come up in ${Math.round(waitMs / 1000)} s; the supervisor keeps waiting up to ${Math.round(CONFIG.startMs / 1000)} s, so a retry may find it up; see ${CONFIG.log}`,
+    )
     return false
   }
   return true

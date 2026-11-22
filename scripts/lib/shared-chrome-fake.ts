@@ -3,6 +3,8 @@
 // --remote-debugging-port flag, answers /json/version and the four Target.* calls the supervisor makes, and
 // lets the test edit the world over POST /_fake/{context,page,title}.
 const port = Number(process.argv.find((a) => a.startsWith("--remote-debugging-port="))?.split("=")[1])
+// A loaded machine starts Chrome slowly: FAKE_CHROME_DELAY_MS holds the DevTools port closed that long.
+await Bun.sleep(Number(process.env.FAKE_CHROME_DELAY_MS ?? 0))
 const contexts = new Set<string>()
 const pages = new Map<string, { targetId: string; type: string; url: string; title: string; browserContextId: string }>()
 pages.set("p0", { targetId: "p0", type: "page", url: "about:blank", title: "", browserContextId: "default" })

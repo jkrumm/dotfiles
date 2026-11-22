@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { DISPATCHED, HELP, VERB_HELP, daemonOf, plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
+import { CONFIG, DISPATCHED, HELP, VERB_HELP, daemonOf, plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
 
 const cfg = { idleMs: 1000, graceMs: 500 }
 const page = (id: string, ctx: string, url = "https://a.test/", title = ""): TargetInfo => ({
@@ -97,6 +97,12 @@ describe("help", () => {
     expect(run("frobnicate").exitCode).toBe(2)
     expect(run("frobnicate", "--help").exitCode).toBe(2) // help is for a verb that exists
     rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe("start limits", () => {
+  test("ensure waits less than the supervisor does, so it never hands out a Chrome about to be killed", () => {
+    expect(CONFIG.ensureMs).toBeLessThan(CONFIG.startMs)
   })
 })
 
@@ -258,6 +264,35 @@ esac
     expect(r.stderr.toString()).toContain("status failed")
     expect(cli("status", broken).stdout.toString()).toMatch(/devtools: +unreadable/)
   })
+
+  const logText = () => (existsSync(env.SHARED_CHROME_LOG) ? readFileSync(env.SHARED_CHROME_LOG, "utf8") : "")
+
+  test("a Chrome that answers later than the supervisor waits is given up on: it logs it, ensure exits 1", async () => {
+    // answers after 3 s, the supervisor waits 2 s, ensure 1 s (the floor)
+    cli("stop")
+    expect(await until(async () => !(await up()), 5000)).toBe(true)
+    const slow = { FAKE_CHROME_DELAY_MS: "3000", SHARED_CHROME_START_MS: "2000", SHARED_CHROME_ENSURE_MS: "1500" }
+    const r = cli("ensure", slow)
+    expect(r.exitCode).toBe(1)
+    expect(r.stdout.toString()).toBe("")
+    expect(r.stderr.toString()).toContain("did not come up in 1 s")
+    expect(r.stderr.toString()).toContain("keeps waiting up to 2 s")
+    expect(await until(async () => logText().includes("never answered on its DevTools port in 2 s"), 5000)).toBe(true)
+    expect(await up()).toBe(false)
+  }, 20_000)
+
+  test("a slow Chrome inside both limits is waited for: ensure exits 0 and Chrome stays up", async () => {
+    // answers after 2 s; the supervisor waits 6 s, ensure 4.5 s
+    const slow = { FAKE_CHROME_DELAY_MS: "2000", SHARED_CHROME_START_MS: "6000", SHARED_CHROME_ENSURE_MS: "4500" }
+    const r = cli("ensure", slow)
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout.toString().trim()).toBe(base)
+    expect(await up()).toBe(true)
+    expect(cli("status", slow).exitCode).toBe(0)
+    expect(logText()).not.toContain("answered after") // 2 s is under the 5 s a start must exceed to be logged
+    expect(cli("stop").stdout.toString().trim()).toBe("stopped")
+    expect(await up()).toBe(false)
+  }, 20_000)
 
   test("a daemon attached elsewhere is refused and never stopped", async () => {
     const foreign = `pid=777 socket=/tmp/fake start-date=now version=1\nargs=["--viaCli","--auto-connect"]\n`
