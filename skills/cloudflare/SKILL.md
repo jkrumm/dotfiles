@@ -190,7 +190,8 @@ Full pattern and rationale: `vps/docs/edge-cache.md`. Origin nginx sets the head
 **Token split:** rules are set with `CLOUDFLARE_MANAGE_TOKEN` (1Password + servers only); the purge runs in CI with `CACHE_PURGE_TOKEN`, which sits in public repos' GitHub secrets and so stays Zone:Read + Cache Purge only. Seed it without printing it — the VPS service account reads `common/`:
 
 ```bash
-ssh vps "op read 'op://common/cloudflare/CACHE_PURGE_TOKEN'" | gh secret set CLOUDFLARE_PURGE_TOKEN --repo jkrumm/<repo>
+ssh vps "op read 'op://common/cloudflare/CACHE_PURGE_TOKEN'" | { IFS= read -r t && [ -n "$t" ] && printf %s "$t" | gh secret set CLOUDFLARE_PURGE_TOKEN --repo jkrumm/<repo>; }
+# a bare `op read | gh secret set` stores an empty secret and exits 0 when the field is missing
 ```
 
 ### Provision / verify a site — use the vps make targets, not snippets
