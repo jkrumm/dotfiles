@@ -14,6 +14,11 @@ BINDINGS=(
   "cmd-e jk-keys.brain-note"
   # Find in a terminal (app 0.1.13): a keys.json edited by hand has to add the binding itself.
   "terminal:cmd-f terminal.search"
+  # Resize the focused pane from the keyboard (app 0.1.17), 40 px per press.
+  "ctrl-alt-left pane.resize:left"
+  "ctrl-alt-right pane.resize:right"
+  "ctrl-alt-up pane.resize:up"
+  "ctrl-alt-down pane.resize:down"
 )
 
 HOME_DIR="${1:-${HERDR_APP_HOME:-$HOME/.config/herdr-app}}"

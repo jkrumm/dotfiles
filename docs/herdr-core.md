@@ -408,7 +408,8 @@ in `~/Applications/Herdr.app.new.noindex` and applies on the next app start; the
    screen after a reboot, which helps reading a session `hc-resume` is about to resume; off by default),
    `draft_wait` (0.1.20: an agent message waits for an unfinished human draft, default at most a minute, left at the default; `rd say` and
    `hc send` into a terminal someone is typing in), `hc wait --children`, `hc wait` exit codes; app 0.1.15 drag a screenshot
-   or file into a terminal (reaches Claude Code), a layout can name its toast mod, rows as tall as Ghostty.
+   or file into a terminal (reaches Claude Code), a layout can name its toast mod, rows as tall as Ghostty; app 0.1.17
+   `pane.resize` on ctrl-alt-arrows (adopted 2026-11-23, `scripts/herdr-app-keys.sh`).
 Record the result in the update's commit message or a doc line; anything adopted is a tracked change, never a hand edit.
 
 **What breaks it.**

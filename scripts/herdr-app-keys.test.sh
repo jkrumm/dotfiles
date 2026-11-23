@@ -15,7 +15,8 @@ echo "$BASE" > "$T/keys.json"
 "$HERE/herdr-app-keys.sh" "$T" >/dev/null
 expect "binds terminal cmd-f" "$(jq -r '.terminal["cmd-f"]' "$T/keys.json")" "terminal.search"
 expect "binds cmd-e" "$(jq -r '.global["cmd-e"]' "$T/keys.json")" "jk-keys.brain-note"
-expect "other bindings unchanged" "$(jq -c 'del(.global["cmd-e"]) | del(.terminal["cmd-f"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .)"
+expect "binds pane.resize" "$(jq -r '.global["ctrl-alt-left"]' "$T/keys.json")" "pane.resize:left"
+expect "other bindings unchanged" "$(jq -c 'del(.global["cmd-e"], .global["ctrl-alt-left"], .global["ctrl-alt-right"], .global["ctrl-alt-up"], .global["ctrl-alt-down"]) | del(.terminal["cmd-f"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .)"
 expect "terminal section keeps its keys" "$(jq -c '.terminal | del(.["cmd-f"])' "$T/keys.json")" "$(echo "$BASE" | jq -c .terminal)"
 
 # 2. idempotent
