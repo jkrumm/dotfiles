@@ -60,8 +60,9 @@ else
   exit 4
 fi
 
-# 3. Turns in flight.
-working=$("$HC_BIN" ls 2>/dev/null | jq -r '.terminals[] | select(.status == "working") | "    " + .address + "  " + (.name // .where // "-")')
+# 3. Turns in flight, on this machine only: `hc ls` also lists linked machines' terminals (`mini/t14n`), which
+#    live under their own core and holder, so this core's update cannot end them.
+working=$("$HC_BIN" ls 2>/dev/null | jq -r '.terminals[] | select(.status == "working" and (.address | contains("/") | not)) | "    " + .address + "  " + (.name // .where // "-")')
 if [ -n "$working" ]; then
   echo "  working agents (an update may end the program in a terminal, upstream herdr-core #133):"
   echo "$working"
