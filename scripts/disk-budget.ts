@@ -215,10 +215,14 @@ function check(file: string): number {
   if (overCommitted) failures++
 
   const sizes = new Map<string, number>()
+  let scanOk = true
   for (const root of budget.scan) {
     const r = du(["-d", String(budget.scan_depth), expand(root)], SCAN_TIMEOUT_MS)
     // A failed scan only loses the uncovered-path check for this run: every row is then measured on its own below.
-    if (!r.ok && existsSync(expand(root))) console.error(`disk-budget: the scan of ${root} failed; its rows are measured one by one, uncovered paths are not checked this run`)
+    if (!r.ok && existsSync(expand(root))) {
+      scanOk = false
+      console.error(`disk-budget: the scan of ${root} failed; its rows are measured one by one, uncovered paths are not checked this run`)
+    }
     for (const [p, kib] of r.sizes) sizes.set(p, kib)
   }
 
@@ -230,6 +234,8 @@ function check(file: string): number {
     return !at || now.getTime() - Date.parse(at) > REFILE_DAYS * 86_400_000
   }
   let nFiled = 0
+  // Without a scan there is no uncovered-path check: its signals stay on record, so the next run does not file them again.
+  if (!scanOk) for (const key of Object.keys(state.filed)) if (key.startsWith("unknown:")) keep(key)
 
   const rows = budget.rows.map((row) => {
     const path = expand(row.path)
