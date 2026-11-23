@@ -64,20 +64,21 @@ Config changes go through the web UI. API writes would be untested `so` ACTs on
 `DEV2_ADT_WIFI_COMMON`: a wrong one drops every Wi-Fi client.
 
 **Changing a setting through the web UI with a browser agent** (the owner present
-and asking for that one change): spawn the `browser` subagent on Sonnet, since a
-multi-page admin UI needs more than Haiku. Brief it with: `https://192.168.1.1`
-(accept the self-signed certificate), user `user`, the password read from the
+and asking for that one change): spawn the `browser` subagent on Sonnet: Haiku
+loses its way in a multi-page admin UI. Brief it with: `https://192.168.1.1`, user `user`, the password read from the
 linewatch file above and typed, never echoed; one login, stop after two failures
 (lockout). A UI login logs linewatch's poller out until the next poll. Trap: a page
 snapshot of the login field and of the Basic overview prints the admin and Wi-Fi
 passwords into the agent's transcript, so the agent works from screenshots and
-targeted element reads on those pages. The menus (English UI): Advanced → Wireless →
+targeted element reads on those pages; a Wireless Settings screenshot shows the Wi-Fi
+password too, so it deletes its screenshots. Chrome's certificate page needs
+`thisisunsafe` typed; a "one device at a time" prompt means another session is open. The menus: Advanced → Wireless →
 Wireless Settings (per band: SSID, hide, security, mode, channel, width, transmit
 power Low/Middle/High, OFDMA, TWT, BSS colouring), Guest Network, WPS, MAC
 Filtering, Wireless Schedule, Advanced Settings (beacon, DTIM, WMM, Zero-Wait DFS),
 Band Steering, Channel Optimization, EasyMesh, Multi-SSID; Advanced → System → Time
 Settings, LED Control, Reboot Schedule. There is no region setting and no control
-for MU-MIMO or beamforming. Read the change back with `routerctl` afterwards.
+for MU-MIMO or beamforming. Read the change back with `routerctl`.
 
 WAN reconnect and router reboot exist, guarded, in linewatch:
 `make router-reconnect` / `make router-reboot` on the mini (need
