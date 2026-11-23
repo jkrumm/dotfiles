@@ -203,6 +203,7 @@ fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")" \
   "$(rawterm t6bb '{"where":"vps / web","jk.resume.cmd":"make dev"}' "$LOGIN")"
 {
   echo "$(iso $((BOOT - 3600))) not restorable: t9old a / old node"
+  echo "$(iso $((BOOT - 3500))) not restorable: t4nn basalt-ui / plan yesterday-bun"
   echo "$(iso $((BOOT + 100))) not restorable: t4nn basalt-ui / plan bun"
   echo "$(iso $((BOOT + 101))) not restorable: t5aa basalt-ui / docs bun"
   echo "$(iso $((BOOT + 102))) not restorable: t6bb vps / web make"

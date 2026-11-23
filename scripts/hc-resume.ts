@@ -344,7 +344,12 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     if (!id) return
     if (inflight.has(t.address) || attempted.get(t.address) === id) return
     const skip = skipOf(t, argvFallback, rerun !== undefined)
-    if (skip === "running") { unsettled.delete(t.address); skipLogged.delete(t.address); return }
+    if (skip === "running") {
+      unsettled.delete(t.address); skipLogged.delete(t.address)
+      // an opt-in command seen running counts as done: a program the owner stops later is not retyped, only a `restarted` loss is
+      if (rerun !== undefined) attempted.set(t.address, id)
+      return
+    }
     if (skip) { noteSkip(t.address, skip); return }
     const line = rerun !== undefined ? rerunLine(rerun) : resumeLine(labels, t.argv)
     if (!line) { noteSkip(t.address, { reason: rerun !== undefined ? `unusable ${RESUME_CMD} label` : "unusable session label", unknown: false }); return }

@@ -19,7 +19,7 @@
 # Not restorable (issue 3160): a non-Claude program that ran in a named space/tab and was lost with a reboot. hc-resume
 # logs `not restorable: <address> <where> <program>` when it finds the tab at a login shell; `lost` lists those since the
 # boot whose terminal is STILL at a login shell and carries no resume label. They are not part of resumable/running/waiting
-# and never WARN: a tab the owner wants back opts in with the label `jk.resume.cmd` (docs/herdr-core.md §Resume).
+# and never WARN: a tab the owner wants back opts in with the label `jk.resume.cmd` (docs/herdr-core.md §Resume, "Non-Claude programs in named tabs").
 #
 # NEVER starts anything. Any `hc` call starts a core when none answers, so lib/core-up.sh (bare socket connect + ps)
 # runs first and no `hc` is called unless a launchd-born core answers. The only hc traffic is one `terminal.list`

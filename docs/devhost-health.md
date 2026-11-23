@@ -118,7 +118,7 @@ recovery: 25 resumable, 10 running claude, 12 waiting, 3 skipped
 | waiting | resumable, not running, foreground positively a login shell: not typed into yet, or typed and Claude is still loading |
 | skipped | the rest: foreground unknown or another program, which hc-resume never types into |
 
-running + waiting + skipped = resumable. A non-Claude program lost with the boot (a named tab, no resume label) is not in these numbers: the line gains `, N not restorable` and the command prints one `not restorable: <address> <space> / <tab> <program>` per tab still at a shell (JSON: `lost`); it never WARNs. `jk.resume.cmd` opts a tab in to a rerun: `docs/herdr-core.md` §Non-Claude programs. The JSON adds, per terminal, hc-resume's last verdict since boot from
+running + waiting + skipped = resumable. A non-Claude program lost with the boot (a named tab, no resume label) is not in these numbers: the line gains `, N not restorable` and the command prints one `not restorable: <address> <space> / <tab> <program>` per tab still at a shell (JSON: `lost`); it never WARNs. `jk.resume.cmd` opts a tab in to a rerun: `docs/herdr-core.md` §Resume, "Non-Claude programs in named tabs". The JSON adds, per terminal, hc-resume's last verdict since boot from
 `~/Library/Logs/hc-resume.log`: `sent` (at), `skipped` or `failed` (with the reason). A waiting terminal with verdict
 `sent` was typed and Claude has not started yet; one with no verdict is still in hc-resume's queue.
 

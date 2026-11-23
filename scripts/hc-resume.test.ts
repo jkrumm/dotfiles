@@ -595,32 +595,30 @@ test("a labelled non-Claude terminal is rerun, an unlabelled one is reported as 
   const store = memStore()
   const sent: [string, string][] = []
   const logs: string[] = []
-  const ac = new AbortController()
   const labelled = named("t4nn", "basalt-ui / plan", { "jk.resume.cmd": "bun run preview" })
   const unlabelled = named("t5aa", "basalt-ui / docs")
   const helper = { address: "t6zz", argv: shell } as Terminal // no space/tab: unnamed helper, lost silently on purpose
-  let opens = 0
   const link = (msgs: Msg[]): Link => ({ messages: (async function* () { yield* msgs })(), close() {} })
+  // two hc-resume processes, as in life: the first dies with the host, the second starts after the boot on the same state file
+  const boot = (msgs: Msg[], clock: number) => {
+    const ac = new AbortController()
+    let opens = 0
+    return Promise.race([run({
+      open: async () => { if (opens++ === 0) return link(msgs); ac.abort(); return link([]) },
+      send: async (a, l) => { sent.push([a, l]) },
+      log: (l) => logs.push(l),
+      backoffMs: [5, 10],
+      pacing: { staggerMs: 0 },
+      lost: { store, bootedAtMs: BOOT, now: () => clock },
+      signal: ac.signal,
+    }), Bun.sleep(3000)])
+  }
   const t0 = Date.now()
-  const done = run({
-    open: async () => {
-      opens++
-      // before the reboot: both run bun, the helper runs sleep
-      if (opens === 1) return link([{ kind: "snapshot", terminals: [running(labelled, ["bun", "run", "preview"]), running(unlabelled, ["/x/bin/bun", "dev"]), running(helper, ["sleep", "9"])] }])
-      // after the reboot: all three sit at a fresh login shell
-      if (opens === 2) return link([{ kind: "snapshot", terminals: [atShell(labelled), atShell(unlabelled), atShell(helper)] }])
-      ac.abort()
-      return link([])
-    },
-    send: async (a, l) => { sent.push([a, l]) },
-    log: (l) => logs.push(l),
-    backoffMs: [5, 10],
-    pacing: { staggerMs: 0 },
-    // the program was seen "before the boot" (the clock reads before BOOT while the first snapshot is observed)
-    lost: { store, bootedAtMs: BOOT, now: () => (opens < 2 ? BOOT - 1000 : BOOT + 1000) },
-    signal: ac.signal,
-  })
-  await Promise.race([done, Bun.sleep(3000)])
+  // before the reboot: both run bun, the helper runs sleep
+  await boot([{ kind: "snapshot", terminals: [running(labelled, ["bun", "run", "preview"]), running(unlabelled, ["/x/bin/bun", "dev"]), running(helper, ["sleep", "9"])] }], BOOT - 1000)
+  expect(sent).toEqual([])
+  // after the reboot: all three sit at a fresh login shell
+  await boot([{ kind: "snapshot", terminals: [atShell(labelled), atShell(unlabelled), atShell(helper)] }], BOOT + 1000)
   expect(Date.now() - t0).toBeLessThan(3000)
   expect(sent).toEqual([["t4nn", "bun run preview"]])
   expect(logs).toContain("not restorable: t5aa basalt-ui / docs bun")
@@ -643,6 +641,15 @@ test("jk.resume.cmd: typed once at a login shell, never into a running program, 
   r.handle({ kind: "snapshot", terminals: [atShell(named("t1", "a / b", label))] })
   await r.settled()
   expect(sent).toHaveLength(1)
+  // a command seen running is not retyped when the owner stops it later; a restarted loss types it again
+  const seen = harness()
+  seen.r.handle({ kind: "snapshot", terminals: [running(named("t1", "a / b", label), ["make", "dev"])] })
+  seen.r.handle({ kind: "snapshot", terminals: [atShell(named("t1", "a / b", label))] })
+  await seen.r.settled()
+  expect(seen.sent).toEqual([])
+  seen.r.handle({ kind: "restarted", terminals: [named("t1", "a / b", label)] })
+  await seen.r.settled()
+  expect(seen.sent).toEqual([["t1", "make dev"]])
   // a Claude session label wins over the command label
   const both = harness()
   both.r.handle(snap(term({ labels: { "jk.claude.session": ID, "jk.resume.cmd": "make dev" } })))
