@@ -16,6 +16,11 @@
 # running + waiting + skipped = resumable. Each terminal also carries hc-resume's last verdict since boot, read from
 # ~/Library/Logs/hc-resume.log: sent (at), skipped / failed (with the reason).
 #
+# Not restorable (issue 3160): a non-Claude program that ran in a named space/tab and was lost with a reboot. hc-resume
+# logs `not restorable: <address> <where> <program>` when it finds the tab at a login shell; `lost` lists those since the
+# boot whose terminal is STILL at a login shell and carries no resume label. They are not part of resumable/running/waiting
+# and never WARN: a tab the owner wants back opts in with the label `jk.resume.cmd` (docs/herdr-core.md §Resume).
+#
 # NEVER starts anything. Any `hc` call starts a core when none answers, so lib/core-up.sh (bare socket connect + ps)
 # runs first and no `hc` is called unless a launchd-born core answers. The only hc traffic is one `terminal.list`
 # request over `hc connect`, bounded at 5 s. Writes nothing but, in the heartbeat path, one line to the snapshot log.
@@ -62,8 +67,23 @@ _recovery_verdicts() {
   ' "$log"
 }
 
+# hc-resume.log lines since <since-epoch> -> `<address>\t<where>\t<program>`, one per line, in log order:
+#   <iso> not restorable: <address> <where, may hold spaces> <program>
+_recovery_lost() {
+  local since="$1" log="${RECOVERY_RESUME_LOG:-$HOME/Library/Logs/hc-resume.log}" since_iso
+  [[ -r "$log" ]] || return 0
+  since_iso=$(/bin/date -u -r "$since" +%Y-%m-%dT%H:%M:%S 2>/dev/null) || since_iso=""
+  /usr/bin/awk -v since="$since_iso" '
+    substr($1, 1, 19) < since { next }
+    $2 == "not" && $3 == "restorable:" && NF >= 6 {
+      where = $5
+      for (i = 6; i < NF; i++) where = where " " $i
+      printf "%s\t%s\t%s\n", $4, where, $NF }
+  ' "$log"
+}
+
 recovery_measure() {
-  local since="${1:-0}" hc="${HC_BIN:-$HOME/.local/bin/hc}" jq="${JQ_BIN:-/usr/bin/jq}" raw terminals verdicts
+  local since="${1:-0}" hc="${HC_BIN:-$HOME/.local/bin/hc}" jq="${JQ_BIN:-/usr/bin/jq}" raw terminals verdicts lost
   RECOVERY_JSON="" RECOVERY_WHY=""
   core_up || { RECOVERY_WHY="$CORE_UP_WHY"; return 1; }
   [[ -x "$hc" ]] || { RECOVERY_WHY="hc not installed at $hc"; return 2; }
@@ -74,8 +94,9 @@ recovery_measure() {
   [[ -n "$terminals" ]] || { RECOVERY_WHY="hc did not answer terminal.list within ${RECOVERY_HC_TIMEOUT:-5}s"; return 2; }
 
   verdicts=$(_recovery_verdicts "$since")
+  lost=$(_recovery_lost "$since")
   # shellcheck disable=SC2016  # jq, not shell
-  RECOVERY_JSON=$("$jq" -c --arg verdicts "$verdicts" '
+  RECOVERY_JSON=$("$jq" -c --arg verdicts "$verdicts" --arg lost "$lost" '
     def base: split("/") | last;
     def argv0: ((.foreground.argv // [])[0] // "");
     def login_shell:
@@ -85,6 +106,12 @@ recovery_measure() {
         and (($a[0] | startswith("-")) or ($a[1:] | any(. == "-l" or . == "--login")));
     ($verdicts | split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: {kind: .[1], at: .[2], reason: (.[3] // "")}})
       | from_entries) as $v
+    | (. as $all
+       | $lost | split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: {address: .[0], where: .[1], program: .[2]}})
+       | from_entries | [.[]]
+       | map(. as $l | select($all | any(.address == $l.address and .state == "live" and .keep == true
+                                          and ((.labels["jk.claude.session"] // "") == "") and ((.labels["jk.resume.cmd"] // "") == "")
+                                          and login_shell)))) as $lost
     | [.[] | select(.state == "live" and .keep == true and ((.labels["jk.claude.session"] // "") != ""))
        | (if ((argv0 | base) == "claude") or ((.status.app // "") != "") then "running"
           elif login_shell then "waiting" else "skipped" end) as $s
@@ -99,13 +126,20 @@ recovery_measure() {
        waiting: ($r | map(select(.state == "waiting")) | length),
        skipped: ($r | map(select(.state == "skipped")) | length),
        sent: ($r | map(select(.verdict == "sent")) | length),
+       lost: $lost,
        terminals: $r}' <<<"$terminals" 2>/dev/null) || RECOVERY_JSON=""
   [[ -n "$RECOVERY_JSON" ]] || { RECOVERY_WHY="terminal.list is not the JSON this check reads"; return 2; }
   return 0
 }
 
 recovery_line() {
-  "${JQ_BIN:-/usr/bin/jq}" -r '"recovery: \(.resumable) resumable, \(.running) running claude, \(.waiting) waiting, \(.skipped) skipped"' <<<"$RECOVERY_JSON"
+  "${JQ_BIN:-/usr/bin/jq}" -r '"recovery: \(.resumable) resumable, \(.running) running claude, \(.waiting) waiting, \(.skipped) skipped"
+    + (if (.lost | length) > 0 then ", \(.lost | length) not restorable" else "" end)' <<<"$RECOVERY_JSON"
+}
+
+# One `not restorable: <address> <where> <program>` line per lost tab (the heartbeat's one line only counts them).
+recovery_lost_lines() {
+  "${JQ_BIN:-/usr/bin/jq}" -r '.lost[] | "not restorable: \(.address) \(.where) \(.program)"' <<<"$RECOVERY_JSON"
 }
 
 # WARN when fewer are running than are resumable, once the tailnet has been up long enough (ten minutes) that hc-resume's
@@ -172,7 +206,7 @@ recovery_heartbeat() {
   line=$(recovery_line)
   if [[ -n "${DEVHOST_SNAPSHOT_LOG:-}" ]]; then
     "$jq" -c --arg ts "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson up "$uptime_s" --arg age "$age" \
-      '{ts: $ts, up_s: $up, tailnet_up_s: ($age | tonumber? // null), recovery: (del(.terminals))}' <<<"$RECOVERY_JSON" \
+      '{ts: $ts, up_s: $up, tailnet_up_s: ($age | tonumber? // null), recovery: (del(.terminals, .lost) + (if (.lost | length) > 0 then {not_restorable: (.lost | length)} else {} end))}' <<<"$RECOVERY_JSON" \
       >> "$DEVHOST_SNAPSHOT_LOG" 2>/dev/null || true
   fi
   # shellcheck disable=SC2046  # three integers, split on purpose
@@ -205,7 +239,7 @@ recovery_main() {
     else echo "recovery: not measured ($RECOVERY_WHY)"; fi
     return 1
   fi
-  if (( json )); then echo "$RECOVERY_JSON"; else recovery_line; fi
+  if (( json )); then echo "$RECOVERY_JSON"; else recovery_line; recovery_lost_lines; fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

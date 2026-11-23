@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, pacingFromEnv, tailnetRunning, waitForTailnet, coreAvailable, isSubscribeError, listHc, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { DEFAULT_MAX_INFLIGHT, DEFAULT_STAGGER_MS, NotConnecting, RetryLater, createLostTracker, createResumer, fileProgramStore, parseBootTime, isLoginShell, modelFlags, pacingFromEnv, tailnetRunning, waitForTailnet, coreAvailable, isSubscribeError, listHc, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -577,4 +577,138 @@ test("listHc: live kept terminals only; a refused guard never spawns hc", async 
     await expect(listHc(1000, () => false)).rejects.toThrow("not connecting")
     expect(log()).toEqual([])
   })
+})
+
+// --- non-Claude programs in named tabs (issue 3160) ----------------------------------------------------------------
+
+const BOOT = 1_800_000_000_000
+const named = (address: string, where: string, labels: Record<string, string> = {}, over: Partial<Terminal> = {}): Terminal =>
+  ({ address, argv: shell, labels: { where, ...labels }, ...over })
+const running = (t: Terminal, argv: string[]): Terminal => ({ ...t, foreground: { argv } })
+const atShell = (t: Terminal): Terminal => ({ ...t, foreground: { argv: shell } })
+const memStore = (initial: Record<string, import("./hc-resume").Program> = {}) => {
+  let data = initial
+  return { read: () => structuredClone(data), write: (p: Record<string, import("./hc-resume").Program>) => { data = structuredClone(p) }, get: () => data }
+}
+
+test("a labelled non-Claude terminal is rerun, an unlabelled one is reported as not restorable (the 2026-11-23 reboot)", async () => {
+  const store = memStore()
+  const sent: [string, string][] = []
+  const logs: string[] = []
+  const ac = new AbortController()
+  const labelled = named("t4nn", "basalt-ui / plan", { "jk.resume.cmd": "bun run preview" })
+  const unlabelled = named("t5aa", "basalt-ui / docs")
+  const helper = { address: "t6zz", argv: shell } as Terminal // no space/tab: unnamed helper, lost silently on purpose
+  let opens = 0
+  const link = (msgs: Msg[]): Link => ({ messages: (async function* () { yield* msgs })(), close() {} })
+  const t0 = Date.now()
+  const done = run({
+    open: async () => {
+      opens++
+      // before the reboot: both run bun, the helper runs sleep
+      if (opens === 1) return link([{ kind: "snapshot", terminals: [running(labelled, ["bun", "run", "preview"]), running(unlabelled, ["/x/bin/bun", "dev"]), running(helper, ["sleep", "9"])] }])
+      // after the reboot: all three sit at a fresh login shell
+      if (opens === 2) return link([{ kind: "snapshot", terminals: [atShell(labelled), atShell(unlabelled), atShell(helper)] }])
+      ac.abort()
+      return link([])
+    },
+    send: async (a, l) => { sent.push([a, l]) },
+    log: (l) => logs.push(l),
+    backoffMs: [5, 10],
+    pacing: { staggerMs: 0 },
+    // the program was seen "before the boot" (the clock reads before BOOT while the first snapshot is observed)
+    lost: { store, bootedAtMs: BOOT, now: () => (opens < 2 ? BOOT - 1000 : BOOT + 1000) },
+    signal: ac.signal,
+  })
+  await Promise.race([done, Bun.sleep(3000)])
+  expect(Date.now() - t0).toBeLessThan(3000)
+  expect(sent).toEqual([["t4nn", "bun run preview"]])
+  expect(logs).toContain("not restorable: t5aa basalt-ui / docs bun")
+  expect(logs.filter((l) => l.startsWith("not restorable"))).toHaveLength(1) // not the labelled one, not the unnamed helper
+  expect(logs).toContain("resume t4nn jk.resume.cmd (rerun)")
+})
+
+test("jk.resume.cmd: typed once at a login shell, never into a running program, never without the label, never a second command", async () => {
+  const label = { "jk.resume.cmd": "make dev" }
+  const { sent, r } = harness()
+  r.handle({ kind: "snapshot", terminals: [
+    atShell(named("t1", "a / b", label)),
+    running(named("t2", "a / c", label), ["make", "dev"]),
+    atShell(named("t3", "a / d")),
+    atShell(named("t4", "a / e", { "jk.resume.cmd": "make dev\nrm -rf ~" })),
+    atShell(named("t5", "a / f", { "jk.resume.cmd": "  " })),
+  ] })
+  await r.settled()
+  expect(sent).toEqual([["t1", "make dev"]])
+  r.handle({ kind: "snapshot", terminals: [atShell(named("t1", "a / b", label))] })
+  await r.settled()
+  expect(sent).toHaveLength(1)
+  // a Claude session label wins over the command label
+  const both = harness()
+  both.r.handle(snap(term({ labels: { "jk.claude.session": ID, "jk.resume.cmd": "make dev" } })))
+  await both.r.settled()
+  expect(both.sent[0][1]).toStartWith("env ")
+})
+
+test("sendHc accepts a jk.resume.cmd terminal and refuses one whose label changed", async () => {
+  const t = atShell(named("t1", "a / b", { "jk.resume.cmd": "make dev" }))
+  await withFake({ FAKE_TERMINAL: JSON.stringify(t) }, async (log) => {
+    await sendHc("t1", "make dev", "make dev", 5000, () => true)
+    expect(log()).toEqual(["terminal.get", "terminal.send"])
+  })
+  await withFake({ FAKE_TERMINAL: JSON.stringify(t) }, async (log) => {
+    await expect(sendHc("t1", "make other", "make other", 5000, () => true)).rejects.toThrow("no longer carries")
+    expect(log()).toEqual(["terminal.get"])
+  })
+})
+
+test("lost tracker: only a program seen before the boot, in a named tab, is reported once; a program ended after the boot is not", () => {
+  const logs: string[] = []
+  const store = memStore()
+  let clock = BOOT - 5000
+  const tr = createLostTracker({ store, bootedAtMs: BOOT, now: () => clock, log: (l) => logs.push(l) })
+  const a = named("t1", "basalt-ui / plan"), b = named("t2", "basalt-ui / docs"), c = named("t3", "x / y", { "jk.claude.session": ID })
+  tr.handle({ kind: "snapshot", terminals: [running(a, ["/Users/x/.bun/bin/bun", "dev"]), running(b, ["vim"]), running(c, ["claude"])] })
+  expect(Object.keys(store.get()).sort()).toEqual(["t1", "t2"])
+  expect(store.get().t1).toMatchObject({ where: "basalt-ui / plan", program: "bun" })
+  clock = BOOT + 60_000
+  // an unknown foreground after the boot keeps the evidence; the login shell that follows reports each program once
+  tr.handle({ kind: "snapshot", terminals: [{ ...atShell(a), foreground: null }, running(b, ["vim", "x"])] })
+  expect(store.get().t1).toBeDefined()
+  tr.handle({ kind: "snapshot", terminals: [atShell(a)] })
+  tr.handle({ kind: "snapshot", terminals: [atShell(a), atShell(b)] })
+  tr.handle({ kind: "snapshot", terminals: [atShell(a), atShell(b)] })
+  expect(logs).toEqual(["not restorable: t1 basalt-ui / plan bun", "not restorable: t2 basalt-ui / docs vim"])
+  expect(store.get()).toEqual({})
+  // a program that starts and ends after the boot is nobody's loss
+  tr.handle({ kind: "snapshot", terminals: [running(a, ["bun", "dev"])] })
+  tr.handle({ kind: "snapshot", terminals: [atShell(a)] })
+  expect(logs).toHaveLength(2)
+})
+
+test("lost tracker: a restarted event reports a known program regardless of the boot time; the store survives a new tracker", () => {
+  const logs: string[] = []
+  const store = memStore()
+  const first = createLostTracker({ store, bootedAtMs: BOOT, now: () => BOOT + 10, log: (l) => logs.push(l) })
+  first.handle({ kind: "snapshot", terminals: [running(named("t9", "s / t"), ["node", "srv.js"])] })
+  // a new process (hc-resume restarted) reads what the first one stored; seen after the boot, so only the event proves a loss
+  const second = createLostTracker({ store, bootedAtMs: BOOT, now: () => BOOT + 20, log: (l) => logs.push(l) })
+  second.handle({ kind: "restarted", terminals: [named("t9", "s / t")] })
+  expect(logs).toEqual(["not restorable: t9 s / t node"])
+})
+
+test("file store round-trips, tolerates a missing or corrupt file; boot time parses", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hcprog-"))
+  try {
+    const store = fileProgramStore(join(dir, "sub", "programs.json"))
+    expect(store.read()).toEqual({})
+    store.write({ t1: { where: "a / b", program: "bun", seenAt: 5 } })
+    expect(store.read()).toEqual({ t1: { where: "a / b", program: "bun", seenAt: 5 } })
+    writeFileSync(join(dir, "sub", "programs.json"), "{nope")
+    expect(store.read()).toEqual({})
+    writeFileSync(join(dir, "sub", "programs.json"), JSON.stringify({ t1: { where: 1 }, t2: { where: "a", program: "p", seenAt: 1 } }))
+    expect(Object.keys(store.read())).toEqual(["t2"])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+  expect(parseBootTime("{ sec = 1790000000, usec = 123 } Mon Nov 23 2026")).toBe(1790000000_000)
+  expect(parseBootTime("")).toBeNull()
 })

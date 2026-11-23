@@ -195,6 +195,31 @@ fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")"; recovery_heartbeat 1200 "$STAMP" 1 >/
 rm -f "$RECOVERY_RESUME_LOG" "$FACTORY_CALLED" "$SIGSTAMP"
 fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")"
 
+# 8c. not restorable (issue 3160): hc-resume's `not restorable` lines since boot, for tabs still at a login shell without a label
+rawterm() { printf '{"address":"%s","name":"n-%s","state":"live","keep":true,"labels":%s,"status":null,"foreground":{"argv":%s}}' "$1" "$1" "$2" "$3"; }
+fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")" \
+  "$(rawterm t4nn '{"where":"basalt-ui / plan"}' "$LOGIN")" \
+  "$(rawterm t5aa '{"where":"basalt-ui / docs"}' '["bun","dev"]')" \
+  "$(rawterm t6bb '{"where":"vps / web","jk.resume.cmd":"make dev"}' "$LOGIN")"
+{
+  echo "$(iso $((BOOT - 3600))) not restorable: t9old a / old node"
+  echo "$(iso $((BOOT + 100))) not restorable: t4nn basalt-ui / plan bun"
+  echo "$(iso $((BOOT + 101))) not restorable: t5aa basalt-ui / docs bun"
+  echo "$(iso $((BOOT + 102))) not restorable: t6bb vps / web make"
+  echo "$(iso $((BOOT + 103))) not restorable: t7gone a / gone node"
+  echo "$(iso $((BOOT + 104))) not restorable: t4nn basalt-ui / plan bun"
+} > "$RECOVERY_RESUME_LOG"
+measure "$BOOT"
+eq "lost: only the tab still at a shell, no label, since boot, once" "t4nn|basalt-ui / plan|bun" "$(field '[.lost[] | "\(.address)|\(.where)|\(.program)"] | join(";")')"
+eq "lost: not part of the Claude counts" "1 1 0 0" "$(field '"\(.resumable) \(.running) \(.waiting) \(.skipped)"')"
+eq "lost: line counts it" "recovery: 1 resumable, 1 running claude, 0 waiting, 0 skipped, 1 not restorable" "$(recovery_line)"
+eq "lost: named per tab" "not restorable: t4nn basalt-ui / plan bun" "$(recovery_lost_lines)"
+out=$(bash "$HERE/recovery-check.sh" --since "$BOOT"); eq "lost: cli prints the line and the tab" "recovery: 1 resumable, 1 running claude, 0 waiting, 0 skipped, 1 not restorable
+not restorable: t4nn basalt-ui / plan bun" "$out"
+rm -f "$RECOVERY_RESUME_LOG"; fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")"; measure "$BOOT"
+eq "lost: none without log lines" "0" "$(field '.lost | length')"
+eq "lost: line unchanged when none" "recovery: 1 resumable, 1 running claude, 0 waiting, 0 skipped" "$(recovery_line)"
+
 # 9. the CLI: --json, and the not-measured line
 out=$(bash "$HERE/recovery-check.sh" --json --since 0); eq "cli json" 1 "$(/usr/bin/jq -r .resumable <<<"$out")"
 out=$(bash "$HERE/recovery-check.sh" --since 0); eq "cli line" "recovery: 1 resumable, 1 running claude, 0 waiting, 0 skipped" "$out"
