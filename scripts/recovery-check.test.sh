@@ -203,12 +203,12 @@ fixture "$(term t1 aaaaaaaa-1 "$CLAUDE")" \
   "$(rawterm t6bb '{"where":"vps / web","jk.resume.cmd":"make dev"}' "$LOGIN")"
 {
   echo "$(iso $((BOOT - 3600))) not restorable: t9old a / old node"
-  echo "$(iso $((BOOT - 3500))) not restorable: t4nn basalt-ui / plan yesterday-bun"
   echo "$(iso $((BOOT + 100))) not restorable: t4nn basalt-ui / plan bun"
   echo "$(iso $((BOOT + 101))) not restorable: t5aa basalt-ui / docs bun"
   echo "$(iso $((BOOT + 102))) not restorable: t6bb vps / web make"
   echo "$(iso $((BOOT + 103))) not restorable: t7gone a / gone node"
   echo "$(iso $((BOOT + 104))) not restorable: t4nn basalt-ui / plan bun"
+  echo "$(iso $((BOOT - 3500))) not restorable: t4nn basalt-ui / plan yesterday-bun"  # last in the file: it would win if the since filter were gone
 } > "$RECOVERY_RESUME_LOG"
 measure "$BOOT"
 eq "lost: only the tab still at a shell, no label, since boot, once" "t4nn|basalt-ui / plan|bun" "$(field '[.lost[] | "\(.address)|\(.where)|\(.program)"] | join(";")')"
