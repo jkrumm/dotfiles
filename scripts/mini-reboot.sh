@@ -45,9 +45,10 @@ backend="$( [ -f "$BACKEND_FILE" ] && cat "$BACKEND_FILE" || echo op )"
 OP_BIN="$OP_BIN" bash "$HERE/lib/op-signed-in.sh" "$ACCOUNT" || die "1Password is locked for $ACCOUNT: unlock it and re-run"
 remote true 2>/dev/null || die "$HOST is not reachable over ssh"
 
-if remote 'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null' 2>/dev/null; then
-  die "a macOS update prepare is running on $HOST: a forced reboot aborts it and boots the old OS. Let it finish its own restart"
-fi
+# Only pgrep's own "no match" (1) passes: an ssh failure (255) is not evidence that nothing runs. Same pattern: planned-restart.sh, mini-macos-update.sh.
+rc=0
+remote 'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null' 2>/dev/null || rc=$?
+[ "$rc" -eq 1 ] || die "cannot say that no macOS update prepare is running on $HOST (rc=$rc): a forced reboot during one aborts it and boots the old OS"
 
 before="$(remote 'sysctl -n kern.boottime' 2>/dev/null)" || die "could not read the boot time of $HOST"
 say "$HOST is up ($before)"

@@ -34,7 +34,7 @@ printf '%s\n' "$last" >> "$ST/ssh.log"
 case "$last" in
   true)
     if [ -f "$ST/shutdown_sent" ] && [ ! -f "$ST/nodown" ] && [ ! -f "$ST/down_seen" ]; then touch "$ST/down_seen"; exit 255; fi ;;
-  *"pdateBrainService"*) [ -f "$ST/prepare_running" ] || exit 1 ;;
+  *"pdateBrainService"*) [ -f "$ST/pgrep_ssh_fail" ] && exit 255; [ -f "$ST/prepare_running" ] || exit 1 ;;
   *"kern.boottime"*)
     if [ -f "$ST/shutdown_sent" ] && [ ! -f "$ST/same_boot" ]; then echo "{ sec = 200 }"; else echo "{ sec = 100 }"; fi ;;
   *"nohup sudo -S shutdown -r +0"*) cat > "$ST/stdin"; touch "$ST/shutdown_sent" ;;
@@ -142,6 +142,10 @@ assert_eq "a macOS prepare is running: exit 1" "$RC" 1
 assert_contains "says why" "$OUT" "prepare is running"
 assert_not_contains "refused before draining" "$(log)" "queue set drain"
 assert_not_contains "no reboot" "$(log)" "rebooter"
+reset; touch "$ST/pgrep_ssh_fail"; REASON=maintenance run
+assert_eq "ssh fails on the prepare check: exit 1" "$RC" 1
+assert_contains "says it cannot tell" "$OUT" "cannot say"
+assert_not_contains "fails closed: no drain" "$(log)" "queue set drain"
 reset; touch "$ST/updater_fail"; REASON=maintenance run
 assert_eq "reboot applier failed: exit 1" "$RC" 1
 assert_not_contains "after the reboot started the queue is not released" "$(log)" "queue set run"
@@ -176,6 +180,9 @@ assert_contains "says it never rebooted" "$OUT" "it never rebooted"
 reset; touch "$ST/prepare_running"; run_reboot
 assert_eq "a macOS prepare is running: exit 1" "$RC" 1
 assert_not_contains "prepare running: no shutdown" "$(log)" "shutdown -r +0"
+reset; touch "$ST/pgrep_ssh_fail"; run_reboot
+assert_eq "ssh fails on the prepare check: exit 1" "$RC" 1
+assert_not_contains "fails closed: no shutdown" "$(log)" "shutdown -r +0"
 reset; touch "$ST/op_locked"; run_reboot
 assert_eq "1Password locked: exit 1" "$RC" 1
 assert_not_contains "locked: no shutdown" "$(log)" "shutdown -r +0"
