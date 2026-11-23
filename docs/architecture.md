@@ -212,7 +212,7 @@ the weatherorb session workflow.
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |
 | `com.iu.prometheus-vpn-watcher` | IuRoot | KeepAlive |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
-| `com.iu.tool-checkout-deploy` | IuRoot (tool-checkout) | 600s — `prometheus-deploy-gate/gate.py` for the tool-checkout dashboard worktree |
+| `com.iu.tool-checkout-deploy` | IuRoot (epos-tool-athena) | 600s — `prometheus-deploy-gate/gate.py` for the tool-checkout dashboard worktree |
 | `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
 | `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
 | `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
