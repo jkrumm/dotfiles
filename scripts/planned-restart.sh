@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# planned-restart.sh — restart the mini for a pending macOS update, in a window, without stranding the leads.
+# planned-restart.sh — restart the mini in a window, without stranding the leads: for a pending macOS update, or (REASON=maintenance) a plain reboot.
 #
-#   make planned-restart              MacBook-only, TTY or YES=1 (it reboots the host every agent runs on)
-#   DRY_RUN=1 make planned-restart    prints every step with its command and runs NOTHING (no ssh, no factory call)
+#   make planned-restart                      MacBook-only, TTY or YES=1 (it reboots the host every agent runs on)
+#   REASON=maintenance make planned-restart   a plain reboot, no macOS update pending (after brew/cask/Safari/Tailscale upgrades)
+#   DRY_RUN=1 make planned-restart            prints every step with its command and runs NOTHING (no ssh, no factory call)
 #
 # WHY. 2026-11-15 01:09 softwareupdated ran its "tonight" install and restarted the mini at 01:11 with 12 leads
 # working; the host was back at 01:23, 11 sessions stayed down for seven hours and seven Issues were stranded.
@@ -13,13 +14,16 @@
 #   3 quiesce   factory merge-lock / deploy-lock <project> -- true, per project: returns once the running window ended
 #   4 restart   mini-macos-update.sh (YES=1)     the existing applier: pins the label, snapshots the resume labels, waits down and up,
 #                                                asserts the version moved. Its header owns the "do not force a reboot" lesson.
+#               REASON=maintenance: mini-reboot.sh (YES=1) instead: the same snapshot, an op-fed `sudo -S shutdown -r +0`,
+#                                                waits down and up, asserts the boot time moved. Steps 1-3 and 5-6 are unchanged;
+#                                                step 0 no longer needs a pending update.
 #   5 recover   make recovery-check              polls until 0 waiting (hc-resume is paced, minutes)
 #   6 resume    factory queue set run            only after a clean recovery; an unclean one leaves the queue drained and says so
 #
 # A failure before step 4 starts puts the queue back to run (nothing happened). From step 4 on it never silently
 # undrains: a half-restarted host with leads running into it is worse than a drained queue.
 #
-# Overrides (tests): SSH_BIN, MACOS_UPDATE_BIN, MINI_HOST, PLANNED_RESTART_{GRACE,LOCK_WAIT,RECOVER_WAIT,POLL}, BACKEND_FILE.
+# Overrides (tests): SSH_BIN, MACOS_UPDATE_BIN, MINI_REBOOT_BIN, MINI_HOST, PLANNED_RESTART_{GRACE,LOCK_WAIT,RECOVER_WAIT,POLL}, BACKEND_FILE.
 # bash 3.2 (the MacBook's /bin/bash).
 set -euo pipefail
 
@@ -27,7 +31,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST="${MINI_HOST:-mini}"
 SSH_BIN="${SSH_BIN:-ssh}"
 UPDATER="${MACOS_UPDATE_BIN:-$HERE/mini-macos-update.sh}"
+REBOOTER="${MINI_REBOOT_BIN:-$HERE/mini-reboot.sh}"
 DRY_RUN="${DRY_RUN:-0}"
+REASON="${REASON:-update}"
 GRACE="${PLANNED_RESTART_GRACE:-300}"                 # s the leads get to wrap up after the note
 LOCK_WAIT="${PLANNED_RESTART_LOCK_WAIT:-5400}"        # s per lock, the merge lock's own cap
 RECOVER_WAIT="${PLANNED_RESTART_RECOVER_WAIT:-2700}"  # s for hc-resume to bring every terminal back
@@ -39,28 +45,42 @@ MINI_PATH='PATH=$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin'
 
 say() { echo "  $*"; }
 die() { echo "✗ $*" >&2; exit 1; }
+case "$REASON" in
+  update) APPLIER="$UPDATER"; WHAT="macOS update" ;;
+  maintenance) APPLIER="$REBOOTER"; WHAT="maintenance reboot" ;;
+  *) die "unknown REASON '$REASON': use REASON=maintenance for a plain reboot, or leave it unset for a pending macOS update" ;;
+esac
 mini() { "$SSH_BIN" -o ConnectTimeout=6 -o BatchMode=yes "$HOST" "$MINI_PATH; $*"; }
 
-NOTE_TEXT="Planned restart of the mini (macOS update) in about $((GRACE / 60)) min. The queue is draining: start no merge window and no deploy. Commit and push your branch and report or ship what is done; whatever is not done waits. Your terminal is resumed by hc-resume afterwards: re-read git, the pull request and production before you repeat anything."
+NOTE_TEXT="Planned restart of the mini ($WHAT) in about $((GRACE / 60)) min. The queue is draining: start no merge window and no deploy. Commit and push your branch and report or ship what is done; whatever is not done waits. Your terminal is resumed by hc-resume afterwards: re-read git, the pull request and production before you repeat anything."
 
 STEP_DRAIN='factory queue set drain'
 STEP_LIST='factory read sessions --live --format json | jq -r ".sessions[] | select(.role == \"lead\" and .state != \"idle\") | .id"'
 STEP_NOTE='factory session note <lead> "<restart notice>"   (each non-idle lead)'
 STEP_LOCKS='factory merge-lock --project <p> -- true ; factory deploy-lock --project <p> -- true   (every project of the queue)'
-STEP_RESTART="YES=1 $UPDATER"
+STEP_RESTART="YES=1 $APPLIER"
 STEP_RECOVER='make recovery-check ARGS=--json   (until waiting = 0)'
 STEP_RUN='factory queue set run'
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "planned-restart (DRY_RUN=1: nothing below is run)"
-  say "0 preflight   backend must be op (MacBook); $HOST reachable; a macOS update pending ($SU_DOMAIN RecommendedUpdates)"
+  if [ "$REASON" = maintenance ]; then
+    say "0 preflight   backend must be op (MacBook); $HOST reachable; no macOS update needed (REASON=maintenance)"
+  else
+    say "0 preflight   backend must be op (MacBook); $HOST reachable; a macOS update pending ($SU_DOMAIN RecommendedUpdates)"
+  fi
   say "1 drain       on $HOST: $STEP_DRAIN   (refused = stop)"
   say "2 tell        on $HOST: $STEP_LIST"
   say "              on $HOST: $STEP_NOTE"
   say "              note: $NOTE_TEXT"
   say "              then ${GRACE}s for the leads to wrap up"
   say "3 quiesce     on $HOST: $STEP_LOCKS   (${LOCK_WAIT}s per lock)"
-  say "4 restart     here: $STEP_RESTART"
+  if [ "$REASON" = maintenance ]; then
+    say "4 snapshot    on $HOST: resume labels of every Claude terminal to ~/Library/Logs/herdr-core-resume-pre-reboot-<stamp>.tsv (lib/resume-snapshot.sh)"
+    say "4 reboot      here: $STEP_RESTART   (op-fed sudo -S shutdown -r +0, waits down and up, boot time must move)"
+  else
+    say "4 restart     here: $STEP_RESTART"
+  fi
   say "5 recover     on $HOST: $STEP_RECOVER   (up to ${RECOVER_WAIT}s, every ${POLL}s)"
   say "6 resume      on $HOST: $STEP_RUN   (only after step 5 read 0 waiting)"
   say "failure before step 4: the queue is set back to run; from step 4 on it stays drained and the output says so"
@@ -90,11 +110,15 @@ trap on_exit EXIT
 # --- 0 preflight -------------------------------------------------------------
 backend="$( [ -f "$BACKEND_FILE" ] && cat "$BACKEND_FILE" || echo op )"
 [ "$backend" = "op" ] || die "backend is '$backend': run this from the MacBook (the applier needs biometric 1Password)"
-[ -f "$UPDATER" ] || die "applier not found: $UPDATER"
+[ -f "$APPLIER" ] || die "applier not found: $APPLIER"
 mini true >/dev/null 2>&1 || die "$HOST is not reachable over ssh"
-pending="$(mini "defaults read $SU_DOMAIN RecommendedUpdates 2>/dev/null || true" | sed -n 's/.*"Display Name" = "\(.*\)";/\1/p' | tr '\n' ',' | sed 's/,$//')"
-[ -n "$pending" ] || { say "no macOS update pending: nothing to restart for"; exit 0; }
-say "pending: $pending"
+if [ "$REASON" = maintenance ]; then
+  say "maintenance reboot: no macOS update required"
+else
+  pending="$(mini "defaults read $SU_DOMAIN RecommendedUpdates 2>/dev/null || true" | sed -n 's/.*"Display Name" = "\(.*\)";/\1/p' | tr '\n' ',' | sed 's/,$//')"
+  [ -n "$pending" ] || { say "no macOS update pending: nothing to restart for (REASON=maintenance reboots anyway)"; exit 0; }
+  say "pending: $pending"
+fi
 
 if [ "${YES:-0}" != 1 ]; then
   [ -t 0 ] || die "refusing to restart $HOST unattended: re-run with YES=1"
@@ -133,9 +157,9 @@ done
 say "· every merge window and deploy lock is free"
 
 # --- 4 restart ---------------------------------------------------------------
-say "4 restart $HOST (mini-macos-update)"
+say "4 restart $HOST ($(basename "$APPLIER" .sh))"
 RESTARTING=1
-YES=1 bash "$UPDATER"
+YES=1 bash "$APPLIER"
 
 # --- 5 recover ---------------------------------------------------------------
 say "5 wait for the terminals to come back"

@@ -3875,7 +3875,7 @@ planned-restart:
 	@bash $(DOTFILES_DIR)/scripts/planned-restart.sh
 
 planned-restart-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/planned-restart.sh $(DOTFILES_DIR)/scripts/planned-restart.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/planned-restart.sh $(DOTFILES_DIR)/scripts/mini-reboot.sh $(DOTFILES_DIR)/scripts/lib/resume-snapshot.sh $(DOTFILES_DIR)/scripts/planned-restart.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/planned-restart.test.sh
 
 drift-check-setup:
@@ -4238,7 +4238,7 @@ help:
 	@echo "  make mini-up|mini-down NAME=<service>   Start/stop a registered service (core needs FORCE=1)"
 	@echo "  make mini-profile NAME=<work|dev-db> UP=1|0   Start/stop a manual profile"
 	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
-	@echo "  make planned-restart        MacBook-only: the restart window — drain, tell the leads, wait for merges/deploys, update, recover, run (DRY_RUN=1 prints the steps)"
+	@echo "  make planned-restart        MacBook-only: the restart window — drain, tell the leads, wait for merges/deploys, update, recover, run (REASON=maintenance = plain reboot, no update pending; DRY_RUN=1 prints the steps)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
 	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."

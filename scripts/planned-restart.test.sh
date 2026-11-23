@@ -6,6 +6,8 @@
 # Asserted: DRY_RUN prints every step and runs nothing; the order drain -> notes -> locks -> restart -> recover -> run;
 # a refused drain stops before anything else; a failure before the restart puts the queue back; a failure after the
 # restart leaves it drained; "0 waiting" is awaited, not assumed; nothing pending exits 0 without draining.
+# REASON=maintenance: the plain-reboot mode runs the same steps with no update pending and the reboot applier in step 4.
+# mini-reboot.sh (that applier) runs against the same stubs: snapshot, then the op-fed shutdown, then down, up, boot time moved.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,6 +32,12 @@ cat > "$BIN/ssh" <<'EOF'
 for last; do :; done
 printf '%s\n' "$last" >> "$ST/ssh.log"
 case "$last" in
+  true)
+    if [ -f "$ST/shutdown_sent" ] && [ ! -f "$ST/nodown" ] && [ ! -f "$ST/down_seen" ]; then touch "$ST/down_seen"; exit 255; fi ;;
+  *"kern.boottime"*)
+    if [ -f "$ST/shutdown_sent" ] && [ ! -f "$ST/same_boot" ]; then echo "{ sec = 200 }"; else echo "{ sec = 100 }"; fi ;;
+  *"nohup sudo -S shutdown -r +0"*) cat > "$ST/stdin"; touch "$ST/shutdown_sent" ;;
+  *"python3 -"*) cat > /dev/null; echo 2 ;;
   *"RecommendedUpdates"*)
     [ -f "$ST/nopending" ] || printf '    "Display Name" = "macOS Tahoe 26.7.3";\n' ;;
   *"queue set drain"*) [ -f "$ST/drain_fail" ] && exit 1 ;;
@@ -53,9 +61,22 @@ echo "updater YES=${YES:-}" >> "$ST/ssh.log"
 [ -f "$ST/updater_fail" ] && exit 1
 exit 0
 EOF
+cat > "$BIN/rebooter" <<'EOF'
+#!/bin/bash
+echo "rebooter YES=${YES:-}" >> "$ST/ssh.log"
+[ -f "$ST/updater_fail" ] && exit 1
+exit 0
+EOF
+cat > "$BIN/op" <<'EOF'
+#!/bin/sh
+[ -f "$ST/op_locked" ] && exit 1
+[ "$1" = read ] && echo "the-password"
+exit 0
+EOF
 chmod +x "$BIN"/*
 
 export SSH_BIN="$BIN/ssh" MACOS_UPDATE_BIN="$BIN/updater" BACKEND_FILE="$TMP/backend"
+export OP_BIN="$BIN/op" MINI_REBOOT_BIN="$BIN/rebooter" REBOOT_POLL=0 REBOOT_DOWN_WAIT=1 REBOOT_UP_WAIT=1
 export PLANNED_RESTART_GRACE=0 PLANNED_RESTART_POLL=0 PLANNED_RESTART_RECOVER_WAIT=2 PLANNED_RESTART_LOCK_WAIT=10
 export YES=1
 unset DRY_RUN
@@ -95,6 +116,67 @@ assert_contains "the applier runs with YES=1" "$(log)" "updater YES=1"
 d=$(line_of "queue set drain"); n=$(line_of "session note"); l=$(line_of "merge-lock --project alpha"); u=$(line_of "updater"); r=$(line_of "recovery-check"); q=$(line_of "queue set run")
 if [ -n "$d" ] && [ "$d" -lt "$n" ] && [ "$n" -lt "$l" ] && [ "$l" -lt "$u" ] && [ "$u" -lt "$r" ] && [ "$r" -lt "$q" ]; then
   ok "order: drain, notes, locks, restart, recover, run"; else bad "order wrong: $d $n $l $u $r $q"; fi
+
+echo "REASON=maintenance"
+reset; DRY_RUN=1 REASON=maintenance run
+assert_eq "exit 0" "$RC" 0
+for step in "0 preflight" "1 drain" "2 tell" "3 quiesce" "4 snapshot" "4 reboot" "5 recover" "6 resume"; do
+  assert_contains "prints step $step" "$OUT" "$step"
+done
+assert_contains "names the reboot applier" "$OUT" "rebooter"
+assert_not_contains "no update is required" "$OUT" "a macOS update pending"
+assert_eq "touches nothing: no ssh call" "$(wc -l < "$ST/ssh.log" | tr -d ' ')" 0
+reset; touch "$ST/nopending"; REASON=maintenance run
+assert_eq "no update pending, maintenance: exit 0" "$RC" 0
+assert_contains "done line" "$OUT" "planned restart done"
+assert_contains "the reboot applier runs with YES=1" "$(log)" "rebooter YES=1"
+assert_not_contains "the macOS applier does not run" "$(log)" "updater"
+assert_not_contains "no RecommendedUpdates read" "$(log)" "RecommendedUpdates"
+assert_contains "the leads are told it is a maintenance reboot" "$(log)" 'maintenance\ reboot'
+d=$(line_of "queue set drain"); n=$(line_of "session note"); l=$(line_of "merge-lock --project alpha"); u=$(line_of "rebooter"); r=$(line_of "recovery-check"); q=$(line_of "queue set run")
+if [ -n "$d" ] && [ "$d" -lt "$n" ] && [ "$n" -lt "$l" ] && [ "$l" -lt "$u" ] && [ "$u" -lt "$r" ] && [ "$r" -lt "$q" ]; then
+  ok "order: drain, notes, locks, reboot, recover, run"; else bad "order wrong: $d $n $l $u $r $q"; fi
+reset; touch "$ST/updater_fail"; REASON=maintenance run
+assert_eq "reboot applier failed: exit 1" "$RC" 1
+assert_not_contains "after the reboot started the queue is not released" "$(log)" "queue set run"
+assert_contains "and says it stays drained" "$OUT" "stays DRAINED"
+reset; touch "$ST/lock_fail"; REASON=maintenance run
+assert_eq "a lock that does not free: exit 1" "$RC" 1
+assert_not_contains "no reboot with a window running" "$(log)" "rebooter"
+assert_contains "failure before the reboot puts the queue back" "$(log)" "queue set run"
+reset; REASON=bogus run
+assert_eq "unknown REASON: exit 1" "$RC" 1
+assert_contains "names the valid mode" "$OUT" "REASON=maintenance"
+assert_eq "unknown REASON: no ssh at all" "$(wc -l < "$ST/ssh.log" | tr -d ' ')" 0
+
+echo "mini-reboot.sh"
+REBOOT_SRC="$HERE/mini-reboot.sh"
+run_reboot() { RC=0; OUT=$(/bin/bash "$REBOOT_SRC" 2>&1 </dev/null) || RC=$?; }
+reset; run_reboot
+assert_eq "exit 0" "$RC" 0
+assert_contains "says it rebooted" "$OUT" "rebooted"
+assert_contains "the resume snapshot runs" "$(log)" "resume-pre-reboot"
+assert_contains "the shutdown is requested" "$(log)" "shutdown -r +0"
+assert_eq "the password reaches the host over stdin" "$(cat "$ST/stdin")" "the-password"
+assert_not_contains "the password is never an argument" "$(log)" "the-password"
+s=$(line_of "resume-pre-reboot"); d=$(line_of "shutdown -r +0")
+if [ -n "$s" ] && [ -n "$d" ] && [ "$s" -lt "$d" ]; then ok "order: snapshot, then shutdown"; else bad "order wrong: $s $d"; fi
+reset; touch "$ST/nodown" "$ST/same_boot"; REBOOT_DOWN_WAIT=1 REBOOT_POLL=1 run_reboot
+assert_eq "a host that never goes down: exit 1" "$RC" 1
+assert_contains "says so" "$OUT" "never went down"
+reset; touch "$ST/same_boot"; run_reboot
+assert_eq "boot time unchanged: exit 1" "$RC" 1
+assert_contains "says it never rebooted" "$OUT" "it never rebooted"
+reset; touch "$ST/op_locked"; run_reboot
+assert_eq "1Password locked: exit 1" "$RC" 1
+assert_not_contains "locked: no shutdown" "$(log)" "shutdown -r +0"
+reset; echo cache > "$BACKEND_FILE"; run_reboot
+assert_eq "not the MacBook: exit 1" "$RC" 1
+assert_eq "not the MacBook: no ssh at all" "$(wc -l < "$ST/ssh.log" | tr -d ' ')" 0
+reset; unset YES; run_reboot
+assert_eq "no TTY and no YES: refused" "$RC" 1
+assert_not_contains "refused before the shutdown" "$(log)" "shutdown -r +0"
+export YES=1
 
 echo "recovery is awaited"
 reset; echo 2 > "$ST/rc_waiting_calls"; PLANNED_RESTART_RECOVER_WAIT=60 run

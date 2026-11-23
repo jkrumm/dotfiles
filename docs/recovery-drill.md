@@ -220,7 +220,7 @@ stamps: starts 3 s apart, never more than 3 in flight. Set `HC_RESUME_STAGGER_MS
 The automated counterpart is `scripts/hc-resume.test.ts` (hermetic, in `make check`); this drill adds the live core and the
 real shell.
 
-## 4. A planned restart (macOS update): `make planned-restart`
+## 4. A planned restart (macOS update or maintenance): `make planned-restart`
 
 Automatic macOS install is off (`docs/devhost-health.md` §Update policy), so a pending update waits for this, run by the owner
 from the MacBook in a quiet hour. On 2026-11-15 an unplanned install restarted the mini at 01:11 with 12 leads working and
@@ -229,7 +229,10 @@ from the MacBook in a quiet hour. On 2026-11-15 an unplanned install restarted t
 ```
 DRY_RUN=1 make planned-restart     # prints every step with its command and runs nothing
 make planned-restart               # TTY prompt, or YES=1
+REASON=maintenance make planned-restart   # a plain reboot with no macOS update pending
 ```
+
+`REASON=maintenance` is the way to reboot the mini after brew, cask, Safari or Tailscale upgrades: steps 1-3 and 5-6 are unchanged, step 0 no longer needs a pending update, and step 4 is `scripts/mini-reboot.sh` in place of the macOS applier. Without it a run with nothing pending exits 0 at step 0 and reboots nothing.
 
 | Step | What it does | If it fails |
 |-|-|-|
@@ -237,7 +240,7 @@ make planned-restart               # TTY prompt, or YES=1
 | 1 | `factory queue set drain`: no Issue is admitted | refused = stop; an unannounced restart is the incident |
 | 2 | `factory session note` to every non-idle lead: the time, "commit and push, start no merge or deploy, you are resumed afterwards"; then 5 min (`PLANNED_RESTART_GRACE`) | a failed note is named, the run goes on |
 | 3 | for every project of the queue, `factory merge-lock` then `factory deploy-lock` with `-- true`: returns when the running window has ended (up to 90 min each) | a lock that does not free stops the run and puts the queue back to run |
-| 4 | `scripts/mini-macos-update.sh` (YES=1): snapshot of the resume labels, installs, waits down and up, asserts the version moved | the queue **stays drained** and the output says so; the applier's header owns the "never force a reboot" rule |
+| 4 | `scripts/mini-macos-update.sh` (YES=1): snapshot of the resume labels, installs, waits down and up, asserts the version moved. `REASON=maintenance`: `scripts/mini-reboot.sh` (YES=1): the same snapshot (`scripts/lib/resume-snapshot.sh`), an op-fed `sudo -S shutdown -r +0`, waits down and up, asserts the boot time moved | the queue **stays drained** and the output says so; the applier's header owns the "never force a reboot" rule |
 | 5 | polls `make recovery-check ARGS=--json` on the mini until `waiting` is 0 (hc-resume is paced; up to 45 min) | the queue stays drained; read §1 |
 | 6 | `factory queue set run` | the line to run by hand is printed |
 

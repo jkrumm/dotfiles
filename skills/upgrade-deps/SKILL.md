@@ -92,7 +92,11 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
    - **macOS:** majors are held by policy; drift-check reports them as info.
      Same-major companions (CLT, Safari) install with the exact label from
      `softwareupdate -l` (e.g. `Command Line Tools for Xcode 27.0-27.0`).
-7. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
+7. **Reboot the mini** when the upgrades need one (node, llvm, postgis, Safari, Tailscale) and no macOS update is pending:
+   `REASON=maintenance make planned-restart` from the MacBook (`DRY_RUN=1` first). It drains the queue, tells the leads, waits for
+   merge windows and deploys, snapshots the resume labels, reboots, waits for `recovery-check` to read 0 waiting and sets the queue
+   back to run. Never hand-roll those steps (`docs/recovery-drill.md` §4); a pending macOS update uses the same target without `REASON`.
+8. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
    failures against their `persisted N runs` count before blaming the upgrade.
 
 ### Tailscale
