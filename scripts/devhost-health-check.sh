@@ -1594,6 +1594,7 @@ echo "liveness pushed after ${SECONDS}s" >&2
 # report (lib/devhost-forensics.sh). Both are bounded and never fail the run.
 if (( SECONDS < SNAPSHOT_START_LIMIT )); then
   devhost_snapshot || true
+  devhost_boot_record "$uptime_s" || true
 else
   echo "snapshot skipped: liveness phase already used ${SECONDS}s (limit ${SNAPSHOT_START_LIMIT}s)" >&2
 fi

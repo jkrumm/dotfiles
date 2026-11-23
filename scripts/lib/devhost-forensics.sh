@@ -11,6 +11,7 @@
 #   panic_newest_report          newest panic report file (shared with check_kernel_panics)
 #   panic_headline <file>        the panicString's first line, with the `panic(cpu N caller 0x…):` prefix removed
 #   devhost_snapshot             one compact JSON line appended to DEVHOST_SNAPSHOT_LOG
+#   devhost_boot_record          one `boot` line per boot: kernel boot, userspace, session, core ready, load settled
 #   devhost_panic_notify         one ntfy push per panic report, state in $STATE_DIR/panic-notified
 
 DEVHOST_SNAPSHOT_LOG="${DEVHOST_SNAPSHOT_LOG:-$HOME/Library/Logs/devhost-snapshots.jsonl}"
@@ -104,6 +105,121 @@ devhost_snapshot() {
   [[ -n "$line" ]] || { echo "snapshot: could not build the line" >&2; return 0; }
   mkdir -p "$(dirname "$DEVHOST_SNAPSHOT_LOG")" 2>/dev/null || true
   printf '%s\n' "$line" >> "$DEVHOST_SNAPSHOT_LOG" 2>/dev/null || echo "snapshot: cannot append to $DEVHOST_SNAPSHOT_LOG" >&2
+  return 0
+}
+
+# --- One boot record per boot ----------------------------------------------------------------------------------
+# 2026-11-23 the mini sat about six minutes between kernel boot and its first userspace daemon, then another ten
+# before the post-boot load fell (docs/recovery-drill.md §Boot to userspace). The two halves have different causes
+# and different owners, so every boot records both, once: a line `{ts, up_s, boot: {...}}` in the snapshot log.
+#
+#   boot_at          kern.boottime (kernel start), UTC
+#   userspace_at     start of the earliest surviving process that is neither kernel_task (pid 0) nor launchd (pid 1)
+#   session_at       start of the earliest surviving process of this user other than loginwindow (the session leader):
+#                    the first agent of the user session (a user agent's parent shows as pid 1, so a parent test cannot tell)
+#   core_ready_at    mtime of the herdr-core socket, i.e. when the core bound it (null when older than the boot)
+#   settled_at       the first heartbeat whose 1-min load average is under SETTLE_LOAD; settled_prev_at is the heartbeat
+#                    before it, so the true crossing lies in between (the heartbeat runs every 300 s)
+#   boot_to_userspace_s, userspace_to_settled_s   the two halves, in seconds
+#
+# Written when the load settles, or at DEVHOST_BOOT_RECORD_WINDOW_S (45 min) with settled_at null: a boot that never
+# settled is a finding too. A boot whose FIRST sighting was later than BOOT_RECORD_LATE_S (a deploy mid-uptime, a
+# heartbeat that was down) gets no record: its settle time would be a guess. State: $STATE_DIR/boot-record =
+# `<boot epoch> <first sighting up_s> <previous run epoch> <pending|done>`. Start times come from `ps etime` (whole
+# seconds, no timezone parsing). DEVHOST_BOOT_RECORD=0 turns it off. Never fails the heartbeat.
+BOOT_RECORD_WINDOW_S="${DEVHOST_BOOT_RECORD_WINDOW_S:-2700}"
+BOOT_RECORD_LATE_S="${DEVHOST_BOOT_RECORD_LATE_S:-900}"
+BOOT_SETTLE_LOAD="${DEVHOST_BOOT_SETTLE_LOAD:-20}"
+BOOT_RECORD_STATE="$STATE_DIR/boot-record"
+
+# `<userspace epoch> <comm>` then `<session epoch> <comm>`, from ps rows `pid uid etime comm` (etime [[dd-]hh:]mm:ss).
+# An unreadable row is skipped; a section with no row prints `- -`.
+_boot_earliest_procs() {
+  local now="$1" uid="$2" rows="$3"
+  # shellcheck disable=SC2016  # awk program
+  "$AWK_BIN" -v now="$now" -v uid="$uid" '
+    function secs(e,  d, a, p, n) {
+      d = 0
+      if (e ~ /-/) { split(e, a, "-"); d = a[1]; e = a[2] }
+      n = split(e, p, ":")
+      if (n == 3) return d * 86400 + p[1] * 3600 + p[2] * 60 + p[3]
+      if (n == 2) return d * 86400 + p[1] * 60 + p[2]
+      return -1
+    }
+    { s = secs($3); if (s < 0 || $1 + 0 < 2) next
+      name = $4; for (i = 5; i <= NF; i++) name = name " " $i
+      n = split(name, parts, "/"); name = parts[n]
+      if (s > us) { us = s; un = name }
+      if ($2 == uid && name != "loginwindow" && s > ss) { ss = s; sn = name } }
+    END {
+      if (us > 0) printf "%d %s\n", now - us, un; else print "- -"
+      if (ss > 0) printf "%d %s\n", now - ss, sn; else print "- -" }' <<<"$rows"
+}
+
+devhost_boot_record() {
+  [[ "${DEVHOST_BOOT_RECORD:-1}" != 0 && -n "$DEVHOST_SNAPSHOT_LOG" ]] || return 0
+  local up="${1:-}" now boot_epoch s_boot="" s_first="" s_prev="" s_state="" load1="" settled=0 out
+  case "$up" in ''|*[!0-9]*) return 0 ;; esac
+  (( up < BOOT_RECORD_WINDOW_S + 600 )) || return 0
+  now=$("$DATE_BIN" +%s)
+  boot_epoch=$(( now - up ))
+  if [[ -f "$BOOT_RECORD_STATE" ]]; then read -r s_boot s_first s_prev s_state < "$BOOT_RECORD_STATE" || true; fi
+  case "$s_boot" in ''|*[!0-9]*) s_boot="" ;; esac
+  # The boot epoch is now - uptime: exact on a real host, a second or two of jitter under the test hook.
+  if [[ -n "$s_boot" ]] && (( s_boot - boot_epoch <= 60 && boot_epoch - s_boot <= 60 )); then
+    [[ "$s_state" != "done" ]] || return 0
+  else
+    s_boot=$boot_epoch s_first=$up s_prev="" s_state=pending
+  fi
+  case "$s_first" in ''|*[!0-9]*) s_first=$up ;; esac
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  if (( s_first > BOOT_RECORD_LATE_S )); then
+    echo "$s_boot $s_first ${s_prev:-0} done" > "$BOOT_RECORD_STATE" 2>/dev/null || true
+    return 0
+  fi
+
+  out=$(run_bounded "$SNAPSHOT_TOOL_TIMEOUT" "$SYSCTL_BIN" -n vm.loadavg) || out=""
+  # shellcheck disable=SC2016  # awk fields
+  load1=$("$AWK_BIN" 'NR == 1 { gsub(/[{}]/, ""); print $1 }' <<<"$out")
+  if [[ -n "$load1" ]] && "$AWK_BIN" -v l="$load1" -v t="$BOOT_SETTLE_LOAD" 'BEGIN { exit !(l + 0 < t + 0) }'; then settled=1; fi
+  if (( ! settled && up < BOOT_RECORD_WINDOW_S )); then
+    echo "$s_boot $s_first $now pending" > "$BOOT_RECORD_STATE" 2>/dev/null || true
+    return 0
+  fi
+
+  local ps_out procs core_sock core_at="" uid
+  uid=$(id -u)
+  ps_out=$(run_bounded "$SNAPSHOT_TOOL_TIMEOUT" "$PS_BIN" -axo pid=,uid=,etime=,comm=) || ps_out=""
+  procs=$(_boot_earliest_procs "$now" "$uid" "$ps_out")
+  if declare -F core_socket >/dev/null 2>&1; then
+    core_sock=$(core_socket)
+    core_at=$("$STAT_BIN" -f %m "$core_sock" 2>/dev/null) || core_at=""
+    case "$core_at" in ''|*[!0-9]*) core_at="" ;; esac
+  fi
+  local line
+  line=$("$JQ_BIN" -nc --arg ts "$("$DATE_BIN" -u +%Y-%m-%dT%H:%M:%SZ)" --argjson up "$up" --argjson boot "$boot_epoch" \
+    --argjson now "$now" --argjson first "$s_first" --arg prev "$s_prev" --arg core "$core_at" --arg load "$load1" \
+    --argjson settled "$settled" --arg procs "$procs" '
+      def ep: if . == "" or . == "-" then null else (tonumber? // null) end;
+      def iso: if . == null then null else todate end;
+      ($procs | split("\n")) as $p
+      | ($p[0] | split(" ")) as $u | ($p[1] | split(" ")) as $s
+      | ($u[0] | ep) as $us | ($s[0] | ep) as $ss | ($core | ep) as $cr
+      | (if $settled == 1 then $now else null end) as $st
+      | ($prev | ep) as $pv
+      | {ts: $ts, up_s: $up,
+         boot: {boot_at: ($boot | iso),
+                userspace_at: ($us | iso), userspace_proc: ($u[1:] | join(" ") | if . == "-" then null else . end),
+                session_at: ($ss | iso), session_proc: ($s[1:] | join(" ") | if . == "-" then null else . end),
+                core_ready_at: (if $cr != null and $cr >= $boot then $cr else null end | iso),
+                settled_at: ($st | iso), settled_prev_at: (if $st != null and $pv != null and $pv > 0 then $pv else null end | iso),
+                settled_load: (if $settled == 1 then ($load | tonumber? // null) else null end),
+                boot_to_userspace_s: (if $us != null then $us - $boot else null end),
+                userspace_to_settled_s: (if $us != null and $st != null then $st - $us else null end),
+                first_seen_up_s: $first}}') || line=""
+  [[ -n "$line" ]] || { echo "boot record: could not build the line" >&2; return 0; }
+  printf '%s\n' "$line" >> "$DEVHOST_SNAPSHOT_LOG" 2>/dev/null || { echo "boot record: cannot append to $DEVHOST_SNAPSHOT_LOG" >&2; return 0; }
+  echo "$s_boot $s_first $now done" > "$BOOT_RECORD_STATE" 2>/dev/null || true
   return 0
 }
 

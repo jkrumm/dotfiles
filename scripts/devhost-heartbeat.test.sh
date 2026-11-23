@@ -88,7 +88,7 @@ run_script() {
     DEVHOST_DIAGNOSTIC_REPORTS_DIR="$TMP/diag" DEVHOST_SNAPSHOT_LOG="$TMP/snapshots.jsonl" DEVHOST_SWAP_DIR="$TMP/vm" \
     NTFY_URL="http://ntfy.invalid" NTFY_CONFIG="$TMP/none-ntfy.yml" SECRETS_RUN_BIN="$TMP/secrets-run-default" \
     OBSIDIAN_BIN="$TMP/obsidian" TAILSCALE_BIN=/usr/bin/false \
-    DEVHOST_TRANSIENT_FAILS=1 DEVHOST_BOOT_GRACE_SECONDS=0 \
+    DEVHOST_TRANSIENT_FAILS=1 DEVHOST_BOOT_GRACE_SECONDS=0 DEVHOST_BOOT_RECORD=0 \
     "$@" /bin/bash "$HERE/devhost-health-check.sh" >"$TMP/out.log" 2>&1
   RC=$?
   ELAPSED=$(( SECONDS - t0 ))
@@ -407,6 +407,55 @@ rm -f "$TMP/snapshots.jsonl"
 run_script DEVHOST_COMPONENTS="check_obsidian" PS_BIN="$TMP/ps" STUB_PS_HANG=1 DEVHOST_SNAPSHOT_TOOL_TIMEOUT=1
 assert_eq "a hung ps still yields a line, no process data" '{"procs":0,"rss":0}' "$(/usr/bin/jq -c '{procs, rss: (.top_rss|length)}' "$TMP/snapshots.jsonl")"
 assert_eq "...and the heartbeat still exits 0" 0 "$RC"
+
+echo "boot record: one line per boot with the five timestamps, written when the load settles"
+cat > "$TMP/ps-boot" <<'STUB'
+#!/bin/sh
+case "$*" in
+  *uid=*) printf '    1     0 05:54 /sbin/launchd\n  177 %s 05:10 /System/CoreServices/loginwindow.app/Contents/MacOS/loginwindow\n  101     0 05:50 /usr/libexec/logd\n  105     0 05:49 /System/Frameworks/fseventsd\n  500 %s 05:00 /usr/sbin/cfprefsd\n  600 %s 01:00 /Applications/Some App.app/Contents/MacOS/Some App\n' "$STUB_UID" "$STUB_UID" "$STUB_UID" ;;
+  *) : ;;
+esac
+STUB
+cat > "$TMP/sysctl-boot" <<'STUB'
+#!/bin/sh
+case "$*" in *loadavg*) echo "{ ${STUB_LOAD:-3.00} 2.00 1.00 }" ;; esac
+STUB
+chmod +x "$TMP/ps-boot" "$TMP/sysctl-boot"
+touch "$TMP/sock-boot"
+boot_env=(DEVHOST_BOOT_RECORD=1 PS_BIN="$TMP/ps-boot" SYSCTL_BIN="$TMP/sysctl-boot" STUB_UID="$(id -u)" HC_SOCKET="$TMP/sock-boot")
+boot_lines() { /usr/bin/jq -c 'select(.boot)' "$TMP/snapshots.jsonl" 2>/dev/null | wc -l | tr -d ' '; }
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/boot-record"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=400 STUB_LOAD=180.5 "${boot_env[@]}"
+assert_eq "load 180 after boot: no record yet" 0 "$(boot_lines)"
+assert_contains "...the first sighting is remembered, pending" "pending" "$(cat "$TMP/state/boot-record")"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=400 STUB_LOAD=3.25 "${boot_env[@]}"
+assert_eq "load under 20: one boot record" 1 "$(boot_lines)"
+rec=$(/usr/bin/jq -c 'select(.boot) | .boot' "$TMP/snapshots.jsonl")
+assert_eq "the two halves, measured separately" '{"b2u":50,"u2s":350}' "$(/usr/bin/jq -c '{b2u: .boot_to_userspace_s, u2s: .userspace_to_settled_s}' <<<"$rec")"
+assert_eq "userspace is the earliest non-kernel, non-launchd process" "logd" "$(/usr/bin/jq -r '.userspace_proc' <<<"$rec")"
+assert_eq "the session is the user's earliest process after loginwindow (a name with a space survives later rows)" "cfprefsd" "$(/usr/bin/jq -r '.session_proc' <<<"$rec")"
+assert_eq "all five timestamps are ISO UTC" "5" "$(/usr/bin/jq -r '[.boot_at, .userspace_at, .session_at, .core_ready_at, .settled_at] | map(select(. != null and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$"))) | length' <<<"$rec")"
+assert_eq "settled load and the bound before it" '{"load":3.25,"prev":true,"first":400}' "$(/usr/bin/jq -c '{load: .settled_load, prev: (.settled_prev_at != null), first: .first_seen_up_s}' <<<"$rec")"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=400 STUB_LOAD=2 "${boot_env[@]}"
+assert_eq "once per boot: a later run adds none" 1 "$(boot_lines)"
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/boot-record"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=1000 STUB_LOAD=3 "${boot_env[@]}"
+assert_eq "first sighting 1000 s after boot (a mid-uptime deploy): no record, nothing guessed" 0 "$(boot_lines)"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=1000 STUB_LOAD=3 "${boot_env[@]}"
+assert_eq "...and it is not retried" 0 "$(boot_lines)"
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/boot-record"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=7200 STUB_LOAD=3 "${boot_env[@]}"
+assert_eq "an old boot: no record and no state" "0 0" "$(boot_lines) $([[ -f "$TMP/state/boot-record" ]] && echo 1 || echo 0)"
+echo "$(( $(date +%s) - 2750 )) 330 $(( $(date +%s) - 300 )) pending" > "$TMP/state/boot-record"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=2750 STUB_LOAD=95 "${boot_env[@]}"
+assert_eq "never settled by the end of the window: a record with settled_at null" '{"n":1,"settled":null,"b2u":2400}' "$(/usr/bin/jq -sc '[.[] | select(.boot)] | {n: length, settled: .[0].boot.settled_at, b2u: .[0].boot.boot_to_userspace_s}' "$TMP/snapshots.jsonl")"
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/boot-record"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=400 STUB_LOAD=3 DEVHOST_BOOT_RECORD=0 "${boot_env[@]:1}"
+assert_eq "DEVHOST_BOOT_RECORD=0: nothing written" 0 "$(boot_lines)"
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/boot-record"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_TEST_UPTIME_S=400 STUB_LOAD=3 "${boot_env[@]}" PS_BIN="$TMP/none-ps"
+assert_eq "no ps: still a record, the process fields null, heartbeat exit 0" '{"n":1,"us":null,"ss":null,"rc":0}' "$(/usr/bin/jq -sc '[.[] | select(.boot)] | {n: length, us: .[0].boot.userspace_at, ss: .[0].boot.session_at, rc: 0}' "$TMP/snapshots.jsonl" | /usr/bin/sed "s/\"rc\":0/\"rc\":$RC/")"
+rm -f "$TMP/snapshots.jsonl" "$TMP/state/boot-record"
 
 echo "snapshot log is bounded by log-rotate (the declared EXTRA entry)"
 assert_contains "log-rotate names the file" "devhost-snapshots.jsonl" "$(/usr/bin/grep -c 'devhost-snapshots.jsonl' "$HERE/log-rotate.sh") $(/usr/bin/grep 'devhost-snapshots.jsonl' "$HERE/log-rotate.sh")"

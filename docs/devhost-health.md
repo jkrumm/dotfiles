@@ -84,6 +84,10 @@ culprit, nothing had recorded what ran, and nobody was told (`docs/incident-2026
   liveness phase already used `DEVHOST_SNAPSHOT_START_LIMIT` (100 s). `scripts/log-rotate.sh` caps it (16 MB, one `.1`
   generation: about three weeks each). Read the minutes before a hang with
   `jq -c '[.ts,.load[0],.pressure,.swap_used_mb,.top_rss[0].cmd]' ~/Library/Logs/devhost-snapshots.jsonl | tail`.
+- **Boot record.** Once per boot, a line `{ts, up_s, boot: {boot_at, userspace_at, session_at, core_ready_at, settled_at, boot_to_userspace_s, userspace_to_settled_s, …}}`
+  (`devhost_boot_record`; `DEVHOST_BOOT_RECORD=0` turns it off): kernel start, the earliest surviving daemon, the first user-session
+  process, the herdr-core socket, and the first heartbeat under load 20. Meaning, the 2026-11-23 measurement (6 min before the first
+  daemon, cause unproven) and how to read it: `docs/recovery-drill.md` §5. State `~/.local/state/devhost-health/boot-record`.
 - **Reboot / panic push.** The first heartbeat that sees a panic report it has not announced (younger than
   `DEVHOST_PANIC_MAX_AGE_DAYS`) sends **one ntfy push** (topic `alerts`, priority high, `DEVHOST_PANIC_NTFY_TOPIC`) with the
   headline, the boot time and the time to ready (seconds from boot to the first heartbeat that found tailnet, sshd and the

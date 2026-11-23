@@ -1,8 +1,8 @@
 # Recovery drill
 
-How to tell whether the mini recovered, and how to prove it without breaking it. Four parts: read recovery after any
+How to tell whether the mini recovered, and how to prove it without breaking it. Five parts: read recovery after any
 reboot (read-only), the owner's quiet-window drill (by hand), the scratch-core proof that never touches the production
-core (by hand), and the planned restart for a macOS update (`make planned-restart`). Background: `docs/incident-2026-11-13-mini-panic.md` (the standing constraint), `docs/herdr-core.md`
+core (by hand), the planned restart for a macOS update (`make planned-restart`), and the measured boot-to-userspace wait (§5). Background: `docs/incident-2026-11-13-mini-panic.md` (the standing constraint), `docs/herdr-core.md`
 §Resume pacing, `docs/devhost-health.md` §Recovery after a boot.
 
 **Who runs what.** Part 1 only reads; anyone, agent or owner, can run it. Parts 2 and 3 contain commands that stop or start
@@ -87,7 +87,7 @@ jq -c 'select(.recovery) | [.ts, .up_s, .tailnet_up_s, .recovery.running, .recov
 jq -c '[.ts, .load[0], .pressure, .swap_used_mb, .top_rss[0].cmd]' ~/Library/Logs/devhost-snapshots.jsonl | tail -12
 ```
 
-The first is the curve per 5 minutes; the second shows load and memory pressure while it ran. The incident's reference
+The first is the curve per 5 minutes; the second shows load and memory pressure while it ran. The third line kind is the boot record (§5). The incident's reference
 points: load 175 then 404 with 25 starts in 9 ms, sshd and tailscale reachable only after about 7.5 minutes. Paced, nothing
 should look like that; load staying below 30 is the line where heartbeat components started timing out (issue 832).
 
@@ -247,3 +247,62 @@ REASON=maintenance make planned-restart   # a plain reboot with no macOS update 
 A failure before step 4 undrains the queue (nothing happened); from step 4 on it never does, because a half-restarted host with
 leads running into it is worse than a held queue. Not run by an agent: it reboots the host every agent runs on, and a lead's
 own session is one of the terminals it ends. A pending update past 14 days stays a `waiting for a restart window` line in the drift report: no signal, no page, never a nightly install.
+
+
+## 5. Boot to userspace and userspace to settled
+
+A reboot has two waits with different causes: the kernel is up but no daemon runs (**boot to userspace**), then the daemons and
+the 25 resumed sessions fight for the host until the load falls (**userspace to settled**). Every boot now records both once,
+in `~/Library/Logs/devhost-snapshots.jsonl` (`devhost_boot_record`, `scripts/lib/devhost-forensics.sh`):
+
+```
+jq -c 'select(.boot) | .boot' ~/Library/Logs/devhost-snapshots.jsonl | tail -5
+```
+
+| Field | Meaning |
+|-|-|
+| `boot_at` | kernel start (`kern.boottime`) |
+| `userspace_at` | start of the earliest surviving process that is not `kernel_task` or `launchd` (`userspace_proc`) |
+| `session_at` | earliest surviving process of the user other than `loginwindow`: the first agent of the session (`session_proc`) |
+| `core_ready_at` | mtime of the herdr-core socket: when the core bound it |
+| `settled_at` | first heartbeat whose 1-min load is under 20; the crossing lies between `settled_prev_at` and `settled_at` (runs are 300 s apart) |
+| `boot_to_userspace_s`, `userspace_to_settled_s` | the two waits; `settled_at` null = not settled within 45 min |
+
+One record per boot, written when the load settles (or at 45 min with `settled_at` null). A boot first seen more than 15 minutes
+after it started (a deploy mid-uptime) gets none: the 2026-11-23 boot is measured below by hand, not by the record.
+
+### Measured: the 2026-11-23 reboot
+
+Mach time (`machTimestamp`, 24 MHz ticks, from `/usr/bin/log show --style ndjson`; zsh's `log` builtin shadows it) agrees with the
+wall clock, so the gap is real, not a clock step.
+
+| Since kernel start | Wall (CET) | Event |
+|-|-|-|
+| 0 s | 23:56:02 | kernel start (`kern.boottime`) |
+| 11 s | 23:56:13 | `launchd` pid 1 starts, issues its boot tasks |
+| 25 s | 23:56:27 | last boot task issued before the hold: `dirhelper` |
+| **25 s to 360 s** | | **no userspace log line; the kernel logs only CoreAnalytics nags and APFS `tx_flush` (about 12 transactions a second on the Data volume)** |
+| 360 s | 00:01:56 | next boot tasks (`finish-demo-restore`, `prng_seedctl`), `logd` pid 101 and every daemon, `DumpPanic`, `loginwindow` |
+| about 374 s | 00:02:10 | herdr-core socket bound |
+| about 377 s | 00:02:13 | tailnet up (`hc-resume`: 66 ms) |
+| about 600 s | 00:06 | load under 20 (owner's reading; the heartbeat samples were 209 at 00:02:22 and 6.6 at 00:08:21) |
+
+- **Boot to userspace: 354 s by `lstart` (6 min).** 2026-11-15 shows the same: the first heartbeat, which needs the user session, came at
+  `up_s` 322 (load 187); 2026-11-23's at 376 (load 209).
+- **Userspace to settled: about 4 min**, to the load line of 20 (the owner's reading at 00:06; the two heartbeat samples only bracket it
+  between 26 s and 6.4 min, which is the resolution the boot record has too: one run interval).
+- **Not shown to be the cause, and why:**
+  - fsck and mounts: `fsck`, `mount-phase-1`, `data-protection`, `detect-installed-roots`, `auto-pivot-root` and `MobileAssetEarlyBootTask`
+    are logged `Skipping boot-task`; the `fsck_apfs` runs in `/var/log` start at 00:01:57, after the hold.
+  - cryptex, Safari or an installer: `cryptexd`, `bootinstalld` and the boot-time Installer Progress UI first log at 00:01:57 to 00:01:58.
+  - A panic: `DumpPanic` logs `No previous DumpPanic finish cookie` and `launched after boot to check for device panic data`. That is its
+    routine boot-time run (first daemon wave, 00:01:56), not a panic; no `.panic` report exists. The lines sit in the window only
+    because `logd` starts in the same wave.
+  - `dirhelper`: its process (pid 160) starts at 360.7 s, so it is the last task issued before the hold, not proven to be the one that held.
+- **What the log cannot show.** `logd` is itself one of the daemons that start at 360 s, so nothing userspace did between 25 s and 360 s was
+  persisted. The kernel side is idle apart from APFS transaction flushes at a normal rate (12 a second against 17 after boot).
+
+**Cause: unproven.** The hold sits between launchd's last issued boot task and the start of the daemon wave; the log has no step name for it,
+and no fix is justified. What would settle it is repetition: the boot record gives `boot_to_userspace_s` per reboot. A near-constant value
+(here 335 to 360 s on two boots) points at a fixed wait or timeout; a value that grows with disk use or terminal count points at I/O. Read the
+next three records before spending anything on it.
