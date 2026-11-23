@@ -17,6 +17,7 @@ scan: ["~", /private, /opt, /Applications, /Library]
 
 rows:
   - { path: ~/SourceRoot/weatherorb, owner: weatherorb, cap_gib: 115, class: data, enforced_by: "the app (retention); a blend round in flight adds ~22 GiB" }
+  - { path: ~/orb, owner: weatherorb, cap_gib: 8, class: data, enforced_by: "the owner: releases, units and the data/ tree here; the live data root is /Volumes/orb-data, not counted; no sweep step" }
   - { path: ~/cache/weatherorb, owner: weatherorb, cap_gib: 40, class: build, enforced_by: "sweep: scratch, seeds" }
   - { path: ~/SourceRoot/shutterflow, owner: shutterflow, cap_gib: 50, class: build, enforced_by: "sweep: worktrees; a live lead bounds its own target/" }
   - { path: ~/cache/shutterflow, owner: shutterflow, cap_gib: 15, class: build, enforced_by: "cargo-target-seed; sweep: seeds" }

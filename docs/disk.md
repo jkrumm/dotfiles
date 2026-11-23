@@ -10,6 +10,7 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | Path | Owner | Cap GiB | Class | Held by |
 |-|-|-|-|-|
 | `~/SourceRoot/weatherorb` | weatherorb | 115 | data | the app (retention); a blend round in flight adds ~22 GiB |
+| `~/orb` | weatherorb | 8 | data | the owner: releases, units and the data/ tree here; the live data root is /Volumes/orb-data, not counted; no sweep step |
 | `~/cache/weatherorb` | weatherorb | 40 | build | sweep: scratch, seeds |
 | `~/SourceRoot/shutterflow` | shutterflow | 50 | build | sweep: worktrees; a live lead bounds its own target/ |
 | `~/cache/shutterflow` | shutterflow | 15 | build | cargo-target-seed; sweep: seeds |
@@ -33,7 +34,7 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | `/Applications` | dotfiles | 18 | data | the owner |
 | `/Library` | dotfiles | 10 | data | macOS |
 
-Caps 649.0 + system 45.0 = 694.0 GiB; the limit is 80 % of 894 GiB = 715.2 GiB.
+Caps 657.0 + system 45.0 = 702.0 GiB; the limit is 80 % of 894 GiB = 715.2 GiB.
 <!-- /disk-budget:table -->
 
 Classes: `data` is state to keep, `cache` regenerates, `build` is build output and worktrees, `history` is logs, backups and transcripts. The external SSD is not on this volume and has no row: `docs/external-ssd.md`, `docs/storage.md`.
