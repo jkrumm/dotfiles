@@ -157,6 +157,15 @@ export function findUnknown(sizes: Map<string, number>, rows: Row[], minKib: num
   return uncovered.filter(([p]) => !uncovered.some(([q]) => p.startsWith(q + "/"))).sort((a, b) => b[1] - a[1])
 }
 
+// A stalled du is transient (a healthy ~/Library takes under a minute), so a row gets a second attempt before it counts as unmeasured.
+function measureRow(path: string): number | undefined {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const kib = du(["-s", path], ROW_TIMEOUT_MS).sizes.get(path)
+    if (kib !== undefined) return kib
+  }
+  return undefined
+}
+
 function liveVolume(volume: string): { sizeGib: number; usedGib: number; freeGib: number; pct: number } | null {
   const r = spawnSync("df", ["-k", volume], { encoding: "utf8" })
   const f = r.stdout?.split("\n")[1]?.trim().split(/\s+/)
@@ -208,7 +217,8 @@ function check(file: string): number {
   const sizes = new Map<string, number>()
   for (const root of budget.scan) {
     const r = du(["-d", String(budget.scan_depth), expand(root)], SCAN_TIMEOUT_MS)
-    if (!r.ok && existsSync(expand(root))) { console.error(`disk-budget: the scan of ${root} failed`); failures++ }
+    // A failed scan only loses the uncovered-path check for this run: every row is then measured on its own below.
+    if (!r.ok && existsSync(expand(root))) console.error(`disk-budget: the scan of ${root} failed; its rows are measured one by one, uncovered paths are not checked this run`)
     for (const [p, kib] of r.sizes) sizes.set(p, kib)
   }
 
@@ -226,8 +236,7 @@ function check(file: string): number {
     let kib = sizes.get(path)
     let present = existsSync(path)
     if (kib === undefined && present) {
-      const r = du(["-s", path], ROW_TIMEOUT_MS)
-      kib = r.sizes.get(path)
+      kib = measureRow(path)
       if (kib === undefined) { console.error(`disk-budget: could not measure ${row.path}`); failures++ }
     }
     if (!present) kib = 0
