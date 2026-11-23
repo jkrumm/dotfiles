@@ -207,24 +207,21 @@ the weatherorb session workflow.
 | `com.jkrumm.homebridge` | home | KeepAlive — Homebridge for Apple Home, installed by `make homebridge` in the home repo |
 | `com.jkrumm.factory-door` | software-factory | KeepAlive (:8796, loopback, tailscale serve in front) — the alert door, same release dir as the factory server; files Issues over the socket, holds no token of the factory |
 | `com.jkrumm.vps-pg-backup` | vps | 03:15 daily — mini Postgres to the HomeLab, ends with a restore drill (`vps/docs/mini-postgres.md`) |
-| `com.iu.prometheus-epos-token` | IuRoot (prometheus-scripts) | 300s |
+| `com.iu.prometheus-epos-token` | IuRoot (epos-tool-athena) | 300s |
 | `com.iu.prometheus-state-backup` | IuRoot | 3600s |
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |
 | `com.iu.prometheus-vpn-watcher` | IuRoot | KeepAlive |
-| `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 | `com.iu.tool-checkout-deploy` | IuRoot (tool-checkout) | 600s — `prometheus-deploy-gate/gate.py` for the tool-checkout dashboard worktree |
 | `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
 | `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
-| `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
 | `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
 | `com.iu.teamchat-api` | IuRoot (chat) | KeepAlive — `make -C chat api` in the teamchat-runtime worktree |
 | `com.iu.teamchat-broker` | IuRoot (chat) | KeepAlive — `epx serve run --port 8790` in the teamchat-runtime worktree | <!-- cli-refs: ignore -->
 | `com.iu.teamchat-runtime-deploy` | IuRoot (chat) | 600s — `prometheus-deploy-gate/gate.py` for the teamchat runtime |
 | `com.iu.teamchat-funnel-reconcile` | IuRoot (chat) | 300s — `chat/scripts/funnel.sh reconcile` in the teamchat-runtime worktree |
 
-Five of the seven IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
-`artefact-daily`, `stack-dashboard`) log to `/tmp` — a known gap, owned by `prometheus-scripts`,
+Three of the five IU jobs (`epos-token`, `state-backup`, `conduktor-token`) log to `/tmp` — a known gap, owned by `epos-tool-athena`,
 not fixed here because IuRoot repos are out of this map's write scope, and one
 that bites on a schedule: macOS sweeps `/tmp` files untouched for three days,
 and launchd opens its stdio once at spawn, so a swept log leaves the job writing

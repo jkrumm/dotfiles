@@ -19,20 +19,18 @@
 services:
   - { name: hermes-gateway, repo: hermes-agent, kind: launchd, tier: core, label: ai.hermes.gateway, memory_mib: 570 }
   - { name: athena-repo-sync, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.athena-repo-sync, memory_mib: 50 }
-  - { name: prometheus-artefact-daily, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-artefact-daily, memory_mib: 50 }
-  - { name: prometheus-conduktor-token, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-conduktor-token, memory_mib: 50 }
-  - { name: prometheus-dashboard-autodeploy, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-dashboard-autodeploy, memory_mib: 50 }
-  - { name: prometheus-epos-token, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-epos-token, memory_mib: 50 }
-  - { name: prometheus-stack-dashboard, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-stack-dashboard, memory_mib: 50 }
-  - { name: prometheus-state-backup, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-state-backup, memory_mib: 50 }
-  - { name: prometheus-vpn-watcher, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.prometheus-vpn-watcher, memory_mib: 50 }
+  - { name: prometheus-conduktor-token, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-conduktor-token, memory_mib: 50 }
+  - { name: prometheus-dashboard-autodeploy, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-dashboard-autodeploy, memory_mib: 50 }
+  - { name: prometheus-epos-token, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-epos-token, memory_mib: 50 }
+  - { name: prometheus-state-backup, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-state-backup, memory_mib: 50 }
+  - { name: prometheus-vpn-watcher, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-vpn-watcher, memory_mib: 50 }
   - { name: teamchat-api, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-api, memory_mib: 380 }
   - { name: teamchat-broker, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-broker, memory_mib: 130 }
   - { name: teamchat-funnel-reconcile, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-funnel-reconcile, memory_mib: 50 }
   - { name: teamchat-profile, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-profile, memory_mib: 50 }
   - { name: teamchat-runtime-deploy, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-runtime-deploy, memory_mib: 50 }
   - { name: teamchat-vm-watch, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.teamchat-vm-watch, memory_mib: 50 }
-  - { name: tool-checkout-deploy, repo: prometheus-scripts, kind: launchd, tier: core, label: com.iu.tool-checkout-deploy, memory_mib: 50 }
+  - { name: tool-checkout-deploy, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.tool-checkout-deploy, memory_mib: 50 }
   - { name: argo, repo: argo, kind: launchd, tier: core, label: com.jkrumm.argo, door: argo-live, memory_mib: 160 }
   - { name: host-agent, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.host-agent, ports: [4416, 4417], memory_mib: 45, note: "OpenTelemetry collector (agent/): host metrics to ClickStack, OTLP receiver on 127.0.0.1:4416 gRPC / :4417 HTTP (the on-demand dev ClickStack publishes 4318 and 4319); footprint 28-30 MiB after an hour, budget 1.5x, docs/host-agent.md" }
   - { name: brain-backup, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-backup, memory_mib: 50 }

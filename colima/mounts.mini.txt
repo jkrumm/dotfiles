@@ -7,5 +7,6 @@
 ~/IuRoot/epos-tool-athena rw
 ~/IuRoot/worktrees/prometheus-dashboard ro
 ~/.local/state/prometheus-scripts rw
+~/.local/state/import-dashboard-shared rw
 ~/SourceRoot/basalt-ui-obsidian ro
 ~/SourceRoot/vps/clickstack ro
