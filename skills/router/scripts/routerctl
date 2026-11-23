@@ -14,8 +14,10 @@ import contextlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -26,6 +28,40 @@ HOST = os.environ.get("ROUTER_HOST", "https://192.168.1.1")
 OP_REF = "op://Private/WLAN Router TP-Link/password"
 LINEWATCH_PW_FILE = Path.home() / ".config/linewatch/router-password"
 SECRET_KEY = re.compile(r"key|psk|pass|pwd|secret|pin|token", re.IGNORECASE)
+
+# CoreWLAN scan, run as `swift <file>` on this Mac: one line per network, channel, band, rssi, ssid.
+SWIFT_SCAN = r"""
+import CoreWLAN
+import Foundation
+
+func bandName(_ channel: CWChannel?) -> String {
+    guard let channel = channel else { return "?" }
+    switch channel.channelBand {
+    case .band2GHz: return "2.4GHz"
+    case .band5GHz: return "5GHz"
+    case .band6GHz: return "6GHz"
+    default: return "?"
+    }
+}
+
+guard let interface = CWWiFiClient.shared().interface() else {
+    FileHandle.standardError.write(Data("no Wi-Fi interface\n".utf8))
+    exit(1)
+}
+
+for _ in 0..<2 {
+    do {
+        for network in try interface.scanForNetworks(withName: nil) {
+            let channel = network.wlanChannel?.channelNumber ?? 0
+            let ssid = network.ssid ?? ""
+            print("\(channel)\t\(bandName(network.wlanChannel))\t\(network.rssiValue)\t\(ssid)")
+        }
+    } catch {
+        FileHandle.standardError.write(Data("scan failed: \(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
+}
+"""
 
 urllib3.disable_warnings()
 
@@ -75,6 +111,7 @@ class Router:
         )
         # Keep-alive reuse yields BadStatusLine on this firmware; one connection per request.
         self.client.req.headers["Connection"] = "close"
+        self.empty: set[str] = set()  # oids that answered empty, for status
 
     def __enter__(self):
         # getGDPRParm intermittently answers without RSA params; it recovers on retry.
@@ -99,8 +136,12 @@ class Router:
         _, values = self.client.req_act([act(kind, oid)])
         value = values[0] if values else None
         if value is None:
-            return []
-        return value if isinstance(value, list) else [value]
+            rows = []
+        else:
+            rows = value if isinstance(value, list) else [value]
+        if not rows:
+            self.empty.add(oid)
+        return rows
 
     def oids(self) -> list[str]:
         r = self.client.req.get(
@@ -213,6 +254,98 @@ def status(r: Router) -> dict:
     }
 
 
+def radios(r: Router) -> list[dict]:
+    keys = [
+        "operatingFrequencyBand",
+        "enable",
+        "status",
+        "channel",
+        "autoChannelEnable",
+        "channelsInUse",
+        "operatingChannelBandwidth",
+        "currentOperatingChannelBandwidth",
+        "transmitPower",
+        "transmitPowerSupported",
+        "IEEE80211hEnabled",
+        "X_TP_RadarDetect",
+        "regulatoryDomain",
+    ]
+    return [pick(radio, keys) for radio in r.read("DEV2_WIFI_RADIO")]
+
+
+def prune(data):
+    """Drop empty fields, so an empty router read shows as one line, not a column of None."""
+    if isinstance(data, dict):
+        kept = {k: prune(v) for k, v in data.items()}
+        return {k: v for k, v in kept.items() if v not in (None, {}, [])}
+    return data
+
+
+def scan_air() -> list[tuple[int, str, int, str]]:
+    """Two CoreWLAN scans on this Mac: (channel, band, rssi, ssid) per network. No router involved."""
+    workdir = Path(tempfile.mkdtemp(prefix="routerctl-scan-"))
+    try:
+        source = workdir / "scan.swift"
+        source.write_text(SWIFT_SCAN)
+        try:
+            out = subprocess.run(
+                ["swift", str(source)],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+        except FileNotFoundError:
+            die("swift is not on PATH (Xcode command line tools)")
+        except subprocess.TimeoutExpired:
+            die("swift scan timed out")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    if out.returncode != 0:
+        die(f"swift scan failed: {out.stderr.strip()}")
+    readings = []
+    for line in out.stdout.splitlines():
+        parts = line.split("\t", 3)
+        if len(parts) == 4:
+            readings.append((int(parts[0]), parts[1], int(parts[2]), parts[3]))
+    return readings
+
+
+def router_ssids() -> set[str] | None:
+    """The router's own SSIDs, or None when it cannot be read: the scan still prints, unflagged."""
+    try:
+        with Router() as r:
+            return {
+                row[k]
+                for row in wifi_bands(r)
+                for k in ("primarySSID", "guestSSID")
+                if row.get(k)
+            }
+    except (Exception, SystemExit):
+        print("routerctl: router unreadable, scan not flagged", file=sys.stderr)
+        return None
+
+
+def scan_report(readings, own: set[str] | None) -> list[dict]:
+    by_ssid: dict[str, list[tuple[int, str, int]]] = {}
+    for channel, band, rssi, ssid in readings:
+        by_ssid.setdefault(ssid, []).append((channel, band, rssi))
+    rows = []
+    for ssid, seen in by_ssid.items():
+        rssis = [rssi for _, _, rssi in seen]
+        row = {"ssid": ssid or "(hidden)"}
+        if own is not None:
+            row["own"] = ssid in own
+        row.update(
+            band=",".join(sorted({band for _, band, _ in seen})),
+            channel=",".join(str(c) for c in sorted({c for c, _, _ in seen})),
+            rssi_min=min(rssis),
+            rssi_max=max(rssis),
+        )
+        rows.append(row)
+    return sorted(rows, key=lambda row: row["rssi_max"], reverse=True)
+
+
 def render(data, as_json: bool, indent: str = "") -> None:
     if as_json:
         print(json.dumps(data, indent=2))
@@ -248,6 +381,14 @@ def main() -> None:
     )
     sub.add_parser("wifi", help="per-band SSID, channel, width, security")
     sub.add_parser(
+        "radio",
+        help="per radio: band, channel, channels in use, width, transmit power, DFS radar",
+    )
+    sub.add_parser(
+        "scan",
+        help="what this Mac's Wi-Fi hears (CoreWLAN, no router); the router's own SSIDs flagged",
+    )
+    sub.add_parser(
         "clients", help="Wi-Fi clients (band, signal, rates) and wired clients"
     )
     sub.add_parser("line", help="G.fast / VDSL line: rates, noise margin, attenuation")
@@ -259,12 +400,25 @@ def main() -> None:
     raw.add_argument("oid")
     raw.add_argument("--op", choices=["gl", "go", "gs"], default="gl")
     args = p.parse_args()
+    if args.cmd == "scan":
+        render(scan_report(scan_air(), router_ssids()), args.json)
+        return
 
     with Router() as r:
         if args.cmd == "status":
-            render(status(r), args.json)
+            report = status(r)
+            empty = sorted(r.empty)
+            if empty:
+                report = prune(report)
+                if args.json:
+                    report["empty"] = empty
+                else:
+                    print(f"router answered empty for: {', '.join(empty)}")
+            render(report, args.json)
         elif args.cmd == "wifi":
             render(wifi_bands(r), args.json)
+        elif args.cmd == "radio":
+            render(radios(r), args.json)
         elif args.cmd == "clients":
             render(clients(r), args.json)
         elif args.cmd == "line":

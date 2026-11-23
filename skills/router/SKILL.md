@@ -1,6 +1,6 @@
 ---
 name: router
-description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel, width, band steering), connected Wi-Fi/wired clients, the G.fast line (sync rates, noise margin, attenuation), firmware, CPU/memory — via the `routerctl` CLI. Use when the user asks about home Wi-Fi, the router, which devices are connected, signal or channel problems, slow LAN/Wi-Fi, or the internet line's physical state. For outage/speed history use the Argo Line page instead.
+description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel, width, band steering), connected Wi-Fi/wired clients, the G.fast line (sync rates, noise margin, attenuation), firmware, CPU/memory — via the `routerctl` CLI. Use when the user asks about home Wi-Fi, the router, which devices are connected, a band or SSID missing or weak (scan what the mini hears), signal or channel problems, slow LAN/Wi-Fi, or the internet line's physical state. For outage/speed history use the Argo Line page instead.
 ---
 
 # Router — TP-Link VX800v
@@ -12,6 +12,8 @@ description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel,
 R=~/.claude/skills/router/scripts/routerctl
 $R status            # firmware, band steering, both bands, line, CPU/mem
 $R wifi              # per band: SSID, channel, auto?, width (configured + current), security
+$R radio             # per radio: band, channel, channelsInUse, width, transmit power, DFS radar, regulatory domain
+$R scan              # this Mac's Wi-Fi scan (CoreWLAN, no router): RSSI per SSID, own SSIDs flagged
 $R clients           # Wi-Fi clients (band, signal, rates) + wired clients (link speed)
 $R line              # DEV2_FAST_LINE (the real carrier) + DEV2_DSL_LINE
 $R oids 'WIFI|STEER' # list data-model objects (585 DEV2_* exist)
@@ -21,7 +23,8 @@ $R --json status     # every command takes --json
 
 Each call logs in, reads, logs out (~5–10 s). **The router allows one admin
 session**: a call logs the web UI out, and an open web UI session can make a
-call fail — retry once, then ask whether the UI is open.
+call fail — retry once, then ask whether the UI is open. Run calls one at a time: parallel
+calls get dropped mid-read. `scan` logs in only to flag the router's own SSIDs.
 
 ## Credentials (resolved in this order)
 
@@ -33,7 +36,7 @@ call fail — retry once, then ask whether the UI is open.
 Host: `ROUTER_HOST`, default `https://192.168.1.1`. Both machines are on the
 router's LAN at home; neither reaches it when away.
 
-## Traps on this firmware (800.0.20) — all measured
+## Traps on this firmware (800.0.22) — all measured
 
 - **Username is `user`, not `admin`**, and only the **HTTPS** UI works (plain
   HTTP serves a "welcome" interstitial on every path). Self-signed cert.
@@ -52,6 +55,8 @@ router's LAN at home; neither reaches it when away.
   `active` flag is wrong (a connected MacBook reads 0). `signal` is not dBm —
   treat it as a relative number, higher is better. For "is X online", ping it.
 - Failed logins count toward a lockout — don't loop on a wrong password.
+- **Router answers empty for a long stretch.** Measured 2026-11-23, 07:20–07:37 UTC: every object except `DEV2_DEV_INFO` answered empty to routerctl and linewatch alike, while logins succeeded. It persisted after the app and web UI were closed; a router reboot cleared it. `status` prints `router answered empty for:` with the oids.
+- **`channelsInUse` can disagree with `channel`:** DEV2_WIFI_RADIO read 100–140 with channel 36. Don't read it as the operating channel.
 
 ## Writes — none here, deliberately
 
@@ -88,3 +93,10 @@ is the protocol reference for this unit.
 4. Distance beats settings: at ~20 m through walls, 5 GHz may not reach at all —
    the fix is a cable or an EasyMesh access point (the VX800v is an EasyMesh
    controller), not a router setting.
+
+## Diagnosing a missing or weak band
+
+1. `routerctl scan` on the mini, which sits next to the router: its own 2.4 GHz SSID reads about -26 dBm there. Compare each SSID's min/max RSSI with its neighbours'.
+2. `routerctl radio`: enable, channel, width and transmit power per radio, as the router reports them.
+3. Own SSIDs at about -90 dBm next to the router while neighbours read about -78, at full transmit power, is not a power or name setting. Move the channel once inside 36–48 and once into 100–140 (DFS, ~60 s radar wait) and re-scan: strong on one range only is firmware; weak on all is the radio or antennas.
+4. SSIDs are case-sensitive. The Aginet app shows an SSID ending `_5G` as `_5g`: match names against `routerctl wifi` or `scan`, not the app.
