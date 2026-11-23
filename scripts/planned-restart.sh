@@ -113,7 +113,12 @@ backend="$( [ -f "$BACKEND_FILE" ] && cat "$BACKEND_FILE" || echo op )"
 [ -f "$APPLIER" ] || die "applier not found: $APPLIER"
 mini true >/dev/null 2>&1 || die "$HOST is not reachable over ssh"
 if [ "$REASON" = maintenance ]; then
-  say "maintenance reboot: no macOS update required"
+  # A pending update is fine (it stays pending); a RUNNING prepare is not: a forced reboot aborts it and boots the old OS.
+  # The brackets keep pgrep from matching its own ssh command line.
+  if mini 'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null'; then
+    die "a macOS update prepare is running on $HOST: a forced reboot aborts it and boots the old OS. Let it finish its own restart"
+  fi
+  say "maintenance reboot: no macOS update required (no prepare running)"
 else
   pending="$(mini "defaults read $SU_DOMAIN RecommendedUpdates 2>/dev/null || true" | sed -n 's/.*"Display Name" = "\(.*\)";/\1/p' | tr '\n' ',' | sed 's/,$//')"
   [ -n "$pending" ] || { say "no macOS update pending: nothing to restart for (REASON=maintenance reboots anyway)"; exit 0; }

@@ -34,6 +34,7 @@ printf '%s\n' "$last" >> "$ST/ssh.log"
 case "$last" in
   true)
     if [ -f "$ST/shutdown_sent" ] && [ ! -f "$ST/nodown" ] && [ ! -f "$ST/down_seen" ]; then touch "$ST/down_seen"; exit 255; fi ;;
+  *"pdateBrainService"*) [ -f "$ST/prepare_running" ] || exit 1 ;;
   *"kern.boottime"*)
     if [ -f "$ST/shutdown_sent" ] && [ ! -f "$ST/same_boot" ]; then echo "{ sec = 200 }"; else echo "{ sec = 100 }"; fi ;;
   *"nohup sudo -S shutdown -r +0"*) cat > "$ST/stdin"; touch "$ST/shutdown_sent" ;;
@@ -136,6 +137,11 @@ assert_contains "the leads are told it is a maintenance reboot" "$(log)" 'mainte
 d=$(line_of "queue set drain"); n=$(line_of "session note"); l=$(line_of "merge-lock --project alpha"); u=$(line_of "rebooter"); r=$(line_of "recovery-check"); q=$(line_of "queue set run")
 if [ -n "$d" ] && [ "$d" -lt "$n" ] && [ "$n" -lt "$l" ] && [ "$l" -lt "$u" ] && [ "$u" -lt "$r" ] && [ "$r" -lt "$q" ]; then
   ok "order: drain, notes, locks, reboot, recover, run"; else bad "order wrong: $d $n $l $u $r $q"; fi
+reset; touch "$ST/prepare_running"; REASON=maintenance run
+assert_eq "a macOS prepare is running: exit 1" "$RC" 1
+assert_contains "says why" "$OUT" "prepare is running"
+assert_not_contains "refused before draining" "$(log)" "queue set drain"
+assert_not_contains "no reboot" "$(log)" "rebooter"
 reset; touch "$ST/updater_fail"; REASON=maintenance run
 assert_eq "reboot applier failed: exit 1" "$RC" 1
 assert_not_contains "after the reboot started the queue is not released" "$(log)" "queue set run"
@@ -167,6 +173,9 @@ assert_contains "says so" "$OUT" "never went down"
 reset; touch "$ST/same_boot"; run_reboot
 assert_eq "boot time unchanged: exit 1" "$RC" 1
 assert_contains "says it never rebooted" "$OUT" "it never rebooted"
+reset; touch "$ST/prepare_running"; run_reboot
+assert_eq "a macOS prepare is running: exit 1" "$RC" 1
+assert_not_contains "prepare running: no shutdown" "$(log)" "shutdown -r +0"
 reset; touch "$ST/op_locked"; run_reboot
 assert_eq "1Password locked: exit 1" "$RC" 1
 assert_not_contains "locked: no shutdown" "$(log)" "shutdown -r +0"

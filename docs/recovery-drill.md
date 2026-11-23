@@ -236,7 +236,7 @@ REASON=maintenance make planned-restart   # a plain reboot with no macOS update 
 
 | Step | What it does | If it fails |
 |-|-|-|
-| 0 | MacBook only (backend `op`), mini reachable, an update actually pending (else exit 0, nothing drained) | stops, nothing changed |
+| 0 | MacBook only (backend `op`), mini reachable, an update actually pending (else exit 0, nothing drained). `REASON=maintenance`: no update needed, but a running macOS update prepare refuses (a forced reboot aborts it) | stops, nothing changed |
 | 1 | `factory queue set drain`: no Issue is admitted | refused = stop; an unannounced restart is the incident |
 | 2 | `factory session note` to every non-idle lead: the time, "commit and push, start no merge or deploy, you are resumed afterwards"; then 5 min (`PLANNED_RESTART_GRACE`) | a failed note is named, the run goes on |
 | 3 | for every project of the queue, `factory merge-lock` then `factory deploy-lock` with `-- true`: returns when the running window has ended (up to 90 min each) | a lock that does not free stops the run and puts the queue back to run |

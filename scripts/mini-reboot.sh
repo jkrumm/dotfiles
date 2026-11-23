@@ -13,6 +13,9 @@
 # secrets cache by design. Do not use this for a pending macOS update: mini-macos-update.sh owns that, and a forced
 # reboot there boots the old OS.
 #
+# Deliberately separate from mini-macos-update.sh: its guards and waits are shaped by the update (label pin, prepare, version check);
+# only the resume snapshot is shared (lib/resume-snapshot.sh). Refuses while a macOS update prepare is running.
+#
 # Overrides (tests): SSH_BIN, OP_BIN, MINI_HOST, BACKEND_FILE, REBOOT_{DOWN_WAIT,UP_WAIT,POLL}.
 # bash 3.2 (the MacBook's /bin/bash).
 set -euo pipefail
@@ -41,6 +44,10 @@ backend="$( [ -f "$BACKEND_FILE" ] && cat "$BACKEND_FILE" || echo op )"
 [ "$backend" = "op" ] || die "backend is '$backend': run this from the MacBook, not the dev host"
 OP_BIN="$OP_BIN" bash "$HERE/lib/op-signed-in.sh" "$ACCOUNT" || die "1Password is locked for $ACCOUNT: unlock it and re-run"
 remote true 2>/dev/null || die "$HOST is not reachable over ssh"
+
+if remote 'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null' 2>/dev/null; then
+  die "a macOS update prepare is running on $HOST: a forced reboot aborts it and boots the old OS. Let it finish its own restart"
+fi
 
 before="$(remote 'sysctl -n kern.boottime' 2>/dev/null)" || die "could not read the boot time of $HOST"
 say "$HOST is up ($before)"
