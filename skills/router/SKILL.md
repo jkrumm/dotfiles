@@ -1,6 +1,6 @@
 ---
 name: router
-description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel, width, band steering), connected Wi-Fi/wired clients, the G.fast line (sync rates, noise margin, attenuation), firmware, CPU/memory — via the `routerctl` CLI. Use when the user asks about home Wi-Fi, the router, which devices are connected, a band or SSID missing or weak (scan what the mini hears), signal or channel problems, slow LAN/Wi-Fi, or the internet line's physical state. For outage/speed history use the Argo Line page instead.
+description: Read the home TP-Link VX800v router — Wi-Fi bands (SSID, channel, width, band steering), connected Wi-Fi/wired clients, the G.fast line (sync rates, noise margin, attenuation), firmware, CPU/memory — via the `routerctl` CLI. Use when the user asks about home Wi-Fi, the router, which devices are connected, a band or SSID missing or weak (scan what the mini hears), signal or channel problems, slow LAN/Wi-Fi, changing a router setting through its web UI, or the internet line's physical state. For outage/speed history use the Argo Line page instead.
 ---
 
 # Router — TP-Link VX800v
@@ -60,12 +60,24 @@ router's LAN at home; neither reaches it when away.
 
 ## Writes — none here, deliberately
 
-Config changes (band steering, channels, width, SSIDs) go through the web UI:
-**Erweitert → WLAN → WLAN-Einstellungen** (per-band tabs; Band Steering is a
-separate switch at the bottom of the same page). Writes are `so` ACTs on
-`DEV2_ADT_WIFI_COMMON` / `DEV2_WIFI_BANDSTEERING`, untested — a wrong one drops
-every Wi-Fi client, including the session issuing it. Add one only with the
-owner present and a verified read-back.
+Config changes go through the web UI. API writes would be untested `so` ACTs on
+`DEV2_ADT_WIFI_COMMON`: a wrong one drops every Wi-Fi client.
+
+**Changing a setting through the web UI with a browser agent** (the owner present
+and asking for that one change): spawn the `browser` subagent on Sonnet, since a
+multi-page admin UI needs more than Haiku. Brief it with: `https://192.168.1.1`
+(accept the self-signed certificate), user `user`, the password read from the
+linewatch file above and typed, never echoed; one login, stop after two failures
+(lockout). A UI login logs linewatch's poller out until the next poll. Trap: a page
+snapshot of the login field and of the Basic overview prints the admin and Wi-Fi
+passwords into the agent's transcript, so the agent works from screenshots and
+targeted element reads on those pages. The menus (English UI): Advanced → Wireless →
+Wireless Settings (per band: SSID, hide, security, mode, channel, width, transmit
+power Low/Middle/High, OFDMA, TWT, BSS colouring), Guest Network, WPS, MAC
+Filtering, Wireless Schedule, Advanced Settings (beacon, DTIM, WMM, Zero-Wait DFS),
+Band Steering, Channel Optimization, EasyMesh, Multi-SSID; Advanced → System → Time
+Settings, LED Control, Reboot Schedule. There is no region setting and no control
+for MU-MIMO or beamforming. Read the change back with `routerctl` afterwards.
 
 WAN reconnect and router reboot exist, guarded, in linewatch:
 `make router-reconnect` / `make router-reboot` on the mini (need
@@ -98,5 +110,5 @@ is the protocol reference for this unit.
 
 1. `routerctl scan` on the mini, which sits next to the router: its own 2.4 GHz SSID reads about -26 dBm there. Compare each SSID's min/max RSSI with its neighbours'.
 2. `routerctl radio`: enable, channel, width and transmit power per radio, as the router reports them.
-3. Own SSIDs at about -90 dBm next to the router while neighbours read about -78, at full transmit power, is not a power or name setting. Move the channel once inside 36–48 and once into 100–140 (DFS, ~60 s radar wait) and re-scan: strong on one range only is firmware; weak on all is the radio or antennas.
+3. Own SSIDs at about -90 dBm next to the router while neighbours read about -78, at full transmit power, is not a power or name setting. Move the channel once inside 36–48 and once into 100–140 (DFS, ~60 s radar wait) and re-scan: strong on one range only is firmware; weak on all is the radio or antennas. A reboot and EasyMesh off did not change it on 2026-11-23: the ISP exchanges the unit.
 4. SSIDs are case-sensitive. The Aginet app shows an SSID ending `_5G` as `_5g`: match names against `routerctl wifi` or `scan`, not the app.
