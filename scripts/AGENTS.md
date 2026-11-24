@@ -39,10 +39,13 @@ resolves every ref through 1Password in one biometric pass, and reseals.
   cache IS delivered; opbackup does not stamp the refs as sealed). tkrumm is the
   trust anchor (recipient pin, Private-vault guard) and must be reachable.
   `secrets-rotate` runs `--require-complete`: it never delivers a partial cache.
-- **A dead ref blocks EVERY reseal of a reachable account.** The seed fails closed,
-  so one deleted upstream item means no cache update at all; the loop collects the
-  complete list before aborting. Fixing it is a refs-file edit, never a
-  `secrets-run` problem — and no monitor tells you which.
+- **A dead ref blocks a FULL reseal of a reachable account, not an incremental one.**
+  `make secrets-seed` fails closed (it could drop a value the cache holds), collecting
+  the complete list first. `--new-only` only reads refs the cache lacks, so a dead one
+  has nothing to lose: it seals every ref that resolved, names the dead ones and exits
+  **3**; the dead ref stays "missing" for `secrets-reseal-request` until the 1Password
+  item exists. Fixing it is a refs-file or 1Password edit, never a `secrets-run`
+  problem — and no monitor tells you which.
 - **`op whoami` is not an unlock probe, it is a permanent lock-out** — under
   desktop-app integration there is no CLI session token, so it returns rc=1 on a
   fully unlocked app while `op read` works in the same second. Use

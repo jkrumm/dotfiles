@@ -2532,7 +2532,7 @@ secrets-seed:
 
 # Incremental: read ONLY the refs the sealed cache lacks (one new ref = one `op` read) and keep
 # every other value. An unreachable 1Password account keeps its old values and is named once
-# (exit 3). This is what a "reseal" request for a new ref runs.
+# (exit 3); a dead new ref is named and skipped, the rest still seals (exit 3). This is what a "reseal" request for a new ref runs.
 .PHONY: secrets-seed-new
 secrets-seed-new:
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh

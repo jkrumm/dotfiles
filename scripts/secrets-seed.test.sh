@@ -584,7 +584,8 @@ assert_eq "18b. echoed phrase, per-ref: stops at the failing ref" "0 2" "$(count
 # ref) made it a full biometric reseal every time. Contract:
 #   - --new-only reads ONLY refs the current cache lacks; every other value is kept;
 #   - an unreachable account keeps its existing values, is named once, exit 3;
-#   - a dead ref in a REACHABLE account still fails the run closed with the full list.
+#   - a dead ref in a REACHABLE account fails a FULL run closed with the full list; --new-only
+#     seals what resolved, names the dead refs, exits 3 (issue 3250).
 injected_refs() { cat "$TESTREPO/op-injected.log" 2>/dev/null || true; }
 read_refs()     { grep '^read ' "$TESTREPO/op-calls.log" 2>/dev/null | grep -v 'mini age key' | sed 's/^read .* //' || true; }
 resolved_refs() { { injected_refs; read_refs; } | sort | tr '\n' ' '; }
@@ -715,24 +716,55 @@ assert_accepted "21b. baseline full seal"
 write_refs headless.iu.refs "op://Athena Internal/x/one" "op://Athena Intrenal/x/typo"
 : > "$TESTREPO/vaultgone-careerpartner"
 SEED_ARGS=(--new-only); run_seed
-assert_refused "21b. a single mistyped-vault ref fails closed"
-assert_contains "21b. and is named in the dead-ref list" "op://Athena Intrenal/x/typo" "$SEED_ERR"
+assert_eq "21b. a single mistyped-vault ref is a dead ref (partial seal, exit 3), not a vanished account" "3" "$SEED_CODE"
+assert_contains "21b. and is named" "op://Athena Intrenal/x/typo" "$SEED_ERR"
+assert_not_contains "21b. the account is not reported as gone" "none of its vaults exist" "$SEED_ERR"
+assert_eq "21b. the old value is kept" "$(stub_value careerpartner 'op://Athena Internal/x/one')" "$(cache_val 'careerpartner|op://Athena Internal/x/one')"
+assert_eq "21b. the dead ref is not sealed" "<absent>" "$(cache_val 'careerpartner|op://Athena Intrenal/x/typo')"
 
-# --- 22. a dead ref in a REACHABLE account still fails the run closed, full list --
+# --- 22. --new-only: a dead NEW ref in a reachable account does not hold back the rest ---
 reset_case
 write_refs headless.refs "op://test/a/one"
 run_seed
 assert_accepted "22. baseline full seal"
-before="$(decrypt_cache)"
 write_refs headless.refs "op://test/a/one" "op://test/badref/x" "op://test/badref/y" "op://test/a/fine"
 write_refs headless.iu.refs "op://test/c/one"
 : > "$TESTREPO/unreachable-careerpartner"
 SEED_ARGS=(--new-only); run_seed
-assert_refused "22. dead refs in a reachable account fail closed (even with the other account down)"
+assert_eq "22. dead new refs: partial seal exits 3" "3" "$SEED_CODE"
 assert_contains "22. first dead ref listed" "op://test/badref/x" "$SEED_ERR"
 assert_contains "22. second dead ref listed" "op://test/badref/y" "$SEED_ERR"
-assert_contains "22. states the cache was left alone" "cache untouched" "$SEED_ERR"
-assert_eq "22. the existing cache is byte-for-byte what it was" "$before" "$(decrypt_cache)"
+assert_eq "22. the resolvable new ref IS sealed" "$(stub_value tkrumm op://test/a/fine)" "$(cache_val op://test/a/fine)"
+assert_eq "22. an old value is kept" "$(stub_value tkrumm op://test/a/one)" "$(cache_val op://test/a/one)"
+assert_eq "22. a dead ref is not sealed" "<absent>" "$(cache_val op://test/badref/x)"
+assert_contains "22. the unreachable account is still named" "account careerpartner is unreachable" "$SEED_ERR"
+
+# --- 22b. the same dead refs in a FULL run still fail closed, cache byte-for-byte untouched ---
+reset_case
+write_refs headless.refs "op://test/a/one"
+run_seed
+assert_accepted "22b. baseline full seal"
+before="$(decrypt_cache)"
+write_refs headless.refs "op://test/a/one" "op://test/badref/x" "op://test/badref/y"
+run_seed
+assert_refused "22b. a full run with dead refs fails closed"
+assert_contains "22b. first dead ref listed" "op://test/badref/x" "$SEED_ERR"
+assert_contains "22b. second dead ref listed" "op://test/badref/y" "$SEED_ERR"
+assert_contains "22b. states the cache was left alone" "cache untouched" "$SEED_ERR"
+assert_eq "22b. the existing cache is byte-for-byte what it was" "$before" "$(decrypt_cache)"
+
+# --- 22c. --new-only with ONLY dead refs: nothing to seal, still exit 3 and named ---
+SEED_ARGS=(--new-only); run_seed
+assert_eq "22c. only dead new refs: exit 3, cache as it was" "3" "$SEED_CODE"
+assert_contains "22c. dead ref named" "op://test/badref/x" "$SEED_ERR"
+assert_eq "22c. cache unchanged" "$before" "$(decrypt_cache)"
+
+# --- 22d. --new-only with NO readable cache is a full run: dead refs fail closed ---
+reset_case
+write_refs headless.refs "op://test/a/one" "op://test/badref/x"
+SEED_ARGS=(--new-only); run_seed
+assert_refused "22d. no cache + dead ref: fails closed"
+assert_cache_absent "22d. nothing delivered"
 
 # --- 23. sealing from a MacBook: the current cache is read back over ssh --------
 # `ssh mini` is stubbed to run the remote script locally under a fake $HOME whose

@@ -29,11 +29,15 @@ ulimit -c 0 2>/dev/null || true  # no core dumps — they would capture resolved
 # or none of its vaults exist on this machine) does not stop the other account: its refs keep
 # the values already in the cache, and the run names the account once at the end. tkrumm is the
 # trust anchor (recipient pinning + the Private-vault guard), so it must always be reachable.
-# A dead ref in a REACHABLE account still fails the whole run closed, with the full list.
+# A dead ref in a REACHABLE account fails a FULL run closed, with the full list (a plain reseal
+# could silently drop a value the cache still holds). --new-only is different: a ref it reads is
+# by construction absent from the cache, so a dead one has no old value to lose. It seals every
+# ref that resolved, names the dead ones, and exits 3, so one wrong item name in one account no
+# longer holds back every other new ref (issue 3250).
 #
 # Exit codes: 0 = sealed + delivered, everything resolved; 3 = sealed + delivered PARTIALLY
-# (an account was unreachable: its old values were kept, and refs with no value anywhere are
-# listed); 1 = failed,
+# (an account was unreachable, or --new-only met a dead new ref: old values were kept, and refs
+# with no value anywhere are listed); 1 = failed,
 # cache untouched.
 
 SECRETS_PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}"
@@ -781,7 +785,14 @@ for ((_k = 0; _k < ${#ACCT_LIST[@]}; _k++)); do
   done
 done
 
-if (( dead_count > 0 )); then
+# --new-only against a readable cache: every ref read here was absent from the cache, so a dead
+# one costs nothing already sealed. Report it (in finish) and seal the rest.
+dead_tolerated=0
+if [[ "$MODE" == new ]] && ((EXIST_OK)) && (( dead_count > 0 )); then
+  dead_tolerated=1
+fi
+
+if (( dead_count > 0 && ! dead_tolerated )); then
   echo "" >&2
   echo "  ✗ unresolvable reference(s) — every one, so one pass tells you the whole list:" >&2
   for ((i = 0; i < ${#refs[@]}; i++)); do
@@ -809,6 +820,11 @@ for ((i = 0; i < ${#refs[@]}; i++)); do
     if [[ ${#vals[$i]} -lt "${REDACT_MIN_LEN:-5}" ]]; then
       echo "    ! ${refs[$i]} resolves to a ${#vals[$i]}-char value — too short to be redacted at runtime (secrets-run won't mask it)" >&2
     fi
+    continue
+  fi
+  if [[ -n "${dead[$i]+set}" ]]; then   # only reachable when dead_tolerated: no value anywhere
+    unsealed_flag[i]=1
+    unsealed=$((unsealed + 1))
     continue
   fi
   if (( kept[i] < 0 )); then
@@ -849,6 +865,16 @@ if (( fresh == 0 && keptn == ${#EXIST_KEYS[@]} && EXIST_OK )); then nothing_to_s
 # complete (opbackup-seed-auto must not stamp it as "refs sealed").
 finish() {
   local k a i kept_n unsealed_n rc=0
+  if (( dead_tolerated )); then
+    rc=3
+    echo "" >&2
+    echo "  ! $dead_count new reference(s) could not be resolved and were NOT sealed (everything else was):" >&2
+    for ((i = 0; i < ${#refs[@]}; i++)); do
+      [[ -n "${dead[$i]+set}" ]] && printf '      %s  (account %s)\n' "${refs[$i]}" "${accts[$i]}" >&2
+    done
+    echo "    The item or field does not exist (renamed, deleted, never created). Create it or fix" >&2
+    echo "    the ref in headless.refs / headless.iu.refs, then run: make secrets-seed-new" >&2
+  fi
   for ((k = 0; k < ${#ACCT_LIST[@]}; k++)); do
     (( ACCT_OK[k] )) && continue
     rc=3

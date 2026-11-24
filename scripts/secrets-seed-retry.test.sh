@@ -70,7 +70,7 @@ refs=("$@")
 accts=(); need=(); kept=(); for _ in "${refs[@]}"; do accts+=(tkrumm); need+=(1); kept+=(-1); done
 # The state the real script has built by the time it reaches the resolve section: one
 # reachable account, every ref needed, no current cache (so nothing is kept).
-OP_ACCOUNT=tkrumm; REQUIRE_COMPLETE=0
+OP_ACCOUNT=tkrumm; REQUIRE_COMPLETE=0; MODE=full
 ACCT_LIST=(tkrumm); ACCT_OK=(1); ACCT_WHY=(""); ACCT_NEED=("${#refs[@]}"); ACCT_ATT=(0); ACCT_VGONE=(0)
 EXIST_KEYS=(); EXIST_VALS=(); EXIST_OK=0; EX_IX=-1
 load_existing() { :; }
