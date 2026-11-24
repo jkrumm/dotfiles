@@ -881,16 +881,38 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test human-queue-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test brew-upgrade-test bun-bin-test drift-check-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test iumac-gate-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test storage-status-test cargo-target-seed-test check-slow ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
-# the failures. Order is the cost of a red run: the cheap suites go first so a failure there stops within
-# about a minute, and the five heaviest (measured 2026-11-21, serial: devhost-heartbeat 209 s, claude-launcher
-# 66 s, ext-mirror 47 s, smb-keepalive 46 s, jobs 32 s of ~570 s in all) run last, together, in `check-slow`.
-# A suite that grows past a minute belongs in CHECK_SLOW.
-CHECK_SLOW := devhost-heartbeat-test claude-launcher-test ext-mirror-test smb-keepalive-test jobs-test
+# the failures. Two lanes run side by side: `check-slow-start` (first prerequisite) launches the CHECK_SLOW suites in
+# the background, the serial prerequisites run meanwhile, and `check`'s own recipe joins the background lane and
+# replays its output, so wall time is the longer lane, not their sum (measured 2026-11-24: serial ~245 s, slow lane
+# ~75 s). A suite joins CHECK_SLOW when it runs past ~15 s; every one is hermetic (its own mktemp dir), which is what
+# makes the parallel lane safe. A red cheap suite stops the foreground lane at once; the background lane then
+# finishes on its own, within its longest suite, and removes its own directory.
+CHECK_SLOW := devhost-heartbeat-test claude-launcher-test ext-mirror-test smb-keepalive-test jobs-test iumac-gate-test brew-upgrade-test storage-status-test human-queue-test drift-check-test
 
-check-slow: ## The slowest check suites in parallel (wall time = the longest one); each suite's output stays whole, replayed in order
+check:
+	@d="$${TMPDIR:-/tmp}/check-slow.$$PPID"; \
+	[ -d "$$d" ] || { echo "  ✗ check-slow lane was not started ($$d missing)"; exit 1; }; \
+	while [ ! -f "$$d/done" ]; do /bin/sleep 0.2; done; \
+	failed=""; \
+	for t in $(CHECK_SLOW); do \
+		echo "== $$t"; cat "$$d/$$t.log"; \
+		[ "$$(cat "$$d/$$t.rc")" = 0 ] || failed="$$failed $$t"; \
+	done; \
+	rm -rf "$$d"; \
+	[ -z "$$failed" ] || { echo "  ✗ check-slow failed:$$failed"; exit 1; }
+
+.PHONY: check-slow-start
+check-slow-start:
+	@d="$${TMPDIR:-/tmp}/check-slow.$$PPID"; rm -rf "$$d"; mkdir -p "$$d"; \
+	( for t in $(CHECK_SLOW); do \
+		( $(MAKE) --no-print-directory $$t >"$$d/$$t.log" 2>&1; echo $$? >"$$d/$$t.rc" ) & \
+	  done; wait; \
+	  if kill -0 $$PPID 2>/dev/null; then : >"$$d/done"; else rm -rf "$$d"; fi ) >/dev/null 2>&1 &
+
+check-slow: ## The CHECK_SLOW suites in parallel (wall time = the longest one); each suite's output stays whole, replayed in order
 	@d=$$(mktemp -d "$${TMPDIR:-/tmp}/check-slow.XXXXXX"); \
 	for t in $(CHECK_SLOW); do \
 		( $(MAKE) --no-print-directory $$t >"$$d/$$t.log" 2>&1; echo $$? >"$$d/$$t.rc" ) & \
