@@ -448,4 +448,11 @@ out21b=$(PATH="$FAKE:$PATH" FAKE_SIM_FAIL="A" bash "$HERE/disk-sweep.sh" sim-run
 check "sim-runtimes: a runtime that cannot be deleted fails the step" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "1 could not be"' _ "$rc21b" "$out21b"
 
 
+# (f) pkg-caches npx: an install more than 7 days old goes, a fresh one stays.
+mkdir -p "$HOME/.npm/_npx/old-install" "$HOME/.npm/_npx/fresh-install"
+echo x > "$HOME/.npm/_npx/old-install/f"; echo x > "$HOME/.npm/_npx/fresh-install/f"
+old 10 "$HOME/.npm/_npx/old-install/f" "$HOME/.npm/_npx/old-install"
+out8=$(PATH=/usr/bin:/bin /bin/bash "$HERE/disk-sweep.sh" pkg-caches 2>&1); rc8=$?
+check "pkg-caches: npx install over 7 days old removed, fresh one kept, exit 0" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/.npm/_npx/old-install" ] && [ -e "$2/.npm/_npx/fresh-install/f" ] && printf "%s" "$3" | grep -q "npx installs trimmed"' _ "$rc8" "$HOME" "$out8"
+
 exit "$fail"

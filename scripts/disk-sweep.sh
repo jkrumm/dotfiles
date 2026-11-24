@@ -309,6 +309,19 @@ step_pkg-caches() {
     fi
   fi
 
+  # npx keeps one install per package set and installs a missing one again on its next run: an install more than a week old goes (its directory's mtime is the install time).
+  local npx_dir="${npm_config_cache:-$HOME/.npm}/_npx"
+  if [ -d "$npx_dir" ]; then
+    local npx_before npx_after
+    npx_before=$(dir_kb "$npx_dir" || echo 0)
+    if with_timeout "$TOOL_TIMEOUT" find "$npx_dir" -mindepth 1 -maxdepth 1 -mtime +7 -exec rm -rf -- {} +; then
+      npx_after=$(dir_kb "$npx_dir" || echo 0)
+      parts+="npx installs trimmed ($(( (npx_before - npx_after) / 1024 )) MB), "
+    else
+      parts+="npx trim FAILED, "; rc=1
+    fi
+  fi
+
   local bun_dir="$HOME/.bun/install/cache"
   if [ -d "$bun_dir" ] && command -v bun >/dev/null 2>&1; then
     if ! kb=$(dir_kb "$bun_dir"); then

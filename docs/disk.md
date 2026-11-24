@@ -26,6 +26,7 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | `~/.local/share/factory` | software-factory | 7 | history | the factory (archive, spikes) |
 | `~/.local/share/teamchat` | epos-ai-teamchat-athena | 9 | history | the app (backups) |
 | `~/.local/state/prometheus-scripts/backups` | prometheus-scripts | 16 | history | its backup job; retention is the owner's call (338 hourly, 212 daily dirs) |
+| `~/.npm` | dotfiles | 5 | cache | sweep: pkg-caches (_cacache over 3 GB; _npx installs over 7 days old) |
 | `~/tmp` | dotfiles | 8 | cache | the owner's scratch |
 | `~/IuRoot` | dotfiles | 46 | data | the owner (.archive, clones) |
 | `/opt/homebrew` | dotfiles | 30 | data | sweep: pkg-caches; Postgres data ~15 |
@@ -34,7 +35,7 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | `/Applications` | dotfiles | 18 | data | the owner |
 | `/Library` | dotfiles | 10 | data | macOS |
 
-Caps 665.0 + system 45.0 = 710.0 GiB; the limit is 80 % of 894 GiB = 715.2 GiB.
+Caps 670.0 + system 45.0 = 715.0 GiB; the limit is 80 % of 894 GiB = 715.2 GiB.
 <!-- /disk-budget:table -->
 
 Classes: `data` is state to keep, `cache` regenerates, `build` is build output and worktrees, `history` is logs, backups and transcripts. The external SSD is not on this volume and has no row: `docs/external-ssd.md`, `docs/storage.md`.
@@ -56,7 +57,7 @@ Classes: `data` is state to keep, `cache` regenerates, `build` is build output a
 | Step | Removes |
 |-|-|
 | `tmpdir`, `node-cache` | top-level entries over 3 days in `$TMPDIR` and this user's `/private/tmp` that nothing holds open; stale node compile cache |
-| `pkg-caches` | uv prune (forced when a `uv run` holds the lock), `brew cleanup -s`, npm over 3 GB, bun over 5 GB |
+| `pkg-caches` | uv prune (forced when a `uv run` holds the lock), `brew cleanup -s`, npm over 3 GB, npx installs (`~/.npm/_npx`) over 7 days old, bun over 5 GB |
 | `lima-cache`, `sim-runtimes`, `simulators` | Lima IPSWs a day old; all but the newest simulator runtime per platform, and the devices they orphaned |
 | `worktrees` | `target/` and `node_modules/` of a closed Issue's factory worktree (source stays) |
 | `seeds`, `scratch` | cargo seeds a day old except the current key's and the newest; `~/cache` dirs of closed Issues, idle ones over 14 days, sccache over 5 GB |
