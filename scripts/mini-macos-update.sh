@@ -131,13 +131,28 @@ say "· installer launched, logging to $log"
 say "· waiting up to ${PREPARE_WAIT}s for the prepare to start…"
 waited=0
 prepared=0
+gone=0
 while [ "$waited" -lt "$PREPARE_WAIT" ]; do
-  if ssh "${SSH_OPTS[@]}" "$HOST" \
-       'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null' 2>/dev/null; then
+  # pgrep's rc is the signal: 0 a prepare runs, 1 none yet, 255 ssh itself failed.
+  # The brackets keep pgrep from matching the remote shell's own command line.
+  rc=0
+  err="$(ssh "${SSH_OPTS[@]}" "$HOST" \
+         'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null' 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then
     prepared=1; break
+  elif [ "$rc" -eq 255 ]; then
+    # The host going away IS the success case, but only a connection-level failure says so.
+    # An auth, key or config error (255 too) proves nothing: fail closed. A single blip
+    # is not enough either: the host must stay gone for two checks in a row.
+    case "$err" in
+      *"Permission denied"*|*"Host key verification failed"*|*"Could not resolve"*|*"Too many authentication"*|*"Bad configuration"*|*"REMOTE HOST IDENTIFICATION"*)
+        die "cannot tell whether the prepare started: ssh to $HOST failed (not a host-down error): $err" ;;
+    esac
+    gone=$(( gone + 1 ))
+    if [ "$gone" -ge 2 ]; then prepared=1; break; fi
+  else
+    gone=0
   fi
-  # The host going away IS the success case if it happened fast.
-  ssh "${SSH_OPTS[@]}" "$HOST" true 2>/dev/null || { prepared=1; break; }
   sleep 10
   waited=$(( waited + 10 ))
 done
