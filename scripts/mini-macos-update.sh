@@ -133,7 +133,7 @@ waited=0
 prepared=0
 while [ "$waited" -lt "$PREPARE_WAIT" ]; do
   if ssh "${SSH_OPTS[@]}" "$HOST" \
-       'pgrep -f "UpdateBrainService|SoftwareUpdateLauncher" >/dev/null' 2>/dev/null; then
+       'pgrep -f "[U]pdateBrainService|[S]oftwareUpdateLauncher" >/dev/null' 2>/dev/null; then
     prepared=1; break
   fi
   # The host going away IS the success case if it happened fast.
@@ -149,7 +149,7 @@ if [ "$prepared" != "1" ]; then
   echo "    app is vetoing the restart. Reboot $HOST plainly and run this again:" >&2
   echo "      ssh $HOST 'sudo shutdown -r now'   # needs the password" >&2
   echo "    Do NOT force a reboot once a prepare IS running — that boots the old OS." >&2
-  echo "    Check by hand: ssh $HOST 'pgrep -fl UpdateBrainService'" >&2
+  echo "    Check by hand: ssh $HOST 'pgrep -fl "[U]pdateBrainService"'" >&2
   exit 1
 fi
 say "· preparing (this takes minutes, and $HOST restarts itself — leave it alone)"
