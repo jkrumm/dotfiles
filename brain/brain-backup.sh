@@ -79,27 +79,35 @@ LOCK_WAIT="${BRAIN_BACKUP_LOCK_WAIT:-120}"
 acquire_lock() {
   local waited=0 holder lock_born lock_age
   while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    if [ "$waited" -ge "$LOCK_WAIT" ]; then
+      echo "brain-backup: could not take the vault lock $LOCK_DIR after ${LOCK_WAIT}s (holder pid ${holder:-none}) — skipping tonight's sweep"
+      return 1
+    fi
     holder="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
     lock_born="$(stat -f %m "$LOCK_DIR" 2>/dev/null || true)"
     lock_age=$(( $(date +%s) - ${lock_born:-0} ))
     # `ps` rather than `kill -0`: the latter cannot distinguish a live process
     # owned by another user (EPERM) from one that is genuinely gone (ESRCH).
     # A pidless lock younger than a minute is a sync run mid-claim, so it is live too.
-    if { [ -n "$holder" ] && ps -p "$holder" >/dev/null 2>&1; } || { [ -z "$holder" ] && [ "$lock_age" -lt 60 ]; }; then
-      if [ "$waited" -ge "$LOCK_WAIT" ]; then
-        echo "brain-backup: brain-sync (pid ${holder:-unknown}) still holds the vault lock after ${LOCK_WAIT}s — skipping tonight's sweep"
-        return 1
+    if [ -d "$LOCK_DIR" ]; then
+      if { [ -n "$holder" ] && ps -p "$holder" >/dev/null 2>&1; } || { [ -z "$holder" ] && [ "$lock_age" -lt 60 ]; }; then
+        [ "$waited" -gt 0 ] || echo "brain-backup: brain-sync (pid ${holder:-unknown}) holds the vault lock — waiting up to ${LOCK_WAIT}s for it to release"
+      else
+        echo "brain-backup: reclaiming the lock left by pid ${holder:-unknown} (${lock_age}s old) — no such process" >&2
+        rm -rf "$LOCK_DIR"
       fi
-      [ "$waited" -gt 0 ] || echo "brain-backup: brain-sync (pid ${holder:-unknown}) holds the vault lock — waiting up to ${LOCK_WAIT}s for it to release"
-      sleep 1
-      waited=$((waited + 1))
-      continue
     fi
-    echo "brain-backup: reclaiming the lock left by pid ${holder:-unknown} (${lock_age}s old) — no such process" >&2
-    rm -rf "$LOCK_DIR"
+    # Every pass waits a second and counts, so no path (a lock that cannot be created,
+    # a reclaim that fails again) can spin without bound.
+    sleep 1
+    waited=$((waited + 1))
   done
-  printf '%s' "$$" >"$LOCK_DIR/pid"
-  [ "$waited" -eq 0 ] || echo "brain-backup: brain-sync released the vault lock after ${waited}s — sweeping"
+  if ! printf '%s' "$$" >"$LOCK_DIR/pid"; then
+    echo "brain-backup: cannot write the pid into $LOCK_DIR — skipping tonight's sweep"
+    rm -rf "$LOCK_DIR"
+    return 1
+  fi
+  [ "$waited" -eq 0 ] || echo "brain-backup: vault lock free after ${waited}s — sweeping"
 }
 acquire_lock || { beat up "skipped: brain-sync holds the lock"; beat_sent="yes"; exit 0; }
 trap on_exit EXIT

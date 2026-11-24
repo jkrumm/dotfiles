@@ -52,7 +52,7 @@ printf '%s' "$holder" >"$LOCK/pid"
 ( sleep 2; kill "$holder" 2>/dev/null || true; rm -rf "$LOCK" ) &
 sweep BRAIN_BACKUP_LOCK_WAIT=20
 [ "$RC" -eq 0 ] || fail "released lock: exit $RC, want 0"
-expect_contains "$OUT" "released the vault lock"
+expect_contains "$OUT" "vault lock free after"
 expect_contains "$(head_subject)" "chore(brain): nightly vault sync"
 wait "$holder" 2>/dev/null || true
 
@@ -67,7 +67,7 @@ sweep BRAIN_BACKUP_LOCK_WAIT=2
 kill "$holder" 2>/dev/null || true
 wait "$holder" 2>/dev/null || true
 [ "$RC" -eq 0 ] || fail "live holder past the wait: exit $RC, want 0"
-expect_contains "$OUT" "still holds the vault lock after 2s"
+expect_contains "$OUT" "could not take the vault lock"
 [ "$(git -C "$VAULT" rev-parse HEAD)" = "$before" ] || fail "a sweep committed while the lock was held"
 [ -f "$LOCK/pid" ] || fail "the sweep removed a lock a live run holds"
 rm -rf "$LOCK"
@@ -83,5 +83,13 @@ sweep BRAIN_BACKUP_LOCK_WAIT=20
 [ "$RC" -eq 0 ] || fail "dead holder: exit $RC, want 0"
 expect_contains "$OUT" "reclaiming the lock"
 expect_contains "$(head_subject)" "chore(brain): nightly vault sync"
+
+# 5. A lock that cannot be created at all is bounded by the same wait, never a busy loop.
+RC=0
+OUT="$(env BRAIN_VAULT="$VAULT" BRAIN_SYNC_LOCK_DIR="$TMP/no-such-dir/brain-sync.lock" \
+  BRAIN_BACKUP_LOCK_WAIT=2 BRAIN_BACKUP_PUSH_URL_FILE="$TMP/no-url-file" bash "$SCRIPT" 2>&1)" || RC=$?
+[ "$RC" -eq 0 ] || fail "uncreatable lock: exit $RC, want 0"
+expect_contains "$OUT" "could not take the vault lock"
+[ "$(printf '%s\n' "$OUT" | wc -l)" -lt 10 ] || fail "uncreatable lock: output grew without bound"
 
 echo "brain-backup tests: ok"
