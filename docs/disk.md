@@ -46,7 +46,7 @@ Classes: `data` is state to keep, `cache` regenerates, `build` is build output a
 - **Status file** `~/.local/state/disk-budget/status.json`: every row with `measured_gib`, `cap_gib`, `over` and its signal, the volume's use, the commit sum, uncovered paths. The log is `~/Library/Logs/disk-budget.log`.
 - **A row over its cap** files one factory signal on its owner, with the number and the cap. It files once, then stays quiet until the row has been under its cap again or 14 days pass. A repo the factory does not know gets the signal on dotfiles with the owner in the title.
 - **Unknown growth:** any path over 5 GiB (`unknown_gib`) that no row covers files one signal on dotfiles. Add a row for it or remove what grows there.
-- **The job fails** only on what a human edit repairs: a table that over-commits the volume, a row it could not measure, a signal the factory refused for the owner and for dotfiles alike.
+- **The job fails** only on what a human edit repairs: a table that over-commits the volume, a signal the factory refused for the owner and for dotfiles alike. A row whose `du` stalls twice (300 s each) is `measured_gib: null` for that run and does not fail the job; a scan that stalls gives up at 900 s.
 - **Changing a cap** is an edit of its row, then `make disk-budget-docs` (re-renders the table above) and `make disk-budget-test`. A cap that does not fit under the limit means another row has to give.
 
 ## Sweeps

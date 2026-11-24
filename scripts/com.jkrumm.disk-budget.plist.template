@@ -5,8 +5,8 @@
   <key>Label</key><string>com.jkrumm.disk-budget</string>
   <!-- Daily comparison of the disk budget (config/mini/disk-budget.yaml) with du: one status file with
        measured and cap per row, one factory signal per row over its cap, one per uncovered path over
-       5 GiB. Fails only when the table over-commits the volume, a row cannot be measured or a signal is
-       refused. See scripts/disk-budget.ts and docs/disk.md. -->
+       5 GiB. Fails only when the table over-commits the volume or a signal is refused; a stalled row is
+       reported unmeasured. See scripts/disk-budget.ts and docs/disk.md. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/.local/bin/jobrun</string>
