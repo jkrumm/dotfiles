@@ -303,7 +303,7 @@ log "stop Athena's cluster (disabled so a login does not start it beside the one
 ATHENA_STOPPED=1
 launchctl disable "$UID_GUI/$ATHENA_LABEL"
 launchctl bootout "$UID_GUI/$ATHENA_LABEL" 2>/dev/null || true
-# bootout's SIGTERM is a smart shutdown that waits for teamchat's sessions, and the lock file in
+# bootout's SIGTERM is a smart shutdown that waits for Athena's sessions, and the lock file in
 # the socket dir the one server takes over stays until it ends (third drill). Make it fast.
 if "$PGBIN/pg_ctl" -D "$ATHENA_DATA" status >/dev/null 2>&1; then
   "$PGBIN/pg_ctl" -D "$ATHENA_DATA" -m fast -w -t 60 stop >/dev/null

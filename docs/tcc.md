@@ -76,7 +76,7 @@ Mini, 2026-10-31 (68 agents; the unified log of the last 7 days holds no `AUTHRE
 | Program | Why flagged | Class |
 |-|-|-|
 | `sh.brew.postgresql@18` | Cellar path, ad-hoc | no grant (data under `/opt/homebrew/var`) |
-| `com.iu.prometheus-dashboard-autodeploy`, `com.iu.teamchat-runtime-deploy` | python3 in a Cellar path | no grant (`~/IuRoot`) |
+| `com.iu.prometheus-dashboard-autodeploy` | python3 in a Cellar path | no grant (`~/IuRoot`) |
 | `com.iu.prometheus-vpn-watcher` | uv python, ad-hoc | no grant (`~/IuRoot`, `~/SourceRoot`) |
 | `com.jkrumm.weatherorb.worker-*`, `…watchdog` | uv python, ad-hoc | removable: their data is on the external volume since 2026-11-14 (`docs/external-ssd.md` §TCC) |
 | `com.jkrumm.modelpick-web` | bun in a Cellar path (Developer ID signed) | no grant |

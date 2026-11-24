@@ -333,7 +333,7 @@ describe("grade", () => {
     expect(f.lines).toContain("WARN container the registry does not know: default/stray (register it, or make mini-prune)")
     expect(f.lines).toContain("WARN disabled but still installed: job (make mini-prune removes the plist)")
     // a registered container in another VM than its row declares is the second-vm rule's finding, not an unknown container
-    const moved = snap({ vms: new Map([["teamchat", { running: true, mib: 100 }]]), containers: new Map([["teamchat", [{ name: "mariadb", project: "vps", state: "running", mib: 10 }]]]) })
+    const moved = snap({ vms: new Map([["second", { running: true, mib: 100 }]]), containers: new Map([["second", [{ name: "mariadb", project: "vps", state: "running", mib: 10 }]]]) })
     expect(grade(services, moved).drift.unknown_containers).toEqual([])
   })
 

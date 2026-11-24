@@ -18,7 +18,7 @@
 #               neither refuses the verb. status: the owner's own status command, for the apps page
 services:
   - { name: hermes-gateway, repo: hermes-agent, kind: launchd, tier: core, label: ai.hermes.gateway, memory_mib: 570 }
-  - { name: athena-repo-sync, repo: epos-ai-teamchat-athena, kind: launchd, tier: core, label: com.iu.athena-repo-sync, memory_mib: 50 }
+  - { name: athena-repo-sync, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.athena-repo-sync, memory_mib: 50, note: "600s; bash/repo-sync.sh keeps epos-tool-athena and epos-knowledge-athena current" }
   - { name: athena-sprint-ensure, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.athena-sprint-ensure, memory_mib: 50, note: "07:30 daily; epx jira sprint-ensure --commit opens the next two Athena sprints when missing" }
   - { name: prometheus-conduktor-token, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-conduktor-token, memory_mib: 50 }
   - { name: prometheus-dashboard-autodeploy, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-dashboard-autodeploy, memory_mib: 50 }

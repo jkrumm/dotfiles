@@ -7,7 +7,7 @@ the registry in the same commit as its plist (the doctor fails on a loaded job i
 
 | Tier | Rule |
 |-|-|
-| `core` | always on (herdr-core, factory, agw, Postgres, Caddy, hermes, home, iris, argo, finances, rb, schedules, the work stack: VPN, teamchat sandbox) |
+| `core` | always on (herdr-core, factory, agw, Postgres, Caddy, hermes, home, iris, argo, finances, rb, schedules, the work stack: VPN) |
 | `on-demand` | starts on the first request, stops idle (dev servers behind `.test` doors, research-chrome) |
 | `manual` | a profile starts it: `work` (the student-enrolment containers), `dev-db` |
 

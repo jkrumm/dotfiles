@@ -31,7 +31,7 @@ rows:
   - { path: ~/.claude, owner: dotfiles, cap_gib: 15, class: history, enforced_by: "Claude Code: cleanupPeriodDays 7" }
   - { path: ~/.hermes, owner: hermes-agent, cap_gib: 10, class: data, enforced_by: "the app" }
   - { path: ~/.local/share/factory, owner: software-factory, cap_gib: 7, class: history, enforced_by: "the factory (archive, spikes)" }
-  - { path: ~/.local/share/teamchat, owner: epos-ai-teamchat-athena, cap_gib: 9, class: history, enforced_by: "the app (backups)" }
+  - { path: ~/.local/share/teamchat, owner: dotfiles, cap_gib: 9, class: history, enforced_by: "the owner: retired Teamchat backups (2026-11-24), delete when nothing needs them" }
   - { path: ~/.local/state/prometheus-scripts/backups, owner: prometheus-scripts, cap_gib: 16, class: history, enforced_by: "its backup job; retention is the owner's call (338 hourly, 212 daily dirs)" }
   - { path: ~/.npm, owner: dotfiles, cap_gib: 5, class: cache, enforced_by: "sweep: pkg-caches (_cacache over 3 GB; _npx installs over 7 days old)" }
   - { path: ~/tmp, owner: dotfiles, cap_gib: 8, class: cache, enforced_by: "the owner's scratch" }

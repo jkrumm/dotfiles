@@ -1060,7 +1060,7 @@ probe_colima() {
     || { echo "colima boot path REVERTED — ProgramArguments:0 is '${program:-unreadable}', not the bounded-retry wrapper, so a broken image boot-loops every 10s (fix: make _colima-supervise)"; return 1; }
 
   # Third assertion: a name RESOLVES inside the default VM. A running VM with a live docker socket says nothing
-  # about its resolver: on 2026-11-14 the file colima wrote once at provisioning went stale when the teamchat
+  # about its resolver: on 2026-11-14 the file colima wrote once at provisioning went stale when a second
   # profile took its gateway address, the VPN container looped on `could not resolve` for five minutes, and
   # everything above stayed green. The failure line names the resolver in the file and the gateway.
   local dns

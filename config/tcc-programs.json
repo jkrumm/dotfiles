@@ -4,7 +4,6 @@
     "sh.brew.postgresql@18": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
     "com.iu.prometheus-dashboard-autodeploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot only" },
     "com.iu.tool-checkout-deploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot and ~/.local/state only (as prometheus-dashboard-autodeploy)" },
-    "com.iu.teamchat-runtime-deploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot only" },
     "com.iu.prometheus-vpn-watcher": { "class": "no-grant", "why": "uv python; touches the VPN client and ~/IuRoot only" },
     "com.jkrumm.modelpick-web": { "class": "no-grant", "why": "bun in a Cellar path; serves from ~/SourceRoot" },
     "com.jkrumm.orb.build": { "class": "no-grant", "why": "ad-hoc built orb binary on a versioned path (~/orb/releases/<sha>); its data root /Volumes/orb-data is an internal APFS volume (not removable), so no grant applies; measured 2026-11-21" },

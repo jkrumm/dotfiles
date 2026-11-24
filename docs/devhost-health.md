@@ -500,7 +500,7 @@ not a host setting.
 page cache the host cannot take back; it lands on the next `make colima-restart`). `mediaanalysisd` was already disabled by
 `make photos-analysis-off`; the 490 MB it held was freed by killing it (launchd may start it again on an XPC event until the next restart, `docs/host-waste.md`; the
 doctor line names that). Spotlight indexing was already off (`mdutil -s /`). Stopping the VM when idle is not possible: the VPN, the
-dashboard and teamchat run always and colleagues reach them (§Memory budget).
+dashboard run always and colleagues reach them (§Memory budget).
 
 **Reverted (2026-11-24).** The ceiling 2.5 → **4 GiB**, the revert signal having fired three times in two days: the import
 dashboard's on-demand API was killed twice on 2026-11-23 (child exit -9) and the nightly snapshot build on 2026-11-24 (exit -9,

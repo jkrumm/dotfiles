@@ -193,7 +193,7 @@ the weatherorb session workflow.
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the live Argo since 2026-10-30, from `~/.argo/releases/<sha>`, crons on; Caddy doors `argo-live.test` and `argo.jkrumm.com` (extra FQDN door); health for Kuma through the Kuma door `/h/argo` |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
-| `com.jkrumm.agent-workflows-gateway` | agent-workflows | KeepAlive (:7794, loopback) — the inference gateway (`packages/gateway`, `gateway/<build>/` under `~/.agent-workflows`, not the release dir; restarted by a deploy only when its build changed). The one process that holds provider keys: the personal IU key and one API key per Claude Console org (`iu`, `me`, `me2`, from `config/claude-accounts.json` `platform` blocks, `docs/claude-accounts.md`). Callers present a door token from `~/.agent-workflows/data/door-tokens`; its own SQLite ledger is the outbox for `usage.records`. Claude Code and Athena Teamchat stay outside it |
+| `com.jkrumm.agent-workflows-gateway` | agent-workflows | KeepAlive (:7794, loopback) — the inference gateway (`packages/gateway`, `gateway/<build>/` under `~/.agent-workflows`, not the release dir; restarted by a deploy only when its build changed). The one process that holds provider keys: the personal IU key and one API key per Claude Console org (`iu`, `me`, `me2`, from `config/claude-accounts.json` `platform` blocks, `docs/claude-accounts.md`). Callers present a door token from `~/.agent-workflows/data/door-tokens`; its own SQLite ledger is the outbox for `usage.records`. Claude Code stays outside it |
 | `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
 | `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
@@ -214,12 +214,6 @@ the weatherorb session workflow.
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 | `com.iu.tool-checkout-deploy` | IuRoot (epos-tool-athena) | 600s — `prometheus-deploy-gate/gate.py` for the tool-checkout dashboard worktree |
 | `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
-| `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
-| `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
-| `com.iu.teamchat-api` | IuRoot (chat) | KeepAlive — `make -C chat api` in the teamchat-runtime worktree |
-| `com.iu.teamchat-broker` | IuRoot (chat) | KeepAlive — `epx serve run --port 8790` in the teamchat-runtime worktree | <!-- cli-refs: ignore -->
-| `com.iu.teamchat-runtime-deploy` | IuRoot (chat) | 600s — `prometheus-deploy-gate/gate.py` for the teamchat runtime |
-| `com.iu.teamchat-funnel-reconcile` | IuRoot (chat) | 300s — `chat/scripts/funnel.sh reconcile` in the teamchat-runtime worktree |
 
 Three of the five IU jobs (`epos-token`, `state-backup`, `conduktor-token`) log to `/tmp` — a known gap, owned by `epos-tool-athena`,
 not fixed here because IuRoot repos are out of this map's write scope, and one
@@ -266,7 +260,7 @@ verbs and grading: [`mini-registry.md`](mini-registry.md).
 | Tier | Rule | Members |
 |-|-|-|
 | `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules |
-| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors, the teamchat sandbox, `research-chrome`, `shared-chrome` |
+| `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors, `research-chrome`, `shared-chrome` |
 | `manual` | started and stopped as a profile | `work` (student-enrolment containers), `dev-db` (mariadb, redis, clickstack) |
 
 The tier is recorded here and enforced by nothing yet; the rows that make `on-demand` and `manual` real are in
@@ -295,7 +289,7 @@ The agent-workflows host (`:7791`) has the same kind of door for the image studi
 | `tcp:22` → mini | OpenSSH, key-only | tailnet `tag:mac → tag:mac` |
 | `tcp:5900` → mini | macOS Screen Sharing (VNC) | tailnet `tag:mac → tag:mac`, MacBook → mini only |
 | `tcp:8642` → mini | Hermes's OpenAI-compatible API (iris is its consumer; Argo's chat route was removed 2026-10-30 with its `tag:vps → tag:mac` grant) | no tailnet grant — the API server is currently off, port closed |
-| `:8443` (IU dashboard), `:10000` (Athena Teamchat) | `tailscale serve` Funnel | **public internet** — the mini's entire public surface |
+| `:8443` (IU dashboard) | `tailscale serve` Funnel | **public internet** — the mini's entire public surface |
 | `tcp:2222` → `<peer-host>` | userland sshd behind `tailscale serve --tcp` | tailnet `tag:mac → tag:mac` |
 | `ssh homelab` / `ssh vps` | Tailscale SSH (keyless) | tailnet ACL |
 | `tcp:445` (SMB `~/Shuttle`) | macOS smbd | tailnet `tag:mac → tag:mac` |
@@ -318,8 +312,8 @@ process (agent-workflows' `scripts/launch-gateway.sh`). agw, its OpenCode server
 `oc` and modelpick hold no provider key: each reaches every model through the gateway
 (`127.0.0.1:7794`) with its own door token from `~/.agent-workflows/data/door-tokens`
 (mode 0600, a caller per line, never in a repo or a log). `~/.config/agw/iu.env` is no
-longer read. Claude Code (subscription logins) and Athena Teamchat (its own team key)
-never pass through it. The Codex lane (`cx`, `cxa`, `astra`) is the other holder of the personal IU key: its launcher (`config/zsh/codex.zsh`) resolves it for codex. Money flow and pool picking: agent-workflows `docs/gateway.md`;
+longer read. Claude Code (subscription logins)
+never passes through it. The Codex lane (`cx`, `cxa`, `astra`) is the other holder of the personal IU key: its launcher (`config/zsh/codex.zsh`) resolves it for codex. Money flow and pool picking: agent-workflows `docs/gateway.md`;
 the registry the pools come from: `docs/claude-accounts.md` §Platform.
 
 ## Watchers
@@ -344,7 +338,6 @@ rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to
 | `com.jkrumm.hermes-liveness`, `Hermes Backup - Push` | push | Hermes gateway (and the inference gateway door token), the 03:00 backup | Kuma, Slack | the owner | hermes-agent | kept; see Open below |
 | `com.jkrumm.hermes-serve-liveness` | push (backstop 4 h) | `hermes serve` (:9119) | Kuma, Slack | the owner | hermes-agent | kept; see Open below |
 | `com.jkrumm.linewatch-watchdog`, `com.jkrumm.linewatch-heartbeat` | push (`Home Line - Push`, `Home Line - Watchdog` latch) | the home internet line, the collector | Kuma, Slack | the owner | linewatch | kept; see Open below |
-| `com.iu.teamchat-vm-watch` | unspecified | teamchat VM (IuRoot, read-only mention) | unspecified | unspecified | IuRoot (teamchat) | not reviewed here |
 | `com.iu.prometheus-vpn-watcher` | in-process self-heal ladder (IuRoot, read-only mention) | the VPN | a desktop notification per the archived note `docs/archive/background-jobs-2026-10-warden-era.md` | unspecified | IuRoot | not reviewed here |
 
 **`fseventsd` leak (2026-11-06):** the system daemon (pid 551, up 5 days) grew to 61 GiB, 55 GiB compressed, filled the 64 GiB swap and held `MacMini Dev Host - Push` DOWN. The heartbeat's memory component now names it above 10 GiB (WARN). The restart is `sudo killall fseventsd` (launchd respawns it at a few MiB; run it through `ask-human`, the mini's sudo password is MacBook-only). `launchctl kickstart -k system/com.apple.fseventsd` does **not** work: SIP refuses it. It recurred (2026-11-12: 2.1 GB, 260 % CPU, 5 days up, swapouts 5 GB per 300 s), so `com.jkrumm.fseventsd-watch` now restarts it hourly when its memory is above 1.5 GB or its CPU stays at 150 % for 10 min, through one sudoers rule (`scripts/sudoers.d/fseventsd-restart`, installed once by `make fseventsd-sudoers` through `ask-human`; until it is installed the job logs that and exits 0). Whether worktree churn feeds the leak is unproven: only 6 worktrees exist now, too few to implicate them.

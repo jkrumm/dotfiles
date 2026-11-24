@@ -16,15 +16,15 @@ Issue 1177 (*Mini lean*); this page is its first row, the registry and its verbs
 
 | Tier | Rule | Members today |
 |-|-|-|
-| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, the teamchat api, broker and sandbox, and the work stack colleagues reach (VPN, its watcher, the token minters, the dashboard and tool deploy gates, the state backup, the artefact job) |
+| `core` | always on | herdr-core, the factory, agent-workflows, Postgres, Caddy, hermes, the home jobs, iris, argo, finances, modelpick, linewatch, rb, the schedules, and the work stack colleagues reach (VPN, its watcher, the token minters, the dashboard and tool deploy gates, the state backup, the artefact job) |
 | `on-demand` | starts on the first request, stops after an idle window | dev servers behind `.test` doors (basalt, rollhook, fpp, ...), `research-chrome`, `shared-chrome` (the `/browse` Chrome) |
 | `manual` | started and stopped as a profile | `work` (the student-enrolment containers only), `dev-db` (mariadb, redis, clickstack); weatherorb's disabled jobs and the import dashboard (`dashboard-api`, `dashboard-ui`, no verb yet) have no profile |
 
 A tier is a promise the registry holds. For a dev server behind a tailnet door the host keeps it (§Apps page): the door
 starts it, the idle stop ends it.
 
-**One VM, always on, 2.5 GiB.** The mini runs one Colima VM, `default`. The VPN and the teamchat sandbox
-(opencode, relay, egress) run in it, colleagues reach them, so they are `core` and no profile verb stops them; the import dashboard runs in it on demand (`manual`, no profile): `make
+**One VM, always on, 2.5 GiB.** The mini runs one Colima VM, `default`. The VPN
+runs in it, colleagues reach it, so it is `core` and no profile verb stops it; the import dashboard runs in it on demand (`manual`, no profile): `make
 mini-profile NAME=work UP=0` reaches only the student-enrolment containers. The dev databases (`dev-db`) start in the same
 VM on demand. The VM's budget is its measured footprint times 1.1 (a vz guest cannot exceed its ceiling by much); its
 revert signal is an out-of-memory kill in the guest, answered by `COLIMA_MEMORY=3` (then 4), never by a second VM.
@@ -191,7 +191,7 @@ Declared Interactive here: Postgres, software-factory, factory-door, agent-workf
 hc-resume. Left at 20 on purpose: Caddy, dnsmasq and tailscaled (system daemons at 20; their plists are root-owned and a
 restart drops every door or the tailnet, so a sudo step of the owner's: `caddy/caddy.plist.template` carries the key and
 `make caddy-boot-order` applies it), colima (a restart takes Docker down), the agw gateway and audio (agent-workflows' plists:
-signal filed), hermes, argo, iris, modelpick, rb, finances, linewatch, the home jobs and the teamchat jobs (tenant apps, or
+signal filed), hermes, argo, iris, modelpick, rb, finances, linewatch, the home jobs (tenant apps, or
 another repo's plist, not measured to starve).
 
 ## Where the findings go

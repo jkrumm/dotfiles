@@ -791,11 +791,11 @@ foreground, one hop) instead of hot-looping on `colima start -f`'s instant
   supervise`, exit 0, over the stock plist it exists to repair.
 - **The default VM's resolver is derived at every start, never remembered.**
   Lima's host resolver is the guest's default gateway, and the gateway moves when
-  lima renumbers the guest: the `default` and `teamchat` profiles (two VMs then; one now) shared one lima
+  lima renumbers the guest: the `default` and a second profile (two VMs then; one now) shared one lima
   network, so whichever booted first takes `192.168.5.2` and the other gets the
   next address. The `/etc/resolv.conf` colima wrote once at provisioning
   (`nameserver 192.168.5.1`, 2026-06-08) went stale on 2026-11-14 18:54 CET when
-  teamchat restarted first; nothing answered DNS, the VPN container looped on
+  the second profile restarted first; nothing answered DNS, the VPN container looped on
   `could not resolve` and every container that resolves names was cut off for
   about five minutes. The fix is `colima/vm-dns-guest.sh` (runs in the guest:
   the default route's gateway becomes the only nameserver, prints `changed` or
@@ -807,8 +807,7 @@ foreground, one hop) instead of hot-looping on `colima start -f`'s instant
   the containers that still hold the old resolver (they read it when they
   start; `--restart` restarts them); `vm-dns.sh check` is the heartbeat's
   `colima` probe line (a name resolves inside the VM; a failure names the
-  resolver in the file and the gateway). The teamchat VM no longer exists:
-  its sandbox runs in this VM (Issue 1239).
+  resolver in the file and the gateway). The second VM no longer exists (Issue 1239).
 - **Order rule (history, from the two-VM time): never restart one colima profile while the other is booting.**
   They shared the lima network, so the address a VM got depended on who booted
   first; with one VM it no longer applies. `make colima-restart` returns before the VM is down (`bootout` +
@@ -873,9 +872,8 @@ where the human is.
 - **Current rows**: `:7730` (rb, tailnet-only), `:8788` (Collie, tailnet-only,
   never funneled), `:8443` — **Funnel, public internet**, the IU dashboard, gated
   by `tag:iu-dashboard-funnel`, an *additive single-device* tag because Funnel is
-  a whole-device capability and `tag:mac` would expose the work MacBook; `:10000` —
-  **Funnel, public internet**, Athena Teamchat, same tag and grant. Those two ports
-  are the machine's entire public surface.
+  a whole-device capability and `tag:mac` would expose the work MacBook. That port
+  is the machine's entire public surface (`:10000`, Athena Teamchat, was retired 2026-11-24).
 - **Tagging a device is console-only** and independent of pushing a grant — both
   are silently inert without the other (`tag:devhost`, `tag:tablet` likewise).
 - **Verify the live filter with no API key**, from the mini itself:

@@ -9,7 +9,7 @@ only `colima/mounts.mini.txt` (not `$HOME`): a new bind mount elsewhere shows an
 first. Run `colima-restart` from the main checkout: the plist records the checkout it ran from. The default VM's
 resolver is **derived at every start** (`colima/vm-dns-guest.sh`, an `after-boot` provision step written by
 `colima/apply-provision.sh`; `colima/vm-dns.sh apply|check` on a running VM; the heartbeat's `colima` probe fails when no name
-resolves in it). **The mini runs one VM, always on** (the VPN, the import dashboard and the teamchat sandbox share it; an out-of-memory kill in the guest means `COLIMA_MEMORY=3` (then 4), never a second VM), and `make colima-restart` returns before the VM is down. Full model — the inverted
+resolves in it). **The mini runs one VM, always on** (the VPN and the import dashboard share it; an out-of-memory kill in the guest means `COLIMA_MEMORY=3` (then 4), never a second VM), and `make colima-restart` returns before the VM is down. Full model — the inverted
 `KeepAlive` repair, brew silently regenerating the plist on every `brew
 services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,
 `kickstart -k` not re-reading the plist, `com.colima.docker-socket` for the

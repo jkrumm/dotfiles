@@ -194,7 +194,7 @@ databases:
     privileges:
       PUBLIC: [CONNECT, TEMPORARY]
 
-  # Athena teamchat (epos-ai-teamchat-athena, scripts/athena-pg.sh).
+  # Athena Teamchat's database; Teamchat was retired 2026-11-24 and nothing connects. Kept until the owner drops it.
   athena:
     owner: athena_owner
     locale: { provider: libc, locale: C }

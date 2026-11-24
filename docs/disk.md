@@ -24,7 +24,7 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | `~/.claude` | dotfiles | 15 | history | Claude Code: cleanupPeriodDays 7 |
 | `~/.hermes` | hermes-agent | 10 | data | the app |
 | `~/.local/share/factory` | software-factory | 7 | history | the factory (archive, spikes) |
-| `~/.local/share/teamchat` | epos-ai-teamchat-athena | 9 | history | the app (backups) |
+| `~/.local/share/teamchat` | dotfiles | 9 | history | the owner: retired Teamchat backups (2026-11-24), delete when nothing needs them |
 | `~/.local/state/prometheus-scripts/backups` | prometheus-scripts | 16 | history | its backup job; retention is the owner's call (338 hourly, 212 daily dirs) |
 | `~/.npm` | dotfiles | 5 | cache | sweep: pkg-caches (_cacache over 3 GB; _npx installs over 7 days old) |
 | `~/tmp` | dotfiles | 8 | cache | the owner's scratch |

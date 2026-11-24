@@ -22,7 +22,7 @@ never stop it, so its data never moves there.
 | `agent_workflows` | `agent_workflows` | agent-workflows; argo reads as `argo_agw_ro` | TCP, scram |
 | `postgres` | superuser | the vps prod mirror's schemas (`make restore-local`) | TCP, scram |
 | `spike_s1` | superuser | none (agent-workflows' finished runtime spike, kept) | - |
-| `athena` | `athena_owner` | Athena teamchat as `athena_app` | peer over `~/.local/state/athena/pgsock` (0700) |
+| `athena` | `athena_owner` | none: Athena Teamchat (`athena_app`) was retired 2026-11-24, the data is kept until the owner drops it | peer over `~/.local/state/athena/pgsock` (0700) |
 | `weatherorb`, `weatherorb_dbos` | `weatherorb_owner` (PostGIS and pg_trgm stay the superuser's) | weatherorb (`weatherorb_owner`, `weatherorb_spots_ro`) | peer over `/tmp` (0700) |
 | `weatherorb_<suite>_test_<id>` | superuser | weatherorb's tests: scratch databases, undeclared (reported as drift), the app roles log in by peer | peer over `/tmp` |
 | `argo_test_<12 hex>` | superuser | argo's tests (`scripts/test.sh`, `bun test:api`): created and dropped per run, undeclared (reported as drift) | unix socket in `/tmp`, as the OS user |
@@ -137,9 +137,7 @@ step that locked itself out): five databases copied with zero differences, the s
 127.0.0.1:5432 with both sockets, `make verify` of software-factory and agent-workflows green.
 The default Colima VM then went to 4 GiB with the mounts of `colima/mounts.mini.txt`.
 
-Open: the teamchat VM's move into the default one and Athena's script cleanup need Issues in the
-work repo epos-ai-teamchat-athena, which only the owner can file (drafts:
-`~/.local/state/pg-cutover/work-repo-drafts/`); vps still has to remove the stopped container from
+Open: vps still has to remove the stopped container from
 `compose.dev.yml` (its `volumes:` still lists `postgres-dev-data`).
 
 ### Restore proof and removal of the old copies (issue 1163, 2026-11-21)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs INSIDE the colima VM, as root: make /etc/resolv.conf name the default route's gateway as its only
 # nameserver. Lima's host resolver IS the guest's default gateway, and the gateway changes when lima renumbers
-# the guest (the default and teamchat profiles share one lima network, so whichever boots first takes .2/.3).
+# the guest (profiles share one lima network, so whichever boots first takes .2/.3).
 # The file colima writes once at provisioning goes stale and every name lookup in the VM dies
 # (2026-11-14: the VPN container looped on `could not resolve` for five minutes).
 # Idempotent; prints "changed" or "unchanged". colima/apply-provision.sh embeds this file as an `after-boot`
