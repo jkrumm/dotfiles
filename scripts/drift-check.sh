@@ -300,7 +300,7 @@ check_tailscale() {
   local host v
   for host in homelab vps; do
     v=$(/usr/bin/ssh -o ConnectTimeout=8 -o BatchMode=yes "$host" 'tailscale version --daemon' </dev/null 2>/dev/null \
-      | /usr/bin/awk -F': ' '/^Daemon:/{print $2}' | /usr/bin/cut -d- -f1)
+      | /usr/bin/awk -F': ' '/^Daemon:/{print $2}' | /usr/bin/cut -d- -f1 || true)  # ssh 255 under pipefail would end the whole run
     if [[ -z "$v" ]]; then skip_add "tailscale on $host (unreachable)"
     elif [[ "$v" != "$latest" ]]; then drift_add "tailscale-$host" "tailscale on $host $v → $latest (fix, from the MacBook: make tailscale-upgrade HOST=$host)"
     fi

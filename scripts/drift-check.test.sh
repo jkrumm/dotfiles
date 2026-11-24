@@ -122,6 +122,7 @@ EOF
 cat > "$BIN/ssh" <<'EOF'
 #!/bin/sh
 # ssh -o .. -o .. <host> '<cmd>'
+[ -f "$ST/ssh_$5.down" ] && exit 255
 cat "$ST/ssh_$5"
 EOF
 chmod +x "$BIN"/* "$TS/tailscale"
@@ -353,6 +354,8 @@ assert_contains "feed unreachable is skipped" "$(push_msg)" "tailscale (pkgs.tai
 reset; ts_current; printf 'Daemon: 1.099.0\n' > "$ST/ssh_homelab"; printf "no daemon line\n" > "$ST/ssh_vps"; run
 assert_contains "server behind is its own drift key" "$(push_msg)" "tailscale on homelab 1.099.0 → 1.102.3 (fix, from the MacBook: make tailscale-upgrade HOST=homelab)"
 assert_contains "server answering without a Daemon line is skipped, not drift" "$(push_msg)" "tailscale on vps (unreachable)"
+reset; ts_current; touch "$ST/ssh_homelab.down"; run
+assert_contains "a server that does not answer ssh (255) is skipped and the run goes on" "$(push_msg)" "tailscale on homelab (unreachable)"
 reset; rm "$TS/sock"; printf 'Client: 1.50.0\nDaemon: 1.50.0\n' > "$ST/ts_daemon"; cp "$TS/tailscale" "$TS/app"; run
 assert_contains "app bundle is reported and left alone" "$OUT" "tailscale 1.50.0 (app bundle (App Store or standalone) — updates via the App Store)"
 assert_eq "app bundle never drifts or consults the feed" "$(push_msg)" "everything current"
