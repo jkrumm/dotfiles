@@ -37,7 +37,12 @@ backup_push_url=""
 if [ -n "${BRAIN_BACKUP_PUSH_URL:-}" ] || [ -f "$BACKUP_PUSH_URL_FILE" ]; then
   backup_push_url="$(kuma_resolve_push_url "${BRAIN_BACKUP_PUSH_URL:-}" "$BACKUP_PUSH_URL_FILE")" || backup_push_url=""
 fi
-beat() { [ -n "$backup_push_url" ] && kuma_push "$backup_push_url" "$1" "$2" >/dev/null 2>&1 || true; }
+# A heartbeat that fails is logged: the log is the only place that says whether Kuma heard the night.
+beat() {
+  [ -n "$backup_push_url" ] || return 0
+  local out
+  out="$(kuma_push "$backup_push_url" "$1" "$2" 2>&1)" || echo "brain-backup: heartbeat ($1) did not reach Kuma: ${out:-no output}"
+}
 
 # A sweep that dies under `set -e` — a rejected hook, a full disk, an unreachable
 # origin — would otherwise exit non-zero having said nothing at all, and 25h later
@@ -62,29 +67,41 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "brain-backup: $VA
 # below sees a clean tree, reports "nothing to commit" and exits 0 — and the
 # night's uncommitted work sits in a stash that the only committing job on the
 # mini has just declared absent. The other outcome is dying on .git/index.lock
-# mid-`git add -A` with no sweep at all. A one-night skip is the correct
-# response to a live sync; silently losing the sweep is not.
+# mid-`git add -A` with no sweep at all. Waiting for a live sync to finish is the
+# correct response; giving up on the night is only right once the wait runs out (see acquire_lock).
 LOCK_DIR="${BRAIN_SYNC_LOCK_DIR:-$HOME/Library/Caches/brain-sync.lock}"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  holder="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
-  # `ps` rather than `kill -0`: the latter cannot distinguish a live process
-  # owned by another user (EPERM) from one that is genuinely gone (ESRCH).
-  if [ -n "$holder" ] && ps -p "$holder" >/dev/null 2>&1; then
-    echo "brain-backup: brain-sync (pid $holder) holds the vault lock — skipping tonight's sweep"
-    beat up "skipped: brain-sync holds the lock"; beat_sent="yes"
-    exit 0
-  fi
-  lock_born="$(stat -f %m "$LOCK_DIR" 2>/dev/null || true)"
-  lock_age=$(( $(date +%s) - ${lock_born:-0} ))
-  if [ -z "$holder" ] && [ "$lock_age" -lt 60 ]; then
-    echo "brain-backup: the vault lock has no pid yet and is only ${lock_age}s old — a sync run is claiming it; skipping tonight's sweep"
-    exit 0
-  fi
-  echo "brain-backup: reclaiming the lock left by pid ${holder:-unknown} (${lock_age}s old) — no such process" >&2
-  rm -rf "$LOCK_DIR"
-  mkdir "$LOCK_DIR" 2>/dev/null || { echo "brain-backup: lost the race for $LOCK_DIR — skipping tonight's sweep"; exit 0; }
-fi
-printf '%s' "$$" >"$LOCK_DIR/pid"
+
+# A brain-sync tick holds the lock for seconds, so a live holder is waited out, not
+# treated as a reason to skip the night. Only a holder still there after
+# BRAIN_BACKUP_LOCK_WAIT seconds (default 120) costs the sweep, and that is logged.
+# Returns 1 on that timeout; never removes a lock a live run holds.
+LOCK_WAIT="${BRAIN_BACKUP_LOCK_WAIT:-120}"
+acquire_lock() {
+  local waited=0 holder lock_born lock_age
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    holder="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    lock_born="$(stat -f %m "$LOCK_DIR" 2>/dev/null || true)"
+    lock_age=$(( $(date +%s) - ${lock_born:-0} ))
+    # `ps` rather than `kill -0`: the latter cannot distinguish a live process
+    # owned by another user (EPERM) from one that is genuinely gone (ESRCH).
+    # A pidless lock younger than a minute is a sync run mid-claim, so it is live too.
+    if { [ -n "$holder" ] && ps -p "$holder" >/dev/null 2>&1; } || { [ -z "$holder" ] && [ "$lock_age" -lt 60 ]; }; then
+      if [ "$waited" -ge "$LOCK_WAIT" ]; then
+        echo "brain-backup: brain-sync (pid ${holder:-unknown}) still holds the vault lock after ${LOCK_WAIT}s — skipping tonight's sweep"
+        return 1
+      fi
+      [ "$waited" -gt 0 ] || echo "brain-backup: brain-sync (pid ${holder:-unknown}) holds the vault lock — waiting up to ${LOCK_WAIT}s for it to release"
+      sleep 1
+      waited=$((waited + 1))
+      continue
+    fi
+    echo "brain-backup: reclaiming the lock left by pid ${holder:-unknown} (${lock_age}s old) — no such process" >&2
+    rm -rf "$LOCK_DIR"
+  done
+  printf '%s' "$$" >"$LOCK_DIR/pid"
+  [ "$waited" -eq 0 ] || echo "brain-backup: brain-sync released the vault lock after ${waited}s — sweeping"
+}
+acquire_lock || { beat up "skipped: brain-sync holds the lock"; beat_sent="yes"; exit 0; }
 trap on_exit EXIT
 
 if [ -z "$(git status --porcelain)" ]; then
