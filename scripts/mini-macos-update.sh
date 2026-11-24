@@ -149,7 +149,7 @@ if [ "$prepared" != "1" ]; then
   echo "    app is vetoing the restart. Reboot $HOST plainly and run this again:" >&2
   echo "      ssh $HOST 'sudo shutdown -r now'   # needs the password" >&2
   echo "    Do NOT force a reboot once a prepare IS running — that boots the old OS." >&2
-  echo "    Check by hand: ssh $HOST 'pgrep -fl "[U]pdateBrainService"'" >&2
+  echo "    Check by hand: ssh $HOST 'pgrep -fl \"[U]pdateBrainService\"'" >&2
   exit 1
 fi
 say "· preparing (this takes minutes, and $HOST restarts itself — leave it alone)"
