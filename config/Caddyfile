@@ -131,6 +131,13 @@ factory.test {
 	reverse_proxy localhost:7795
 }
 
+# agw-gateway — the agent-workflows inference gateway (loopback :7794); every request needs a door token. Its own
+# door auth answers 401 without one, so the tailnet door exposes nothing open.
+agw-gateway.test {
+	import local
+	reverse_proxy localhost:7794
+}
+
 # argo-live — the native Argo (com.jkrumm.argo, :7737, loopback): one Bun process serving the API under /api, the built
 # dashboard and the browser OTLP relay, so this door needs no path logic. `argo.test` above is the Vite dev server.
 argo-live.test {

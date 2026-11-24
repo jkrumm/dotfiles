@@ -104,7 +104,7 @@ The only headless run, kept on purpose:
 The **inference gateway** (`agent-workflows/packages/gateway`, loopback `:7794`, LaunchAgent
 `com.jkrumm.agent-workflows-gateway`). It holds the personal IU key and one API key per Claude Console org
 (`iu`, `me`, `me2`); `agw`, its OpenCode server, Hermes, dotfiles `oc` and modelpick hold none and reach every model
-through it with their own door token (`~/.agent-workflows/data/door-tokens`). The three subscriptions grant a monthly API
+through it with their own door token (`~/.agent-workflows/data/door-tokens`). The tailnet door `https://agw-gateway.<dev-domain>` (Caddy, `config/Caddyfile`) lets a MacBook client such as NtfyMac reach it; the token is still required. The three subscriptions grant a monthly API
 credit that expires unspent otherwise; a Claude call spends the soonest-expiring org's credit first, then IU. Claude Code
 and Athena Teamchat stay outside it, and a Claude-Code-shaped request never uses a credit org. Every request is one
 `usage.records` row (`source='gateway'`) and one pick row. Design: agent-workflows `docs/gateway.md`; pools and their
