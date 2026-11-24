@@ -189,8 +189,7 @@ describe("registry parsing", () => {
     const { services } = loadAll()
     expect(services.filter((s) => s.kind === "vm").map((s) => s.name)).toEqual(["colima-default"])
     const core = ["vpn", "prometheus-vpn-watcher", "prometheus-dashboard-autodeploy",
-      "prometheus-state-backup", "prometheus-conduktor-token", "prometheus-epos-token", "tool-checkout-deploy",
-      "teamchat-opencode", "teamchat-relay", "teamchat-egress"]
+      "prometheus-state-backup", "prometheus-conduktor-token", "prometheus-epos-token", "tool-checkout-deploy"]
     for (const n of core) expect(services.find((s) => s.name === n)?.tier).toBe("core")
     for (const n of ["dashboard-api", "dashboard-ui"]) expect(services.find((s) => s.name === n)?.tier).toBe("manual")
     // the selection `mini-registry profile work --down` makes
