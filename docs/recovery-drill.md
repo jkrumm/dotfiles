@@ -304,5 +304,5 @@ wall clock, so the gap is real, not a clock step.
 
 **Cause: unproven.** The hold sits between launchd's last issued boot task and the start of the daemon wave; the log has no step name for it,
 and no fix is justified. What would settle it is repetition: the boot record gives `boot_to_userspace_s` per reboot. A near-constant value
-(here 335 to 360 s on two boots) points at a fixed wait or timeout; a value that grows with disk use or terminal count points at I/O. Read the
+(here 354 s measured on 2026-11-23; 2026-11-15 is only bounded, first heartbeat at 322 s) points at a fixed wait or timeout; a value that grows with disk use or terminal count points at I/O. Read the
 next three records before spending anything on it.

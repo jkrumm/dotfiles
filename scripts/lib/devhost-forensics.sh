@@ -109,9 +109,9 @@ devhost_snapshot() {
 }
 
 # --- One boot record per boot ----------------------------------------------------------------------------------
-# 2026-11-23 the mini sat about six minutes between kernel boot and its first userspace daemon, then another ten
-# before the post-boot load fell (docs/recovery-drill.md §Boot to userspace). The two halves have different causes
-# and different owners, so every boot records both, once: a line `{ts, up_s, boot: {...}}` in the snapshot log.
+# 2026-11-23 the mini sat about six minutes between kernel boot and its first userspace daemon, then about four
+# more minutes before the post-boot load fell (docs/recovery-drill.md §5). The two waits are separate questions
+# (what holds launchd, what loads the host afterwards), so every boot records both, once: a line `{ts, up_s, boot: {...}}` in the snapshot log.
 #
 #   boot_at          kern.boottime (kernel start), UTC
 #   userspace_at     start of the earliest surviving process that is neither kernel_task (pid 0) nor launchd (pid 1)
