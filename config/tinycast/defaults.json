@@ -18,17 +18,19 @@
     "dev.zed.Zed",
     "com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip",
     "com.microsoft.teams2",
-    "net.imput.helium"
+    "net.imput.helium",
+    "dev.herdr.app",
+    "com.google.Chrome.app.ekdpnfoeaimgkhdlfhomnnalmapfgfla",
+    "com.jkrumm.ntfy-mac",
+    "com.jkrumm.iris.mac"
   ],
   "boundCustomCommandIDs": [],
   "boundCustomWindowSizeIDs": [],
   "boundExtensionCommandEntryIDs": [
     "extension:jkrumm/quick-add",
-    "extension:jkrumm/claude-usage",
     "extension:jkrumm/hub",
-    "extension:jkrumm/netgear",
-    "extension:jkrumm/van-power",
-    "extension:jkrumm/shortcuts"
+    "extension:jkrumm/shortcuts",
+    "extension:jkrumm/my-tasks"
   ],
   "boundQuickActionIDs": [],
   "boundQuicklinkIDs": [],
@@ -105,12 +107,42 @@
       }
     }
   },
+  "hotkey.app.com.google.Chrome.app.ekdpnfoeaimgkhdlfhomnnalmapfgfla": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 3
+        }
+      }
+    }
+  },
   "hotkey.app.com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip": {
     "$jsonString": {
       "combo": {
         "_0": {
           "carbonModifiers": 6400,
           "carbonKeyCode": 0
+        }
+      }
+    }
+  },
+  "hotkey.app.com.jkrumm.iris.mac": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 34
+        }
+      }
+    }
+  },
+  "hotkey.app.com.jkrumm.ntfy-mac": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 45
         }
       }
     }
@@ -131,6 +163,16 @@
         "_0": {
           "carbonModifiers": 6400,
           "carbonKeyCode": 1
+        }
+      }
+    }
+  },
+  "hotkey.app.dev.herdr.app": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 7
         }
       }
     }
@@ -165,16 +207,6 @@
       }
     }
   },
-  "hotkey.extensionCommand.extension:jkrumm/claude-usage": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 32
-        }
-      }
-    }
-  },
   "hotkey.extensionCommand.extension:jkrumm/home": {
     "$jsonString": {
       "combo": {
@@ -195,12 +227,12 @@
       }
     }
   },
-  "hotkey.extensionCommand.extension:jkrumm/netgear": {
+  "hotkey.extensionCommand.extension:jkrumm/my-tasks": {
     "$jsonString": {
       "combo": {
         "_0": {
           "carbonModifiers": 6400,
-          "carbonKeyCode": 34
+          "carbonKeyCode": 49
         }
       }
     }
@@ -225,76 +257,6 @@
       }
     }
   },
-  "hotkey.extensionCommand.extension:jkrumm/spotify": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 35
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-louder": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 126
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-next": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 124
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-play-pause": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 49
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-previous": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 123
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-quieter": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 125
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/van-power": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 3
-        }
-      }
-    }
-  },
   "hotkey.togglePalette": {
     "$jsonString": {
       "combo": {
@@ -306,20 +268,6 @@
     }
   },
   "hyperKeyIncludesShift": false,
-  "hyperKeyKeyboardMappings": {
-    "$json": {
-      "bootSessionID": "B3E87D17-B0E7-4F26-A165-F07887103251",
-      "keyboards": {
-        "4294973378": {
-          "original": [],
-          "installed": {
-            "source": 30064771129,
-            "destination": 30064771181
-          }
-        }
-      }
-    }
-  },
   "hyperKeyPhysicalKey": "capsLock",
   "interfaceSize": "standard",
   "launcherAliases": {

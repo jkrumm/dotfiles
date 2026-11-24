@@ -44,8 +44,8 @@ TRACKED = Path(__file__).resolve().parent.parent / "config/tinycast/defaults.jso
 VOLATILE = re.compile(r"^(NS|Apple|SU|com\.apple\.)")
 
 # Kept out of git, live only: endpoint URLs and hostnames of private services
-# (this repo is public), and the app's own runtime state.
-PRIVATE = {"aiConnections", "mcpServers", "notesActiveFileName", "supportReminders"}
+# (this repo is public), and the app's own runtime state (per-boot keyboard ids).
+PRIVATE = {"aiConnections", "mcpServers", "notesActiveFileName", "supportReminders", "hyperKeyKeyboardMappings"}
 
 
 def read_live() -> dict:
