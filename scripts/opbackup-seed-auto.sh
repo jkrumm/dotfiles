@@ -298,12 +298,12 @@ fi
 seed_rc=0
 "$SEED_SCRIPT" ${seed_args[@]+"${seed_args[@]}"} || seed_rc=$?
 
-# Exit 3 = delivered, but an account was unreachable (its old values kept, some refs may
-# have no value). NOT a success: the refs stamp stays untouched so the refs stay due, and
+# Exit 3 = delivered, but an account was unreachable or a new ref was dead (old values kept,
+# some refs have no value). NOT a success: the refs stamp stays untouched so the refs stay due, and
 # the retry backoff paces the next attempt. The cache itself was updated.
 if [ "$seed_rc" -eq 3 ]; then
-  log "PARTIAL — cache updated, but an account was unreachable (see the seed output); refs stay due, retry after ${RETRY_HOURS}h"
-  notify "1Password secrets cache" "Partly resealed — a 1Password account was unreachable; sign in to it."
+  log "PARTIAL — cache updated, but an account was unreachable or a new ref does not resolve (see the seed output); refs stay due, retry after ${RETRY_HOURS}h"
+  notify "1Password secrets cache" "Partly resealed — an account was unreachable or a ref does not resolve; see the log."
   exit 1
 fi
 
