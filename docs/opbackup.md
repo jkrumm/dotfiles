@@ -61,7 +61,7 @@ Since 2026-11-13 a refs-only change is also a **cheap** reseal: the guard runs
 reads only the refs the cache lacks and keeps every other value; only an aged cache
 gets the full pass. Both the incremental and a per-account-degraded seal keep the
 previous `_seeded_at` and file mtime, so this guard's age gate keeps measuring the
-last COMPLETE reseal. A seal that exits **3** (an account unreachable: old values
+last COMPLETE reseal. A seal that exits **3** (an account unreachable or a new ref that does not resolve: old values
 kept, delivered) is logged `PARTIAL`, exits non-zero and does NOT stamp the refs as
 sealed, so they stay due. Agents on the mini ask for a reseal with
 `make secrets-reseal-request` (one request per missing-ref set), not by hand.
