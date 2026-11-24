@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Host side of the default colima VM's resolver (the guest half is vm-dns-guest.sh, which colima also runs on
-# every start as a provision step).#   vm-dns.sh apply [--restart]  derive now; if it changed, containers still hold the old resolver (they read
+# every start as a provision step).
+#   vm-dns.sh apply [--restart]  derive now; if it changed, containers still hold the old resolver (they read
 #                                it when they start): name them, or with --restart restart them
 #   vm-dns.sh check              exit 0 when a name resolves inside the VM; else print the resolver in the file
 #                                and the gateway, exit 1 (the heartbeat's colima probe calls this)

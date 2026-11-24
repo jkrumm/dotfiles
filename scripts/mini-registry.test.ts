@@ -185,7 +185,7 @@ describe("registry parsing", () => {
     for (const d of ["argo-live", "brain", "rb", "linewatch", "fpp", "rollhook", "weatherorb-tiles"]) expect(doors).toContain(d)
   })
 
-  test("one VM, always on: the work stack and the sandbox are core, so the work profile's down verb never reaches them", () => {
+  test("one VM, always on: the work stack is core, so the work profile's down verb never reaches them", () => {
     const { services } = loadAll()
     expect(services.filter((s) => s.kind === "vm").map((s) => s.name)).toEqual(["colima-default"])
     const core = ["vpn", "prometheus-vpn-watcher", "prometheus-dashboard-autodeploy",
