@@ -27,14 +27,14 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | `~/.local/share/teamchat` | epos-ai-teamchat-athena | 9 | history | the app (backups) |
 | `~/.local/state/prometheus-scripts/backups` | prometheus-scripts | 16 | history | its backup job; retention is the owner's call (338 hourly, 212 daily dirs) |
 | `~/tmp` | dotfiles | 8 | cache | the owner's scratch |
-| `~/IuRoot` | dotfiles | 38 | data | the owner (.archive, clones) |
+| `~/IuRoot` | dotfiles | 46 | data | the owner (.archive, clones) |
 | `/opt/homebrew` | dotfiles | 30 | data | sweep: pkg-caches; Postgres data ~15 |
 | `/private/var` | dotfiles | 50 | cache | sweep: tmpdir, node-cache; log-rotate |
 | `/private/tmp` | dotfiles | 10 | cache | sweep: tmpdir (entries over 3 days) |
 | `/Applications` | dotfiles | 18 | data | the owner |
 | `/Library` | dotfiles | 10 | data | macOS |
 
-Caps 657.0 + system 45.0 = 702.0 GiB; the limit is 80 % of 894 GiB = 715.2 GiB.
+Caps 665.0 + system 45.0 = 710.0 GiB; the limit is 80 % of 894 GiB = 715.2 GiB.
 <!-- /disk-budget:table -->
 
 Classes: `data` is state to keep, `cache` regenerates, `build` is build output and worktrees, `history` is logs, backups and transcripts. The external SSD is not on this volume and has no row: `docs/external-ssd.md`, `docs/storage.md`.
