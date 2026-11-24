@@ -330,9 +330,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/devhost-forensics.sh"
 # the group (`kill -- -<pgid>`, never a pattern kill). Exit 124 + a one-line msg on
 # timeout; otherwise the captured output and the command's own exit code (0 / 2
 # semantics unchanged). Polled from the parent: no watchdog process to outlive it.
-# bash 3.2: no `wait -n`, no fractional $SECONDS, so the poll is a 0.2 s sleep.
+# bash 3.2: no `wait -n`, no fractional $SECONDS, so the poll is a sleep: 0.02, 0.05, 0.1, then 0.2 s — a command that
+# finishes at once (nearly all of them) costs milliseconds, not a fixed 0.2 s each.
 run_bounded() {
-  local secs="$1" name pid out start rc=0 i
+  local secs="$1" name pid out start rc=0 i nap=0.02
   shift
   name="$1"
   out=$(/usr/bin/mktemp "$STATE_DIR/bounded.XXXXXX") || { echo "$name: cannot create a capture file in $STATE_DIR"; return 1; }
@@ -355,7 +356,8 @@ run_bounded() {
       echo "$name timed out after ${secs}s (hung tool; killed)"
       return 124
     fi
-    /bin/sleep 0.2
+    /bin/sleep "$nap"
+    case "$nap" in 0.02) nap=0.05 ;; 0.05) nap=0.1 ;; *) nap=0.2 ;; esac
   done
   wait "$pid" 2>/dev/null || rc=$?
   cat "$out"
