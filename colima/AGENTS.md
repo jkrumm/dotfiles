@@ -2,8 +2,8 @@
 
 `make colima-{start,stop,restart,status}` — never bare `colima stop` or `brew
 services restart colima`, both fight the supervised boot path.
-`colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/2.5/60**, MacBook
-**2/4/30**; ceilings; disk grows only via recreate; the mini's 2.5 GB is the Memory budget in
+`colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/4/60**, MacBook
+**2/4/30**; ceilings; disk grows only via recreate; the mini's 4 GB is the Memory budget in
 `docs/devhost-health.md`, applied by `make colima-restart`, never by hand). On the mini the VM mounts
 only `colima/mounts.mini.txt` (not `$HOME`): a new bind mount elsewhere shows an empty directory, so add its path there
 first. Run `colima-restart` from the main checkout: the plist records the checkout it ran from. The default VM's

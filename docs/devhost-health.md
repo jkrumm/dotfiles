@@ -502,6 +502,11 @@ page cache the host cannot take back; it lands on the next `make colima-restart`
 doctor line names that). Spotlight indexing was already off (`mdutil -s /`). Stopping the VM when idle is not possible: the VPN, the
 dashboard and teamchat run always and colleagues reach them (§Memory budget).
 
+**Reverted (2026-11-24).** The ceiling 2.5 → **4 GiB**, the revert signal having fired three times in two days: the import
+dashboard's on-demand API was killed twice on 2026-11-23 (child exit -9) and the nightly snapshot build on 2026-11-24 (exit -9,
+guest `available` 11 MiB with the SE local stack and an e2e stack beside it). The nightly sandbox alone is limited to 2200 MiB, so
+2.5 GiB could not hold it next to any other container. Host at the change: 32 GB, 60 % free.
+
 ## Upstream drift
 
 `make brew-upgrade` asserts its own invariants and the heartbeat fails loudly on
