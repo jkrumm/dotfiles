@@ -142,11 +142,11 @@ while [ "$waited" -lt "$PREPARE_WAIT" ]; do
     prepared=1; break
   elif [ "$rc" -eq 255 ]; then
     # The host going away IS the success case, but only a connection-level failure says so.
-    # An auth, key or config error (255 too) proves nothing: fail closed. A single blip
+    # Any other 255 (auth, key, config, resolve) proves nothing: fail closed. A single blip
     # is not enough either: the host must stay gone for two checks in a row.
     case "$err" in
-      *"Permission denied"*|*"Host key verification failed"*|*"Could not resolve"*|*"Too many authentication"*|*"Bad configuration"*|*"REMOTE HOST IDENTIFICATION"*)
-        die "cannot tell whether the prepare started: ssh to $HOST failed (not a host-down error): $err" ;;
+      *"Connection refused"*|*"Connection timed out"*|*"Operation timed out"*|*"Connection closed"*|*"Connection reset"*|*"No route to host"*|*"kex_exchange_identification"*|*"Broken pipe"*) ;;
+      *) die "cannot tell whether the prepare started: ssh to $HOST failed, not as a host-down error: $err" ;;
     esac
     gone=$(( gone + 1 ))
     if [ "$gone" -ge 2 ]; then prepared=1; break; fi
