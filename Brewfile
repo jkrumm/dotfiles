@@ -13,7 +13,6 @@
 
 tap "oven-sh/bun"
 tap "satococoa/tap"
-tap "abue-ammar/tinycast"
 tap "jkrumm/tap"
 tap "openselena/tap"
 # Simple, modern, secure file encryption
@@ -194,10 +193,11 @@ cask "stats"
 # on the MacBook's built-in keyboard; macOS 26 event taps were measured blind to
 # EXTERNAL keyboards with Hyperkey on the mini (2026-07-28) — if the Magic
 # Keyboard turns out dead, reinstall karabiner-elements for the remap only.
-# The beta channel on purpose: it draws extension menu-bar commands and gives
-# extension views more room (stable 0.11.3 does neither) — separate app, own
-# com.tinycast.app.beta domain, self-updates within the beta channel.
-cask "abue-ammar/tinycast/tinycast@beta"
+# Stable from homebrew/cask since 2026-11-24 (bundle id com.abueammar.tinycast
+# since 0.12.15): the beta channel's reasons (menu-bar extension commands, markdown
+# tables) shipped in stable 0.12.x, and the abue-ammar tap now keeps only builds
+# homebrew/cask does not carry. Self-updates.
+cask "tinycast"
 # Universal downloader (YouTube, courses, 1,800+ sites); Tauri app, third-party tap
 cask "openselena/tap/omniget"
 # Multimedia player

@@ -32,17 +32,20 @@ import sys
 import time
 from pathlib import Path
 
-# The beta channel (cask tinycast@beta) since 2026-09-27: it draws extension
-# menu-bar commands and lays extension views out far better in the same fixed
-# window. A separate app with its own domain — stable and beta never share.
-DOMAIN = "com.tinycast.app.beta"
-APP = Path("/Applications/Tinycast Beta.app")
-PROCESS = "Tinycast Beta"
+# Stable (cask tinycast) since 2026-11-24; 0.12.15 moved the bundle id to
+# com.abueammar.tinycast. The beta domain (com.tinycast.app.beta) is retired.
+DOMAIN = "com.abueammar.tinycast"
+APP = Path("/Applications/Tinycast.app")
+PROCESS = "Tinycast"
 TRACKED = Path(__file__).resolve().parent.parent / "config/tinycast/defaults.json"
 
 # Window geometry, status-item slots and AppKit/Sparkle bookkeeping: rewritten
 # by the OS on every run, so tracking them only ever produces noise.
 VOLATILE = re.compile(r"^(NS|Apple|SU|com\.apple\.)")
+
+# Kept out of git, live only: endpoint URLs and hostnames of private services
+# (this repo is public), and the app's own runtime state.
+PRIVATE = {"aiConnections", "mcpServers", "notesActiveFileName", "supportReminders"}
 
 
 def read_live() -> dict:
@@ -91,7 +94,7 @@ def decode(value):
 
 
 def portable(live: dict) -> dict:
-    return {k: encode(v) for k, v in sorted(live.items()) if not VOLATILE.match(k)}
+    return {k: encode(v) for k, v in sorted(live.items()) if not VOLATILE.match(k) and k not in PRIVATE}
 
 
 def read_tracked() -> dict:

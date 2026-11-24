@@ -608,7 +608,7 @@ _setup-ssh:
 	fi
 
 .PHONY: _setup-tinycast tinycast-export tinycast-apply tinycast-check
-# Tinycast (the launcher) keeps its settings in the com.tinycast.app.beta defaults
+# Tinycast (the launcher) keeps its settings in the com.abueammar.tinycast defaults
 # domain; config/tinycast/defaults.json tracks it as readable JSON (hotkeys and
 # custom commands are JSON-in-plist, decoded by the script). Like a rewritten-in-place config,
 # the live domain wins on divergence: setup applies only on a fresh install.
@@ -2422,7 +2422,7 @@ orbstack-remove:
 .PHONY: brew-check
 brew-check:
 	@echo "  Checking machine against Brewfile..."
-	@# --no-upgrade: membership, not freshness. Self-updating casks (tinycast@beta)
+	@# --no-upgrade: membership, not freshness. Self-updating casks (tinycast)
 	@# move ahead of brew's Caskroom record; outdated-ness is brew-upgrade's report.
 	@brew bundle check --verbose --no-upgrade --file=$(DOTFILES_DIR)/Brewfile
 

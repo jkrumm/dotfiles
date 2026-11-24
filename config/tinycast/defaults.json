@@ -8,6 +8,7 @@
       }
     }
   },
+  "aiEnabled": true,
   "boundAppBundleIDs": [
     "com.google.Chrome",
     "com.TickTick.task.mac",
@@ -34,6 +35,12 @@
   "boundWindowLayoutIDs": [],
   "boundWindowRoomIDs": [],
   "calendarMenuBarDisplay": 0,
+  "clipboardDisabledApps": [
+    "com.apple.keychainaccess",
+    "com.apple.Passwords",
+    "com.1password.1password"
+  ],
+  "compactMode": false,
   "customCommands": {
     "$json": []
   },
@@ -50,6 +57,23 @@
     "extension:jkrumm/shortcuts",
     "extension:jkrumm/home",
     "extension:jkrumm/spotify"
+  ],
+  "hiddenLauncherItems": [
+    "com.apple.screenshot.launcher",
+    "com.apple.apps.launcher",
+    "GoCart.gcuninstaller",
+    "com.apple.archiveutility",
+    "com.apple.stocks",
+    "com.apple.audio.AudioMIDISetup",
+    "com.autoclaude.ui",
+    "com.adobe.gcclient",
+    "extension:jkrumm/netgear",
+    "extension:jkrumm/van-power"
+  ],
+  "hiddenLauncherKinds": [
+    "command",
+    "systemAction",
+    "systemSettings"
   ],
   "hotkey.app.com.TickTick.task.mac": {
     "$jsonString": {
@@ -151,6 +175,16 @@
       }
     }
   },
+  "hotkey.extensionCommand.extension:jkrumm/home": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 14
+        }
+      }
+    }
+  },
   "hotkey.extensionCommand.extension:jkrumm/hub": {
     "$jsonString": {
       "combo": {
@@ -191,6 +225,66 @@
       }
     }
   },
+  "hotkey.extensionCommand.extension:jkrumm/spotify": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 35
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-louder": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 126
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-next": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 124
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-play-pause": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 49
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-previous": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 123
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-quieter": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 125
+        }
+      }
+    }
+  },
   "hotkey.extensionCommand.extension:jkrumm/van-power": {
     "$jsonString": {
       "combo": {
@@ -212,90 +306,41 @@
     }
   },
   "hyperKeyIncludesShift": false,
+  "hyperKeyKeyboardMappings": {
+    "$json": {
+      "bootSessionID": "B3E87D17-B0E7-4F26-A165-F07887103251",
+      "keyboards": {
+        "4294973378": {
+          "original": [],
+          "installed": {
+            "source": 30064771129,
+            "destination": 30064771181
+          }
+        }
+      }
+    }
+  },
   "hyperKeyPhysicalKey": "capsLock",
   "interfaceSize": "standard",
   "launcherAliases": {
     "extension:jkrumm/battery": "bt",
     "extension:jkrumm/claude-usage": "cu",
+    "extension:jkrumm/home": "hm",
     "extension:jkrumm/hub": "db",
     "extension:jkrumm/my-tasks": "tt",
     "extension:jkrumm/netgear": "ng",
     "extension:jkrumm/quick-add": "ta",
     "extension:jkrumm/shortcuts": "sc",
     "extension:jkrumm/speed-test": "st",
-    "extension:jkrumm/van-power": "vp",
-    "extension:jkrumm/home": "hm",
-    "extension:jkrumm/spotify": "sp"
+    "extension:jkrumm/spotify": "sp",
+    "extension:jkrumm/van-power": "vp"
   },
-  "showInMenuBar": true,
-  "hotkey.extensionCommand.extension:jkrumm/home": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 14
-        }
-      }
+  "mcpEnabled": true,
+  "notesEnabled": false,
+  "quickActionModel": {
+    "$json": {
+      "appleIntelligence": {}
     }
   },
-  "hotkey.extensionCommand.extension:jkrumm/spotify": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 35
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-play-pause": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 49
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-next": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 124
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-previous": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 123
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-louder": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 126
-        }
-      }
-    }
-  },
-  "hotkey.extensionCommand.extension:jkrumm/spotify-quieter": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 125
-        }
-      }
-    }
-  }
+  "showInMenuBar": false
 }
