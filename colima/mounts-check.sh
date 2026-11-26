@@ -19,8 +19,8 @@ virtiofs=$(printf '%s\n' "$guest" | awk '$3 == "virtiofs" { print $2, ($4 ~ /(^|
 problems=""
 names=""
 add() { problems="${problems}${problems:+; }$1"; }
-# Same row rule as colima/apply-mounts.sh: keep the two in step. The `|| [ -n ]` keeps a last row without a newline.
-while read -r path mode rest || [ -n "$path" ]; do
+# Same row rule as colima/apply-mounts.sh, which also drops a last row with no newline: keep the two in step.
+while read -r path mode rest; do
   case "$path" in '' | \#*) continue ;; esac
   case "$mode" in rw | ro) ;; *) hint=""; [ -n "$rest" ] && hint=" (a path with a space is not supported)"; add "list row '$path $mode' needs rw or ro$hint"; continue ;; esac
   path="${path/#\~/$HOME}"
