@@ -39,7 +39,7 @@ Everything routed through agw exists only on the mini.
 |-|-|
 | agw CLI (sync, exit-10 resume `agw run wait <runId>`; every command: `agw schema --index`) | `/research` · `/otel` · `/check` · `/review` (reviewer agent in-session) · `/prose` (rewrite in-session) · `/podcast` · `/img` · `/excalidraw-diagram` · `/brain` lookups |
 | CLI + MCP · subagent | `/browse` (`browser` agent, haiku: playwright-cli on the shared Chrome, chrome-devtools CLI for traces, Lighthouse and CSS; see *Shared browser*) · `/analyze` (fallow in a native subagent) |
-| Workflow fan-out | `/lenses` (40 to 90 expert angles on one undertaking: question-first catalogue, one Opus agent per lens, source audit, gap rounds, synthesis handover; tens of millions of tokens, only on an explicit ask) |
+| Workflow fan-out | `/lenses` (expert lenses on one undertaking, only on an explicit ask. Seam form for a system that exists: 8 to 20 lenses, one session per lens in a Herdr tab, two challengers, one plan. Wide form for a new concept: 40 to 90 Workflow agents, source audit, gap rounds, synthesis handover; tens of millions of tokens) |
 | inline — git | `/commit` (`--split`/`--amend`) |
 | inline — build | `/upgrade-deps` · `/archify` |
 | inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (hc + the Herdr app) · `/router` (`routerctl`) |

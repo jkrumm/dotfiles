@@ -1,105 +1,100 @@
 ---
 name: lenses
-description: Examine a large undertaking from 40 to 90 expert angles before anything is decided — a question-first lens catalogue, one Opus expert per lens writing one sourced memo, an independent source audit with repair, gap rounds for the angles the experts report as uncovered, then a handover to a staged multi-agent synthesis into decisions and documents. Use when the user asks for a step back, for "every angle" or a concept "thought through to the end", rejects a plan or spec as shallow, or says "lenses". Costs tens of millions of tokens and hours of wall-clock, so only on the user's explicit ask.
+description: Examine an undertaking through expert lenses before anything is decided. Seam form for a system that exists: 8 to 20 lenses, one per seam, each a visible session in a Herdr tab reading the code and the system's own record, two challengers, one plan. Wide form for a new concept across many fields: 40 to 90 lenses as workflow workers, audited web sources, a staged synthesis. Use when the user asks for a step back, a review of every area, "every angle", rejects a plan as shallow, or says "lenses". Only on the user's explicit ask.
 ---
 
-# Lenses: wide expert research, then a staged synthesis
+# Lenses: one question per expert, answers in files, one session decides
 
-One planning agent compresses. Asked for a concept that spans twenty fields, it returns a summary with the depth of
-its shallowest field. This skill separates the work: you write **questions**, one specialist per angle writes
-**answers** into its own file, and a later session **decides** across them.
+One planning agent compresses. Asked about twenty areas, it returns a summary with the depth of its shallowest one.
+This skill separates the work: you write **questions**, one specialist per angle writes **answers** into its own file,
+and one session **decides** across them.
 
-First run, WeatherOrb, 2026-11-14 (`~/SourceRoot/brain/wiki/weatherorb/lenses-2026-11/`): 86 lenses in four rounds
-(68, 11, 5, 2), 735 seed questions, memos of 4,600 words on average, 240,000 to 350,000 subagent tokens and 20 to 30
-minutes per lens with audit and repair, ten lenses at a time. The audit checked 431 cited claims: 358 confirmed, 20
-contradicted, 49 not on the cited page; 38 memos were repaired. The 5-hour usage limit stopped the run twice. The
-synthesis half ran once (2026-11): `reference/synthesis.md` carries what held and what did not.
+**Not for** a question one `/research` run answers, a decision inside one area, or a plan the user wants in an hour.
 
-**Not for** a question one `/research` run answers, a decision inside one field, or a plan the user wants today.
-Invoking this skill is the user's opt-in to the Workflow tool for its fan-outs.
+## Which form
+
+| | Seam form | Wide form |
+|-|-|-|
+| Subject | a system that exists and runs | a new concept across many fields |
+| Lenses | 8 to 20, one per seam of the system | 40 to 90 in about nine groups |
+| Worker | one interactive session per lens in a Herdr tab, on the model the user names | Workflow agents, out of sight |
+| Evidence | the code and the system's own record first, the web for comparison | web sources, audited against their pages |
+| Memo | at most 2,500 words, read in full by the session that plans | about 4,600 words, read by a synthesis run |
+| Ends with | two challengers, at most three further lenses, one plan page | gap rounds, a handover, a staged synthesis |
+| Cost | about 100 minutes and one session per lens | tens of millions of tokens, hours |
+
+Sized by the subject: the owner called 40 to 60 lenses on an existing system "ein bisschen zu aggressiv" (2026-11-26).
 
 ## Files
 
 | File | Use |
 |-|-|
-| `scripts/lenses.mjs` | `stubs` from a catalogue, `index`, `list`, `check`, `section <name>` across memos, `args` for the workflow. Its header documents `lenses.json` and the catalogue format |
-| `scripts/lens-workflow.js` | the Workflow script: a pool of ten lenses, each through research, audit and repair |
-| `reference/lens-brief.md` | template of the brief every expert reads first; its "How to work" and "The memo" stay verbatim |
-| `reference/synthesis.md` | shape of the handover page and of the synthesis run |
+| `reference/seam-brief.md` | seam form: template of the shared brief and of one lens file; "How to work" and "The memo" stay as they are |
+| `reference/wide-form.md` | wide form: the steps, the rules and what the first run taught |
+| `reference/lens-brief.md` | wide form: template of the brief every expert reads first |
+| `reference/synthesis.md` | wide form: shape of the handover page and of the synthesis run |
+| `scripts/lenses.mjs`, `scripts/lens-workflow.js` | wide form: stubs, index, check, sections; the Workflow script |
 
-The run lives where the project's reasoning lives: `brain/wiki/<domain>/lenses-<yyyy-mm>/`, with the brain's rules
-(`/brain`): frontmatter, wikilinks, `node .scripts/vault-lint.mjs` before every commit.
+A run lives where the project's reasoning lives: `brain/wiki/<domain>/lenses-<yyyy-mm>/`, with the brain's rules
+(`/brain`): frontmatter, wikilinks, unique file names, `node .scripts/vault-lint.mjs` before every commit.
 
-## A · Research (this session)
+## Seam form
 
-1. **Collect before you design.** Read the project's memory notes, rulings, the rejected attempts and the owner's
-   verdicts on them. Keep his request verbatim. List the prior material by path. You do no research of your own.
-2. **Write the catalogue: questions, not answers.** 40 to 90 lenses in about nine groups. Per lens: an expert role, a
-   scope, the borders to neighbouring lenses (`not:`), the prior material to read, six to ten seed questions. What
-   makes a catalogue work:
-   - **Borders.** Every lens names what belongs to its neighbours. Without them 80 memos converge on the same
-     general architecture.
-   - **Heterogeneity.** A lens earns its place if only its expertise can answer it. Split by field (a mathematician,
-     a licence reader, a site-reliability engineer), never by chapter of the existing design.
-   - **Both systems.** Lenses for the thing built and for the system that builds it: tests, CI, lint, documents, how
-     the factory takes the work.
-   - **An adversarial group, always:** the mission as a testable contract with its contradictions, a pre-mortem,
-     lessons from rebuilds elsewhere, a simplicity audit that tries to delete what the others propose, and the scope
-     of the first slice.
-   - **Seed questions** ask for numbers, for named systems to compare with, for what must be decided now because it
-     cannot be retrofitted, and for the small experiment that would decide. They never presuppose the current
-     design.
-3. **Write the brief** from `reference/lens-brief.md`: the mission in the owner's words, the rulings that bind, why
-   earlier attempts were rejected, what is open, constraints, prior material. His request goes in verbatim at the
-   end.
-4. **Stubs and index.** Write `lenses.json`, run `lenses.mjs --dir <dir> stubs <catalogue>...` and `index`, lint,
-   commit, push.
-5. **Smoke, then pilot.** One cheap agent proves that a worker can search the web, read a page through `agw` and
-   write a file. Then run eight lenses from different groups and read their Digests. Fix the brief before the rest
-   repeats its flaw.
-6. **Fan out.** `Workflow({scriptPath: "~/.claude/skills/lenses/scripts/lens-workflow.js", args: <output of
-   lenses.mjs args>})` with the path expanded. Research runs on Opus at high effort; the audit on Haiku checks hard
-   structure rules and five cited claims against their pages and stamps an `audit:` line into the memo; a repair runs
-   only on a contradicted claim, two claims missing from their pages, a structure fault or forbidden content.
-7. **Gap rounds.** Every expert returns `missing_perspectives`. Cluster them. An angle becomes a lens when two or
-   more experts name it or when it changes the architecture; its prior material is the memos that named it. Add
-   `"round": 2` to the workflow args. Stop when a round names nothing that passes that test. What you leave out goes
-   into the handover as a lead. In the first run the later rounds drifted from architecture toward business matters,
-   and four rounds were enough.
-8. **After every wave:** `check`, `index`, lint, commit, push.
+First run, software-factory, 2026-11-26 (`~/SourceRoot/brain/wiki/software-factory/lenses-2026-11/`): 19 lenses in five
+waves (5, 5, 4, 2 challengers, 3 further), about 95 minutes of wall-clock, each wave done in 15 to 20 minutes, memos
+of 2,500 to 2,900 words. About 160 proposals became a plan of 37 rows, six spikes and nine owner decisions. Nine
+figures and eleven sentences of the confirmed concept were refuted and corrected.
 
-## B · Handover
+1. **A confirmed concept first.** The lenses hold each area against one model the owner has confirmed (his pictures,
+   his thesis). Put its text in the run folder. Without it every lens invents its own yardstick.
+2. **Cut by seam, not by chapter.** One lens per contract of the system (how work enters, how it ships, what reaches
+   the owner, what a worker is), never per chapter of its docs. Per lens: an expert role, what it **owns** alone, one
+   **must answer** question, what belongs to neighbours, the files to start from, six to eight seed questions that
+   ask for counts with their window, and **leads to test**.
+3. **Leads are hypotheses.** What you already believe goes into the lens file as "From one earlier reading. Each may
+   be wrong; confirm or refute it with evidence." In the first run about a quarter were refuted. A lens handed a
+   conclusion returns it confirmed.
+4. **Waves by dependency.** What limits comes before what is limited: language, core, measurement and the hard
+   mechanics first; what goes in and what reaches the owner second; the work itself third. Write a wave's files when
+   the wave before it is done: copy in the lines earlier memos wrote under "Claims about neighbours" for that lens,
+   and correct any lead an earlier memo refuted.
+5. **One session per lens, in a Herdr tab.** The `herdr` skill has the placement labels. The prompt names the lens
+   file and nothing else, because the shell that starts the session expands the prompt. Start one, look at its
+   screen, then the rest. Five at once at most. Which launcher and model is the user's word for this run.
+6. **Wait on the file, not on the session.** A session reports done between turns while its explorers run. The memo's
+   frontmatter turns `status: done` as its last act: a `Monitor` loop that greps for it emits one line per memo and
+   one line for a terminal that left `working`.
+7. **As each memo lands:** read it in full, check two of its cited lines against the code, publish it to the owner
+   if the project has a place for that (a factory Report in one collection), tell him its verdicts in a few lines.
+   He reads findings one by one; do not hold them for the plan.
+8. **Two challengers, after the areas.** *Simplicity* counts the proposals by kind, names the smallest set that
+   carries the concept, what to cut or shrink, which proposals are one change, and the first week. *Contradictions*
+   settles figures that disagree and proposals that collide, lists the concept's sentences to correct, folds every
+   "Yours to decide" into one list and marks what is not the owner's, and names at most three angles nobody took.
+   Their section lists are in `reference/seam-brief.md`.
+9. **Further lenses:** only the angles *Contradictions* names with a risk that would change the plan, at most three.
+10. **One plan page.** What was found (ten lines), the order (one picture), the owner's decisions as an approval
+    table (as it is, tendency, what it opens), the rows by stage, spikes with a pass mark and the build each
+    authorises, what is deferred and what brings it back, what is left afterwards. A GPT critique before he sees it
+    (`astra`). Then correct the concept in place. File nothing before he has read the plan.
 
-Write `synthesis-handover.md` in the lens folder after `reference/synthesis.md`: the job and what done means, the
-material, the stages, the thread table, the leads from the experts' return values, the rules of the run. Check that
-every lens is primary in exactly one thread. Run the page through `/prose`. Give the user one line to paste into a
-fresh session: read the page and carry it out, with workflows and Opus agents as it describes.
+### Rules of the seam form
 
-## C · Synthesis (a fresh session)
+- **Lenses only read.** No code change, no commit, no write command of the system under review, no touch of a
+  running worker. Each writes its own memo file and nothing else.
+- **The record is shared.** Read-only SQL: one connection per lens, a statement timeout, a LIMIT, never from an
+  explorer. Three lenses met "too many connections" in the first run.
+- **Private names stay out of memos.** A work repo is `work-repo-N`; scan a memo that touched one before you publish.
+- **Evidence marks:** *code* (file and line), *record* (command and window), *source* (URL read today), *assumed*.
+  An unmarked claim counts as assumed.
+- **Close tabs one wave back,** so a memo's session can still be asked while the next wave reads it.
+- **Do not anchor on earlier memos' figures.** Later lenses corrected several; the *Contradictions* memo says which
+  value holds.
 
-The handover page is the prompt; `reference/synthesis.md` explains its stages: dossiers per decision thread,
-cross-examination, the lead decides, writers, fresh reviewers. When it has run, correct `reference/synthesis.md` and
-this page with what held.
+## Wide form
 
-## Rules
-
-- **At most ten units at once**, and each unit (a lens with its audit and repair) finishes before the next starts in
-  its slot. An interruption then loses ten units, not sixty.
-- **A usage limit stalls a workflow without failing it.** The agents' transcripts end with "You've hit your 5-hour
-  limit". Arm a `Monitor` that greps the run's transcript directory for that text; stop the run when it fires,
-  commit what is on disk, and relaunch with fresh `args` once the limit is lifted.
-- **State is what is on disk.** `status:` and `audit:` in each memo say what is finished. `lenses.mjs args` builds the
-  next run from them.
-- **An expert that starts its own measurement can hang its slot.** One waited 30 minutes on a capture process that
-  had died, and the run could not finish. When a memo is written and its agent does not return, stop the run and
-  launch that lens again: `args` offers it as `written`, and it gets its check and audit.
-- **One file, one writer.** Agents write only their own memo and run no git command that changes anything. You
-  commit.
-- **Stay out of the memos.** Read Digests and return values; the views script serves the rest to agents. Reading 80
-  memos into the main session ends it.
-- **Models.** Workflow agents take `model: 'opus'` for research, repair, dossiers, writing and review, and Haiku for
-  audits. With the Agent tool an Opus worker needs `[opus: <reason>]` in its description.
-- **Nothing heavy on a shared host:** agents research and write; builds, benchmarks and downloads become experiments
-  in a memo.
-- **The audit is narrow on purpose.** In the pilot a style-minded audit sent all eight memos to repair; with hard
-  rules only, about a third.
+For a new concept across many fields: 40 to 90 lenses in about nine groups, Workflow agents on Opus, an audit of cited
+claims against their pages, gap rounds, a handover and a staged synthesis in a fresh session. First run WeatherOrb,
+2026-11-14: 86 lenses, 20 to 30 minutes and 240,000 to 350,000 subagent tokens each, stopped twice by the 5-hour
+limit. Read `reference/wide-form.md` before you start one: its steps, its rules and what the first run taught.
+Invoking it is the user's opt-in to the Workflow tool.
