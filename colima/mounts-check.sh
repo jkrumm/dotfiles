@@ -21,6 +21,7 @@ names=""
 add() { problems="${problems}${problems:+; }$1"; }
 while read -r path mode _; do
   case "$path" in '' | \#*) continue ;; esac
+  case "$mode" in rw | ro) ;; *) add "list row '$path $mode' needs rw or ro (a path with a space is not supported)"; continue ;; esac
   path="${path/#\~/$HOME}"
   names="${names}${path}"$'\n'
   got=$(printf '%s\n' "$virtiofs" | awk -v p="$path" '$1 == p { print $2; exit }')

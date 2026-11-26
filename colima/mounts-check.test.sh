@@ -53,6 +53,9 @@ expect "vz-rosetta outside HOME is not compared" 0 ""
 
 fixture="$t/missing" expect "an unreadable VM fails with the reason" 1 "unreadable"
 
+# shellcheck disable=SC2088  # the literal ~ is the point: mounts-check.sh expands it
+printf '~/Some Dir rw\n' >"$t/list"
+expect "a path with a space is refused, not reported as unmounted" 1 "needs rw or ro"
 printf '# nothing\n' >"$t/list"
 expect "an empty list fails: every mount under HOME is unnamed" 1 "does not name it"
 
