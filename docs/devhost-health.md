@@ -486,7 +486,7 @@ io workers and the busier backends 350 to 580 MB, twelve of them for the 6.2 GB.
 on an athena backend). The real tree is the 512 MB segment plus about 7 MB × 31 clients, roughly 0.8 GB. `shared_buffers`
 (512 MB, hit ratio 99.6 % on `shared`), `work_mem` 16 MB, `max_connections` 100 stay: halving the segment would save 256 MB and
 needs a restart that stops the factory, argo and agw. Live clients: factory 8, agw 8, athena 8, argo 2. Caps added without a
-restart: `agent_workflows` 16 (raised to 48 in issue 1709: the host plus a `make check` on the same role hit 16) and `athena_app` 12 (factory 10, usage 10, argo 20 already had one); they bound a leaking pool,
+restart: `agent_workflows` 16 (raised to 48 in issue 1709: the host plus a `make check` on the same role hit 16; to 64 in issue 3375: it hit 48) and `athena_app` 12 (factory 10, usage 10, argo 20 already had one); they bound a leaking pool,
 they do not save memory. `idle_session_timeout` is not set: a pool that does not expect the server to drop it fails on the next query.
 
 **Claude Code.** 26 sessions, 7.4 GB by `footprint` (mean 285 MB, range 212 to 408 MB), none with an MCP child (`--strict-mcp-config`

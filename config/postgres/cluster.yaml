@@ -31,7 +31,7 @@ server:
   settings:
     # About 60 clients today; the live counts plus weatherorb's pools fit under
     # 100 with the reserved superuser slots. The role limits are ceilings for a
-    # leaking pool, not reservations: their sum (105) is above it on purpose.
+    # leaking pool, not reservations: their sum is above it on purpose.
     max_connections: "100"
     superuser_reserved_connections: "3"
     # 32 GiB host shared with every agent: 512 MB of buffers while weatherorb's
@@ -71,10 +71,12 @@ roles:
   agent_workflows:
     # The host alone holds up to ~23 (journal pool 10, research ledger 4, read 2, review ledger 2, runaway 2,
     # middleware 2, lease 1; 10 idle at rest) and every `make check` in agent-workflows opens more on this same
-    # role (bun test --parallel=4, AGW_TEST_PG_URL): at 16 the host answered 500 "too many connections for role"
-    # during a check (issue 1709). 48 + the other roles' ~32 live fits under max_connections less its 3 reserved;
-    # an idle backend costs about 7 MB, so the cap guards a pool that leaks, not a saving (issue 1684).
-    connection_limit: 48
+    # role (bun test on 3 workers, AGW_TEST_PG_URL). A measured run peaked at 38 sessions, about 29 from the tests
+    # (issue 3370). At 16 the host answered 500 "too many connections for role" during a check (issue 1709); at 48
+    # the host plus a run hit it again (issue 3375). 64 covers ~52 with margin. Role limits are ceilings, not
+    # reservations: 64 + the other roles' ~32 live fits under max_connections less its 3 reserved. An idle backend
+    # costs about 7 MB, so the cap guards a pool that leaks, not a saving (issue 1684).
+    connection_limit: 64
     password: op://mini/vps-dev/AGENT_WORKFLOWS_DB_PASSWORD
   argo:
     connection_limit: 20
