@@ -3660,7 +3660,7 @@ collie-upgrade:
 
 # Clone the pinned commit, build it, render com.jkrumm.collie, bootstrap it,
 # then ASSERT: bridge up, spoofed Host
-# 403, bridge connected to the core. Launchd-first — it refuses while
+# 403, the core's terminals listed. Launchd-first — it refuses while
 # com.jkrumm.herdr-core is not running, and the bridge never starts a core.
 collie-setup:
 	@COLLIE_SOURCE=$(COLLIE_SOURCE) COLLIE_REF=$(COLLIE_REF) COLLIE_VERSION=$(COLLIE_VERSION) \

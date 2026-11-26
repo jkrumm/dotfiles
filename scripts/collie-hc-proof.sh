@@ -10,7 +10,7 @@
 # touched.
 #
 #   1. collie-setup.sh setup  → build the pinned commit, render + bootstrap the agent, run the
-#      behavioural check (health, SPA, spoofed-Host 403, bridge ↔ core connected)
+#      behavioural check (health, SPA, spoofed-Host 403, terminals listed)
 #   2. list: the bridge's snapshot shows the scratch terminal
 #   3. read: the bridge returns that terminal's screen (a nonce the terminal printed)
 #   4. type: a paired device sends a keystroke through the bridge; the terminal receives it

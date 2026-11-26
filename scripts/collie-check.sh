@@ -21,8 +21,8 @@
 #      keystroke into it through a paired device, then see it arrive. Never run against the
 #      live core: it types into a terminal.
 #
-# The check never calls hc and never touches the core's socket itself: hc would start a core
-# when none runs (docs/herdr-core.md fact 9), and launchd owns the core.
+# The check never calls hc: hc would start a core when none runs (docs/herdr-core.md fact 9),
+# and launchd owns the core. Step 4's core-up.sh only makes a bare socket connect and reads ps.
 #
 # Env: COLLIE_PORT (8787), COLLIE_STATE_DIR (~/.local/state/collie), COLLIE_EXPECT_VERSION,
 #      COLLIE_CHECK_WAIT_S (20, how long to wait for the bridge to come up), COLLIE_HC_SESSION
