@@ -70,10 +70,11 @@ server:
 roles:
   agent_workflows:
     # The host alone holds up to ~23 (journal pool 10, research ledger 4, read 2, review ledger 2, runaway 2,
-    # middleware 2, lease 1; 10 idle at rest) and every `make check` in agent-workflows opens more on this same
-    # role (bun test on 3 workers, AGW_TEST_PG_URL). A measured run peaked at 38 sessions, about 29 from the tests
-    # (issue 3370). At 16 the host answered 500 "too many connections for role" during a check (issue 1709); at 48
-    # the host plus a run hit it again (issue 3375). 64 covers ~52 with margin. Role limits are ceilings, not
+    # middleware 2, lease 1; 10 idle at rest). On the mini, agent-workflows' `make check` still opens its test
+    # sessions on this role (scripts/test-env.sh via secrets-run, one run at a time under a lock); the factory's
+    # step host and CI use a private cluster instead. A measured run peaked at 38 sessions, about 29 from the
+    # tests (issue 3370). At 16 the host answered 500 "too many connections for role" during a check (issue 1709); at 48
+    # the host plus a run hit it again (issue 3375). 64 covers the host's 23 plus one test run's 38 (61). Role limits are ceilings, not
     # reservations: 64 + the other roles' ~32 live fits under max_connections less its 3 reserved. An idle backend
     # costs about 7 MB, so the cap guards a pool that leaks, not a saving (issue 1684).
     connection_limit: 64
