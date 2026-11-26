@@ -83,6 +83,23 @@ out=$(doctor claude_account_version CA_MINI="$V" SSH_RC=255); rc=$?
 assert_eq "account version: an unreachable MacBook is info, not a failure" "0 passed, 1 info — clean." "$(last "$out")"
 assert_eq "account version: unreachable does not fail the run" 0 "$rc"
 
+# claude-account snapshot: the script's command text against the package's PEER_SCRIPT (a stub package)
+printf 'cache' > "$TMP/cfg/secrets/backend"
+stub_pkg() { # <PEER_SCRIPT tail>
+  printf 'export const HOME_BIN = "$HOME/.local/bin/claude-account"\nexport const PEER_SCRIPT = HOME_BIN + " usage --json"%s\n' "$1" > "$TMP/pkg.ts"
+}
+mkdir -p "$TMP/snap/scripts"
+printf '#!/bin/bash\n"$HOME/.local/bin/claude-account" usage --json\n' > "$TMP/snap/scripts/claude-account-snapshot.sh"
+stub_pkg ''
+out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/pkg.ts")
+assert_eq "account snapshot: equal text is a pass" "1 passed, 0 info — clean." "$(last "$out")"
+stub_pkg ' + "; true"'
+out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/pkg.ts")
+assert_eq "account snapshot: drift warns" "0 passed, 1 warnings, 0 info." "$(last "$out")"
+out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/none.ts")
+assert_eq "account snapshot: no package is info" "0 passed, 1 info — clean." "$(last "$out")"
+assert_eq "account snapshot: the script exports a PATH for \`#!/usr/bin/env bun\`" 1 "$(grep -c '^export PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH"$' "$HERE/claude-account-snapshot.sh")"
+
 # agent notes: the command on PATH and the path to the other machine; an unreachable MacBook is a warning, never a failure
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/agent-note"; chmod +x "$TMP/bin/agent-note"
 printf '#!/bin/sh\ncase "$*" in *term-ls*) [ -n "$SSH_RC" ] && exit "$SSH_RC"; echo "$SSH_OUT" ;; esac\n' > "$TMP/bin/ssh"; chmod +x "$TMP/bin/ssh"

@@ -381,6 +381,22 @@ section_claude_account_version() {
   esac
 }
 
+# --- claude-account snapshot script (mini) ------------------------------------
+# scripts/claude-account-snapshot.sh is what the peer's forced command runs for `claude-account health`: its command text
+# must be the package's PEER_SCRIPT. Checked here and not in `make check`, which does not depend on the live release.
+section_claude_account_snapshot() {
+  hdr "claude-account snapshot script"
+  local pkg="${CLAUDE_ACCOUNTS_PKG:-$HOME/.software-factory/current/packages/accounts/src/index.ts}" want have
+  [ -r "$pkg" ] || { info "account snapshot" "no live accounts package at $pkg"; return; }
+  want=$(bun -e 'const m = await import(process.argv[1]); process.stdout.write(m.PEER_SCRIPT.replaceAll(m.HOME_BIN, "\"$HOME/.local/bin/claude-account\""))' "$pkg" 2>/dev/null)
+  have=$(grep '^"$HOME/.local/bin/claude-account"' "$DOTFILES_DIR/scripts/claude-account-snapshot.sh")
+  if [ -n "$want" ] && [ "$want" = "$have" ]; then
+    ok "account snapshot" "matches the package's PEER_SCRIPT"
+  else
+    warn "account snapshot" "scripts/claude-account-snapshot.sh differs from the package's PEER_SCRIPT"
+  fi
+}
+
 # --- Remote path — MacBook -> mini (MacBook only) -----------------------------
 # Tailscale, ssh, ControlMaster, agent isolation + forwarding (mini-fwd), then the GitHub
 # credential + push rights. The reverse mini->iumac leg is not probed here: it
@@ -651,6 +667,7 @@ if [ "$BACKEND" = "cache" ]; then
   want drift && section_drift
   want claude_accounts && section_claude_accounts
   want claude_account_version && section_claude_account_version
+  want claude_account_snapshot && section_claude_account_snapshot
   want devhost_heartbeat && section_devhost_heartbeat
   want agent_notes && section_agent_notes
 elif [ "$BACKEND" = "op" ]; then

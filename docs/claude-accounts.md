@@ -84,7 +84,7 @@ rolled back in software-factory (`make rollback`), not here.
 
 `config/claude-accounts.json` is the owner's data and the single source of which accounts exist (ids, dirs, plans, home
 lanes, `loginBrowser`, enabled flags, `platform` blocks). Field semantics and validation: the package docs §The registry.
-`scripts/claude-account-host.test.ts` loads it with the live release on the mini. What is specific here:
+`make claude-accounts-verify` (`pick/*`, `plan/*`) loads it with the live release. What is specific here:
 
 - `enabled` stays false until an account's login exists, so a new account ships dark (§Operate, Adding an account).
 - `host`: this setup's two machines. The mini reaches the MacBook over `ssh iumac` (fixed gate verbs), the MacBook the
