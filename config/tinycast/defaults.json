@@ -59,7 +59,7 @@
     "extension:jkrumm/shortcuts",
     "extension:jkrumm/home",
     "extension:jkrumm/spotify",
-    "extension:jkrumm/scan"
+    "extension:jkrumm/scanner"
   ],
   "hiddenLauncherItems": [
     "com.apple.screenshot.launcher",
@@ -285,6 +285,7 @@
     "extension:jkrumm/scan-fronts": "sf",
     "extension:jkrumm/scan-more": "sm",
     "extension:jkrumm/scan-submit": "ss",
+    "extension:jkrumm/scanner": "sn",
     "extension:jkrumm/shortcuts": "sc",
     "extension:jkrumm/speed-test": "st",
     "extension:jkrumm/spotify": "sp",
