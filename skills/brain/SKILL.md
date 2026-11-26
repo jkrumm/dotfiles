@@ -63,6 +63,10 @@ Why the asymmetry: `wiki/` is atomic and reached by traversal, so detail there c
 
 `node .scripts/vault-lint.mjs --drift` reports the mechanically detectable tells (dated headings, stale status lines, wiki frontmatter in the wrong tree, over-length pages, blocks repeated across files) — necessary, not sufficient; voice, stale framing, and "this restates a wiki note" stay human judgment.
 
+## Day canvas
+
+Root `CANVAS.canvas` is the owner's day scratchpad and the one place a todo lives in the vault. Touch it only when he names the canvas, through `node .scripts/canvas.mjs list|add|done` (it edits only the `# Today` card), then commit `CANVAS.canvas`.
+
 ## How to capture
 
 For a quick capture (a stray thought, a URL, a one-line reminder), write it to `Inbox/` as a dated staging file with the loose capture schema (`title`, `date`, `tags`). Do not distill it inline — captures are promoted deliberately (see Ingestion).
