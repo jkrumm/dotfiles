@@ -143,6 +143,9 @@ COLIMA_PLIST="${COLIMA_PLIST:-$(brew_service_plist colima 2>/dev/null || brew_se
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
 # Host half of the default VM's resolver (colima/vm-dns.sh): `check` resolves a name inside the VM.
 COLIMA_VM_DNS="${COLIMA_VM_DNS:-$HOME/SourceRoot/dotfiles/colima/vm-dns.sh}"
+# The mounts colima/mounts.mini.txt names (applied by a VM start only) and the check that compares them with the running VM.
+COLIMA_MOUNTS_LIST="${COLIMA_MOUNTS_LIST:-$HOME/SourceRoot/dotfiles/colima/mounts.mini.txt}"
+COLIMA_MOUNTS_CHECK="${COLIMA_MOUNTS_CHECK:-$HOME/SourceRoot/dotfiles/colima/mounts-check.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
@@ -1066,6 +1069,13 @@ probe_colima() {
   local dns
   [[ -x "$COLIMA_VM_DNS" ]] || return 0
   dns=$("$COLIMA_VM_DNS" check 2>&1) || { echo "${dns:-colima VM resolver check failed}"; return 1; }
+
+  # Fourth: the VM runs the mounts colima/mounts.mini.txt names. A mount added to the list is applied by the next
+  # VM START only: a reboot keeps the old one, and the container shows an EMPTY directory with no error
+  # (2026-11-23: the import dashboard's 04:00 and 06:00 runs failed on "bind source path does not exist").
+  local mounts
+  [[ -x "$COLIMA_MOUNTS_CHECK" ]] || return 0
+  mounts=$("$COLIMA_MOUNTS_CHECK" "$COLIMA_MOUNTS_LIST" 2>&1) || { echo "${mounts:-colima VM mounts check failed}"; return 1; }
 }
 
 probe_caddy() {

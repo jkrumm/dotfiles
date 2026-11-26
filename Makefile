@@ -881,7 +881,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brain-backup-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test colima-mounts-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brain-backup-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Two lanes run side by side: `check-slow-start` (first prerequisite) launches the CHECK_SLOW suites in
@@ -3025,6 +3025,11 @@ colima-mounts-test: ## The mini VM's mounts writer (colima/apply-mounts.sh) agai
 colima-dns-test: ## The default VM's resolver derivation (colima/vm-dns*.sh, apply-provision.sh) against temp files and stubs
 	@shellcheck -S warning $(DOTFILES_DIR)/colima/vm-dns.sh $(DOTFILES_DIR)/colima/vm-dns-guest.sh $(DOTFILES_DIR)/colima/apply-provision.sh $(DOTFILES_DIR)/colima/vm-dns.test.sh
 	@/bin/bash $(DOTFILES_DIR)/colima/vm-dns.test.sh
+
+.PHONY: colima-mounts-check-test
+colima-mounts-check-test: ## The running VM's mounts against colima/mounts.mini.txt (colima/mounts-check.sh) with a stub colima
+	@shellcheck -S warning $(DOTFILES_DIR)/colima/mounts-check.sh $(DOTFILES_DIR)/colima/mounts-check.test.sh
+	@/bin/bash $(DOTFILES_DIR)/colima/mounts-check.test.sh
 
 # Hourly restart of a leaking fseventsd (memory > 1.5 GB, or CPU >= 150 % for 10 min): 2.1 GB at 260 % CPU after 5 days
 # put the dev host into swap thrash on 2026-11-12 (issue 870). The restart is `sudo -n killall fseventsd`, allowed by ONE

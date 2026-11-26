@@ -588,10 +588,12 @@ esac
 STUB
 chmod +x "$TMP/plistbuddy" "$TMP/colima-stub"
 : > "$TMP/colima.plist"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/mounts-check-stub"
+chmod +x "$TMP/mounts-check-stub"
 colima_probe() {
   run_script DEVHOST_COMPONENTS="check_services" HOME="$TMP/home" COLIMA_PLIST="$TMP/colima.plist" \
     COLIMA_START_WRAPPER=/x/colima-start.sh PLISTBUDDY_BIN="$TMP/plistbuddy" \
-    COLIMA_VM_DNS="$HERE/../colima/vm-dns.sh" COLIMA_BIN="$TMP/colima-stub"
+    COLIMA_VM_DNS="$HERE/../colima/vm-dns.sh" COLIMA_BIN="$TMP/colima-stub" COLIMA_MOUNTS_CHECK="$TMP/mounts-check-stub"
 }
 printf 'nameserver 192.168.5.2\n' > "$TMP/guest-resolv.conf"
 colima_probe
@@ -626,5 +628,11 @@ for name in $list; do
 done
 
 echo
+echo "colima probe: a VM whose mounts differ from the list fails the probe (the empty-bind-mount gap)"
+printf 'nameserver 192.168.5.2\n' > "$TMP/guest-resolv.conf"
+printf '#!/bin/sh\necho "colima VM mounts differ from colima/mounts.mini.txt: /x is not mounted"\nexit 1\n' > "$TMP/mounts-check-stub"
+colima_probe
+assert_contains "a mount the VM has not applied fails the probe" "colima VM mounts differ" "$(/usr/bin/grep 'push/detail' "$TMP/curl.log")"
+
 echo "passed: $pass, failed: $fail"
 (( fail == 0 ))
