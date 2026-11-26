@@ -399,6 +399,13 @@ walkingpad.test {
 	reverse_proxy localhost:7708
 }
 
+# athena — Athena Teamchat chat-api + UI (epos-ai-teamchat-athena, `make api`, 127.0.0.1:8800). Started by hand,
+# not always on. chat-api checks the Host header: the door's name must be in TEAMCHAT_ALLOWED_HOSTS (api.env).
+athena.test {
+	import local
+	reverse_proxy localhost:8800
+}
+
 # ─── VPN-only AWS web UIs (via prometheus-scripts/vpn sidecar) ───────────────
 # Caddy fronts the public hostname on 127.0.0.1:443; the sidecar binds a
 # non-443 port and forwards over the AWS Client VPN tunnel. /etc/hosts pin
