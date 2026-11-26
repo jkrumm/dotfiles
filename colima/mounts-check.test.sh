@@ -56,6 +56,9 @@ fixture="$t/missing" expect "an unreadable VM fails with the reason" 1 "unreadab
 # shellcheck disable=SC2088  # the literal ~ is the point: mounts-check.sh expands it
 printf '~/Some Dir rw\n' >"$t/list"
 expect "a path with a space is refused, not reported as unmounted" 1 "needs rw or ro"
+# shellcheck disable=SC2088  # the literal ~ is the point: mounts-check.sh expands it
+printf '~/IuRoot/epos-tool-athena rw\n~/IuRoot/worktrees/prometheus-dashboard ro\n~/.local/state/new rw' >"$t/list"
+expect "a last row without a newline is dropped, as apply-mounts.sh drops it" 0 ""
 printf '# nothing\n' >"$t/list"
 expect "an empty list fails: every mount under HOME is unnamed" 1 "does not name it"
 
