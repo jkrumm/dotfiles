@@ -120,21 +120,23 @@ BASE="http://127.0.0.1:$PORT"
 SECRET=$(cat "$T/cstate/local-secret")
 ROOT="$T/home/${COLLIE_REF:0:12}"
 
-step "2. list — the bridge shows the scratch terminal"
-snap=$(curl -s -H "Authorization: Bearer $SECRET" "$BASE/api/snapshot")
-echo "$snap" | jq -c '{bridge, panes: [(.shellPanes + .agents)[] | {paneId, label: .paneLabel, agent}]}' | sed 's/^/   /'
-if [ "$(echo "$snap" | jq -r '[(.shellPanes + .agents)[].paneId] | index("t1") != null')" = "true" ]; then ok "t1 listed"; else bad "t1 not listed"; fi
-
-step "3. read — the bridge returns its screen"
-screen=$(curl -s -H "Authorization: Bearer $SECRET" "$BASE/api/pane/t1" | jq -r '.text // empty')
-printf '%s\n' "$screen" | sed 's/^/   | /'
-if [[ "$screen" == *"ready-$NONCE"* ]]; then ok "screen carries the terminal's nonce ready-$NONCE"; else bad "nonce not on the bridge's screen"; fi
-
-step "4. type — a paired device sends a keystroke through the bridge"
+step "pair a device — the local credential reads no screen and no bridge state"
 pair_json=$(COLLIE_PLUGIN_ROOT="$ROOT" HERDR_PLUGIN_CONFIG_DIR="$T/cfg" COLLIE_STATE_DIR="$T/cstate" "$ROOT/bin/collie" pair --json 2>/dev/null | tail -1)
 code=$(echo "$pair_json" | jq -r '.code // empty')
 token=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"code\":\"$code\",\"label\":\"proof\"}" "$BASE/api/pair" | jq -r '.token // empty')
 if [ -z "$token" ]; then bad "pairing failed"; else ok "device paired (token ${#token} chars, never printed)"; fi
+
+step "2. list — the bridge shows the scratch terminal"
+snap=$(curl -s -H "Authorization: Bearer $token" "$BASE/api/snapshot")
+echo "$snap" | jq -c '{bridge, panes: [(.shellPanes + .agents)[] | {paneId, label: .paneLabel, agent}]}' | sed 's/^/   /'
+if [ "$(echo "$snap" | jq -r '[(.shellPanes + .agents)[].paneId] | index("t1") != null')" = "true" ]; then ok "t1 listed"; else bad "t1 not listed"; fi
+
+step "3. read — the bridge returns its screen"
+screen=$(curl -s -H "Authorization: Bearer $token" "$BASE/api/pane/t1" | jq -r '.text // empty')
+printf '%s\n' "$screen" | sed 's/^/   | /'
+if [[ "$screen" == *"ready-$NONCE"* ]]; then ok "screen carries the terminal's nonce ready-$NONCE"; else bad "nonce not on the bridge's screen"; fi
+
+step "4. type — a paired device sends a keystroke through the bridge"
 echo "   local credential must not type:"
 got=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d '{"keys":["x"]}' "$BASE/api/pane/t1/keys")
 if [ "$got" = "403" ]; then ok "local credential refused (403)"; else bad "local credential got $got on keys, expected 403"; fi
@@ -171,10 +173,10 @@ left=$(scratch_procs)
 if [ -z "$left" ]; then ok "no process under the scratch session after 15 s (no core started)"; else bad "something is running:"; echo "$left" | cut -c1-150 | sed 's/^/     /'; fi
 if [ ! -e "$T/state/herdr-core/$SESSION" ]; then ok "the session dir was not recreated (no socket)"; else bad "session dir reappeared"; fi
 health=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/health")
-link=$(curl -s -H "Authorization: Bearer $SECRET" "$BASE/api/snapshot" | jq -r '.bridge')
+link=$(curl -s -H "Authorization: Bearer $token" "$BASE/api/snapshot" | jq -r '.bridge')
 echo "   /api/health → $health   snapshot.bridge → $link"
 if [ "$health" = "200" ] && [ "$link" = "disconnected" ]; then ok "bridge up, reports disconnected"; else bad "unexpected bridge state"; fi
-if COLLIE_PORT="$PORT" COLLIE_STATE_DIR="$T/cstate" COLLIE_CHECK_WAIT_S=3 bash "$DOTFILES_DIR/scripts/collie-check.sh" >/dev/null 2>&1; then
+if COLLIE_PORT="$PORT" COLLIE_STATE_DIR="$T/cstate" COLLIE_CHECK_WAIT_S=3 COLLIE_CHECK_PAIRED_TOKEN="$token" bash "$DOTFILES_DIR/scripts/collie-check.sh" >/dev/null 2>&1; then
   bad "collie-check passed with the core down — it must fail"
 else
   ok "collie-check fails with the core down"
@@ -184,7 +186,7 @@ step "   core back (launchd) — the bridge reconnects by itself"
 launchctl bootstrap "$DOMAIN" "$T/agents/$CORE_LABEL.plist" 2>/dev/null || true
 link=""
 for _ in $(seq 1 30); do
-  link=$(curl -s -H "Authorization: Bearer $SECRET" "$BASE/api/snapshot" | jq -r '.bridge')
+  link=$(curl -s -H "Authorization: Bearer $token" "$BASE/api/snapshot" | jq -r '.bridge')
   [ "$link" = "connected" ] && break
   sleep 1
 done

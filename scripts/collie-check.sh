@@ -11,9 +11,12 @@
 #   3. A spoofed Host on /api/snapshot is 403 — the DNS-rebinding guard, i.e. the .env reached
 #      the process. The path is load-bearing: the guard fires on API routes only, `/` answers 200
 #      to any Host.
-#   4. The bridge reaches the core: /api/snapshot with the host-local read credential says
-#      `bridge: connected` and lists the core's terminals (shell panes + agents). The credential
-#      is the bridge's own `local-secret` in its state dir; it reads, it never types.
+#   4. The bridge reaches the core. /api/snapshot with the host-local credential (the bridge's
+#      own `local-secret`; it never types) lists the core's terminals (shell panes + agents), and
+#      the core is up (lib/core-up.sh, live session only). Since 1.28.x upstream answers that
+#      credential with a reduced view without the `bridge` field: a bridge that never reached the
+#      core lists nothing, one that lost it keeps its last list. With a paired device's token
+#      (COLLIE_CHECK_PAIRED_TOKEN) the full snapshot's `bridge: connected` is asserted instead.
 #   5. (COLLIE_CHECK_WRITE=1, scratch cores only) read one terminal's screen and type a
 #      keystroke into it through a paired device, then see it arrive. Never run against the
 #      live core: it types into a terminal.
@@ -22,7 +25,8 @@
 # when none runs (docs/herdr-core.md fact 9), and launchd owns the core.
 #
 # Env: COLLIE_PORT (8787), COLLIE_STATE_DIR (~/.local/state/collie), COLLIE_EXPECT_VERSION,
-#      COLLIE_CHECK_WAIT_S (20, how long to wait for the bridge to come up).
+#      COLLIE_CHECK_WAIT_S (20, how long to wait for the bridge to come up), COLLIE_HC_SESSION
+#      (a scratch core: the live core-up probe is skipped), COLLIE_CHECK_PAIRED_TOKEN.
 set -uo pipefail
 
 PORT="${COLLIE_PORT:-8787}"
@@ -68,16 +72,33 @@ fi
 
 # 4. the core is reached, and listed
 secret=$(cat "$STATE_DIR/local-secret" 2>/dev/null || true)
-if [ -z "$secret" ]; then
-  bad "no local credential at $STATE_DIR/local-secret — cannot read the snapshot"
-else
-  snap=$(printf 'Authorization: Bearer %s\n' "$secret" | curl -s --max-time 10 -H @- "$BASE/api/snapshot" 2>/dev/null || true)
+token="${COLLIE_CHECK_PAIRED_TOKEN:-}"
+snapshot() { printf 'Authorization: Bearer %s\n' "$1" | curl -s --max-time 10 -H @- "$BASE/api/snapshot" 2>/dev/null || true; }
+count() { printf '%s' "$1" | jq '(.agents | length) + (.shellPanes | length)' 2>/dev/null; }
+if [ -n "$token" ]; then
+  snap=$(snapshot "$token")
   link=$(printf '%s' "$snap" | jq -r '.bridge // empty' 2>/dev/null)
   if [ "$link" = "connected" ]; then
-    n=$(printf '%s' "$snap" | jq '(.agents | length) + (.shellPanes | length)')
-    ok "reaches the herdr-core: connected, $n terminals listed"
+    ok "reaches the herdr-core: connected, $(count "$snap") terminals listed"
   else
     bad "bridge ↔ core is '${link:-no snapshot}' — is com.jkrumm.herdr-core running? (the bridge never starts one)"
+  fi
+elif [ -z "$secret" ]; then
+  bad "no local credential at $STATE_DIR/local-secret — cannot read the snapshot"
+else
+  # A fresh bridge lists nothing until its first successful poll of the core.
+  n=0
+  for _ in $(seq 1 "$WAIT_S"); do
+    n=$(count "$(snapshot "$secret")")
+    [ "${n:-0}" -gt 0 ] && break
+    sleep 1
+  done
+  if [ -z "${COLLIE_HC_SESSION:-}" ] && ! why=$(bash "$(dirname "${BASH_SOURCE[0]}")/lib/core-up.sh" 2>&1); then
+    bad "herdr-core is not up: $why"
+  elif [ "${n:-0}" -gt 0 ]; then
+    ok "reaches the herdr-core: $n terminals listed"
+  else
+    bad "no terminals listed — the bridge does not reach the core (or the core has none; the bridge never starts one)"
   fi
 fi
 
@@ -86,7 +107,8 @@ if [ "${COLLIE_CHECK_WRITE:-}" = "1" ]; then
   : "${COLLIE_CHECK_PANE:?COLLIE_CHECK_PANE (a terminal address) required with COLLIE_CHECK_WRITE=1}"
   : "${COLLIE_CHECK_PAIRED_TOKEN:?COLLIE_CHECK_PAIRED_TOKEN required with COLLIE_CHECK_WRITE=1}"
   pane="$COLLIE_CHECK_PANE"
-  screen=$(printf 'Authorization: Bearer %s\n' "$secret" | curl -s --max-time 10 -H @- "$BASE/api/pane/$pane" | jq -r '.text // empty')
+  # The local credential reads no screen (upstream bridge/local-key.ts), so this takes the device token.
+  screen=$(printf 'Authorization: Bearer %s\n' "$token" | curl -s --max-time 10 -H @- "$BASE/api/pane/$pane" | jq -r '.text // empty')
   if [ -n "$screen" ]; then ok "read $pane: $(printf '%s' "$screen" | tail -1 | cut -c1-60)"; else bad "could not read $pane through the bridge"; fi
   sent=$(curl -s --max-time 10 -X POST -H "Authorization: Bearer $COLLIE_CHECK_PAIRED_TOKEN" -H 'Content-Type: application/json' \
     -d "{\"keys\":[\"${COLLIE_CHECK_KEYS:-q}\"]}" "$BASE/api/pane/$pane/keys" | jq -r '.ok // empty')

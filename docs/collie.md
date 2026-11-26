@@ -119,8 +119,12 @@ list` shows status 0 and the UI works perfectly. That is why the check is
    guard fires on API routes only, and the CSP-locked shell at `/` answers 200 to any
    Host, so a pathless probe reports a healthy guard as broken.
 4. The bridge reaches the core: `/api/snapshot` with the host-local credential (the
-   bridge's own `local-secret`, **read-only**, it cannot type) says `bridge: connected`
-   and lists the core's terminals.
+   bridge's own `local-secret`, it cannot type) lists the core's terminals, and the core is
+   up (`lib/core-up.sh`). Upstream's reduced view for that credential (1.30.1,
+   `bridge/local-key.ts`) carries no `bridge` field and no screen, so a bridge that lost a
+   running core and still holds its last list passes; a restarted one lists nothing and
+   fails. A core with no terminal at all also fails. `collie-hc-proof` passes a paired
+   token and asserts `bridge: connected` itself.
 
 `make collie-setup` **fails** on any of them, so re-run that, not just `launchctl list`.
 The check never calls `hc`: an `hc` call with no core running starts one.
@@ -129,6 +133,11 @@ The check never calls `hc`: an `hc` call with no core running starts one.
 `POST /api/pair` are open). The code is minted on the host's terminal on purpose:
 `make collie-pair`, then enter it in the phone's Settings. A phone refused after an
 upgrade re-pairs the same way.
+
+**Reviewed for 1.30.1** (what to leave alone): `/api/pair/request` is a new unauthenticated
+route; a paired device must tap the right one of three codes, so never approve a request you
+did not start. Tricks and the Hill ship off and run code when switched on: leave them off, and
+do not run `collie harness link` or `collie skill sync`.
 
 **What the core adapter does and does not do** (upstream, 1.25.x): the mirror is plain
 text without colour; a send takes about six seconds (the core holds keys for ~3 s);

@@ -55,8 +55,8 @@ endif
 # the pin resolves to on a host that runs every agent, so an upgrade has to be a
 # reviewed diff of this pin (`make collie-upgrade`).
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := fa7b22758dd2a921f90818be2104f6445e8e60aa
-COLLIE_VERSION := 1.28.1
+COLLIE_REF     := d98f51ce7ccc64ceaa76924bb5ca399610265f71
+COLLIE_VERSION := 1.30.1
 
 # kiri — the container-runtime trial beside Colima (docs/kiri-trial.md). Pinned release, its
 # tarball's sha256 (from the release's SHA256SUMS) and the Developer ID team that signs it.
