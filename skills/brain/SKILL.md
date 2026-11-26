@@ -22,7 +22,13 @@ The brain repo must be cloned at `~/SourceRoot/brain`. If it does not exist, tel
 
 ## Agent door
 
-The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware — prefer it: `search`, `backlinks`, `orphans`, `deadends`, `eval` (Dataview). Fall back to plain filesystem reads/writes when Obsidian isn't running.
+The first-party `obsidian` CLI (first on PATH; `which -a obsidian` lists both shims) is metadata-aware — prefer it: `search`, `search:context`, `backlinks`, `orphans`, `deadends`, `base:query`, `eval` (Dataview, top-level `await`). Fall back to plain filesystem reads/writes when Obsidian isn't running.
+
+Three traps, from Obsidian's own `obsidian-cli` skill (`obsidianmd/obsidian-skills`):
+
+- **It exits 0 even when a command fails** (`Error: File "…" not found.`, rc 0). Read the output before reporting success.
+- `content=` turns every `\n` into a newline and `\t` into a tab, with no escape, so text holding a backslash (LaTeX, a regex, a Windows path) is corrupted. Write such text, and anything over about 4 KB, to the file directly.
+- Rename and move with `obsidian rename` / `obsidian move`, never `mv`: only the app rewrites the links that point at the note. `append` and `prepend` take `heading=<name>` to write under an existing section.
 
 ## How to read
 
