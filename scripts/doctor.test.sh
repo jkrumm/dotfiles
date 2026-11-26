@@ -89,6 +89,7 @@ stub_pkg() { # <PEER_SCRIPT tail>
   printf 'export const HOME_BIN = "$HOME/.local/bin/claude-account"\nexport const PEER_SCRIPT = HOME_BIN + " usage --json"%s\n' "$1" > "$TMP/pkg.ts"
 }
 mkdir -p "$TMP/snap/scripts"
+mkdir -p "$TMP/snap/scripts/lib"; cp "$HERE/lib/bun-bin.sh" "$TMP/snap/scripts/lib/"
 printf '#!/bin/bash\n"$HOME/.local/bin/claude-account" usage --json\n' > "$TMP/snap/scripts/claude-account-snapshot.sh"
 stub_pkg ''
 out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/pkg.ts")
@@ -96,6 +97,9 @@ assert_eq "account snapshot: equal text is a pass" "1 passed, 0 info — clean."
 stub_pkg ' + "; true"'
 out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/pkg.ts")
 assert_eq "account snapshot: drift warns" "0 passed, 1 warnings, 0 info." "$(last "$out")"
+printf 'throw new Error("broken")\n' > "$TMP/pkg.ts"
+out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/pkg.ts")
+assert_eq "account snapshot: an unreadable package is not called drift" 1 "$(printf '%s\n' "$out" | grep -c 'could not read PEER_SCRIPT')"
 out=$(doctor claude_account_snapshot DOTFILES_DIR="$TMP/snap" CLAUDE_ACCOUNTS_PKG="$TMP/none.ts")
 assert_eq "account snapshot: no package is info" "0 passed, 1 info — clean." "$(last "$out")"
 assert_eq "account snapshot: the script exports a PATH for \`#!/usr/bin/env bun\`" 1 "$(grep -c '^export PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH"$' "$HERE/claude-account-snapshot.sh")"

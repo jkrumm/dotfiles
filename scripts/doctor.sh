@@ -388,9 +388,12 @@ section_claude_account_snapshot() {
   hdr "claude-account snapshot script"
   local pkg="${CLAUDE_ACCOUNTS_PKG:-$HOME/.software-factory/current/packages/accounts/src/index.ts}" want have
   [ -r "$pkg" ] || { info "account snapshot" "no live accounts package at $pkg"; return; }
-  want=$(bun -e 'const m = await import(process.argv[1]); process.stdout.write(m.PEER_SCRIPT.replaceAll(m.HOME_BIN, "\"$HOME/.local/bin/claude-account\""))' "$pkg" 2>/dev/null)
+  local bun_dir
+  bun_dir=$(/bin/bash "$DOTFILES_DIR/scripts/lib/bun-bin.sh" 2>/dev/null) || { warn "account snapshot" "bun not found — not compared"; return; }
+  want=$("$bun_dir/bun" -e 'const m = await import(process.argv[1]); process.stdout.write(m.PEER_SCRIPT.replaceAll(m.HOME_BIN, "\"$HOME/.local/bin/claude-account\""))' "$pkg" 2>/dev/null)
   have=$(grep '^"$HOME/.local/bin/claude-account"' "$DOTFILES_DIR/scripts/claude-account-snapshot.sh")
-  if [ -n "$want" ] && [ "$want" = "$have" ]; then
+  [ -n "$want" ] || { warn "account snapshot" "could not read PEER_SCRIPT from $pkg — not compared"; return; }
+  if [ "$want" = "$have" ]; then
     ok "account snapshot" "matches the package's PEER_SCRIPT"
   else
     warn "account snapshot" "scripts/claude-account-snapshot.sh differs from the package's PEER_SCRIPT"
