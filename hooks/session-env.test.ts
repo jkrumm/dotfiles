@@ -1,13 +1,19 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
-import { homedir, tmpdir } from "node:os"
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const HOOK = join(import.meta.dir, "session-env.ts")
 let home: string
+let bin: string
 
+// A stub `claude-account` stands in for the real CLI (CI has none): `account` prints $STUB_ID, exits $STUB_RC.
 beforeAll(() => {
   home = mkdtempSync(join(tmpdir(), "session-env-"))
+  bin = join(home, "bin")
+  mkdirSync(bin)
+  writeFileSync(join(bin, "claude-account"), '#!/bin/sh\n[ "$1" = account ] || exit 2\necho "$STUB_ID"\nexit "${STUB_RC:-0}"\n')
+  chmodSync(join(bin, "claude-account"), 0o755)
 })
 afterAll(() => rmSync(home, { recursive: true, force: true }))
 
@@ -15,6 +21,7 @@ function run(env: Record<string, string>) {
   const logs = join(home, ".claude", "logs")
   rmSync(logs, { recursive: true, force: true })
   const base: Record<string, string> = { ...(process.env as Record<string, string>), HOME: home }
+  base.PATH = `${bin}:${base.PATH}`
   delete base.CLAUDE_CONFIG_DIR
   delete base.FACTORY_ROLE
   delete base.FACTORY_SESSION
@@ -28,17 +35,14 @@ function run(env: Record<string, string>) {
 }
 
 describe("session_env account", () => {
-  test("CLAUDE_CONFIG_DIR unset -> iu", () => {
-    expect(run({}).data).toMatchObject({ session: "s1", account: "iu" })
+  test("the id claude-account prints is logged", () => {
+    expect(run({ STUB_ID: "me" }).data).toMatchObject({ session: "s1", account: "me" })
   })
-  test("a set but unregistered dir is account null, not iu", () => {
-    expect(run({ CLAUDE_CONFIG_DIR: join(homedir(), ".claude-me-unknown") }).data.account).toBeNull()
+  test("\"?\" (a dir no account owns) is account null", () => {
+    expect(run({ STUB_ID: "?" }).data.account).toBeNull()
   })
-  test("CLAUDE_CONFIG_DIR at account me's dir -> me", () => {
-    expect(run({ CLAUDE_CONFIG_DIR: join(home, ".claude-me") }).data.account).toBe("me")
-  })
-  test("a broken registry still emits the line, with account null", () => {
-    const e = run({ CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
+  test("a failing claude-account still emits the line, with account null", () => {
+    const e = run({ STUB_ID: "iu", STUB_RC: "2" })
     expect(e.event).toBe("session_env")
     expect(e.data.account).toBeNull()
     expect(e.data.session).toBe("s1")

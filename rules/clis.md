@@ -13,7 +13,7 @@ Before using a CLI for something this table or a skill does not spell out, run i
 | `hc` | terminals and agents in herdr-core: run, read, send, wait | `hc --help` | herdr |
 | `rd` | place work on the mini, read and steer its agents, repos | `rd --help` | remote-dev |
 | `agent-note` | message an agent terminal on the other machine (mini / MacBook) and get the reply; list who takes notes | `agent-note --help` | remote-dev |
-| `claude-account` | Claude Max accounts: pick, quota, expiry, login | `claude-account --help` | none |
+| `claude-account` | Claude Max accounts (the factory's accounts package): pick, quota, mode, expiry | `claude-account --help` | none |
 | `secrets-run` | read secrets on the mini | `secrets-run --help` | secrets |
 | `jobrun` | run and record a scheduled job | `jobrun --help` | mini-service |
 | `shared-chrome` | the one headless Chrome | `shared-chrome --help` | browse |

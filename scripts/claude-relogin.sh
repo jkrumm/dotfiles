@@ -181,7 +181,6 @@ login_env() { # [extra NAME=value…] — builds login_cmd
   [[ -n "$dir" ]] && login_cmd+=("CLAUDE_CONFIG_DIR=${dir/#\~/$HOME}")
   login_cmd+=("$@" claude auth login --claudeai)
 }
-account_cli() { if command -v claude-account >/dev/null 2>&1; then claude-account "$@"; else bun "$HERE/claude-account.ts" "$@"; fi; }
 stamp() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 # Nothing token-shaped may reach the log, whatever the CLI prints (lib/claude-login.sh).
 redact() { login_redact; }
@@ -189,7 +188,7 @@ redact() { login_redact; }
 # "unknown" when the read itself failed (CLI or Keychain error, unparseable answer). --ids: a disabled account too.
 expiry_ms() {
   local out ms
-  out=$(account_cli expiry --json --ids "$id" 2>/dev/null) || { echo unknown; return 0; }
+  out=$(claude-account expiry --json --ids "$id" 2>/dev/null) || { echo unknown; return 0; }
   ms=$(jq -er --arg id "$id" '.accounts[] | select(.id == $id) | .refresh_expires_at // ""' <<<"$out" 2>/dev/null) || { echo unknown; return 0; }
   [[ -z "$ms" || "$ms" =~ ^[0-9]+$ ]] && echo "$ms" || echo unknown
   return 0
@@ -405,9 +404,9 @@ if (( in_pane )); then
     exit 1
   fi
   echo "claude-relogin: logged in, refreshing the quota cache"
-  account_cli refresh --ids "$id" || echo "claude-relogin: refresh reported a problem (see above); run  claude-account refresh --ids $id" >&2
-  account_cli usage | grep "^$id " || true
-  account_cli expiry --ids "$id" | grep "^$id " || true
+  claude-account refresh --ids "$id" || echo "claude-relogin: refresh reported a problem (see above); run  claude-account refresh --ids $id" >&2
+  claude-account usage | grep "^$id " || true
+  claude-account expiry --ids "$id" | grep "^$id " || true
   after=$(expiry_ms)
   if ! login_renewed "$before" "$after"; then
     echo "claude-relogin: $(unchanged_text "$(ms_date "$after")")" >&2
@@ -478,8 +477,8 @@ worker_macbook() {
     rc=4
   fi
   if (( rc == 0 )); then
-    account_cli refresh --ids "$id" 2>&1 | redact >>"$RELOGIN_LOG"
-    account_cli usage 2>&1 | grep "^$id " | redact >>"$RELOGIN_LOG"
+    claude-account refresh --ids "$id" 2>&1 | redact >>"$RELOGIN_LOG"
+    claude-account usage 2>&1 | grep "^$id " | redact >>"$RELOGIN_LOG"
     after=$(expiry_ms)
     d=$(ms_date "$after")
     if ! login_renewed "$before" "$after"; then

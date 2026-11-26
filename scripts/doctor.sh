@@ -367,7 +367,7 @@ section_claude_account_version() {
   mini=$(claude-account --version 2>&1) || mini=""
   case "$mini" in
     "@software-factory/accounts "*) ;;
-    *) warn "claude-account (mini)" "not the accounts package (rolled back or not switched yet): make claude-account-forward"; return ;;
+    *) warn "claude-account (mini)" "not the accounts package: make claude-account-link"; return ;;
   esac
   mac=$(ssh -o ConnectTimeout=8 -o BatchMode=yes iumac account-version 2>/dev/null) || rc=$?
   case "$rc" in

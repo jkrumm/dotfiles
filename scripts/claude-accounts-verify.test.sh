@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # claude-accounts-verify.test.sh — the login/<id> rows of claude-accounts-verify.sh, graded from fixture answers of
-# `claude-account expiry --json` (a stub script in a scratch DOTFILES_DIR). Only the login/* and plan/* rows are asserted: the
+# `claude-account expiry --json` (a stub passed as CLAUDE_ACCOUNT_BIN). Only the login/* and plan/* rows are asserted: the
 # rest of the suite runs against the scratch setup and may FAIL there, which is irrelevant here.
 # Usage: scripts/claude-accounts-verify.test.sh   (exit 0 = all pass)
 set -u
@@ -26,7 +26,8 @@ cat > "$TMP/registry.json" <<JSON
 JSON
 # the stub answers `expiry --json` with fixtures (nothing for "silent"); every other subcommand fails like an unreadable setup.
 # severity is what claude-account computes: the grade, but a non-default account never exceeds WARN.
-cat > "$TMP/dot/scripts/claude-account.ts" <<'TS'
+cat > "$TMP/bin/claude-account" <<'TS'
+#!/usr/bin/env bun
 if (process.argv[2] === "expiry") {
   console.log(JSON.stringify({ accounts: [
     { id: "iu", default: true, grade: process.env.IU_SEV ?? "PASS", severity: process.env.IU_SEV ?? "PASS", detail: "login valid until 2026-11-20 (20 d left)", tier: "default_claude_max_20x", plan_detected: "max20x" },
@@ -37,10 +38,11 @@ if (process.argv[2] === "expiry") {
   ] }))
 } else process.exit(1)
 TS
+chmod +x "$TMP/bin/claude-account"
 printf '#!/bin/sh\necho "{\\"loggedIn\\": false}"\n' > "$TMP/bin/claude"; chmod +x "$TMP/bin/claude"
 
 verify() { # [env…] — the verify script against the scratch setup
-  env "$@" DOTFILES_DIR="$TMP/dot" CLAUDE_ACCOUNTS_REGISTRY="${VREG:-$TMP/registry.json}" CLAUDE_BIN="$TMP/bin/claude" CLAUDE_ACCOUNTS_STATE_DIR="$TMP/state" CLAUDE_ACCOUNTS_CACHE_DIR="$TMP/cache" \
+  env "$@" DOTFILES_DIR="$TMP/dot" CLAUDE_ACCOUNT_BIN="$TMP/bin/claude-account" CLAUDE_ACCOUNTS_REGISTRY="${VREG:-$TMP/registry.json}" CLAUDE_BIN="$TMP/bin/claude" CLAUDE_ACCOUNTS_STATE_DIR="$TMP/state" CLAUDE_ACCOUNTS_CACHE_DIR="$TMP/cache" \
     USAGE_TRACKER_PG="host=$TMP/none dbname=none" RD_SCRIPT="$TMP/none.sh" CLAUDE_LOG_DIR="$TMP/logs" bash "$HERE/claude-accounts-verify.sh" 2>&1
 }
 out=$(verify IU_SEV=PASS)

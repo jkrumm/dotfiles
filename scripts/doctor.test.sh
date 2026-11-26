@@ -65,7 +65,7 @@ out=$(doctor claude_accounts DOTFILES_DIR="$TMP/dot" HC_TERMINAL_ID=x); rc=$?
 assert_eq "a failure row fails the run" 1 "$rc"
 
 
-# claude-account version: both machines on the package and equal is a pass; a different MacBook, a rolled-back mini or a missing gate verb is a warning; an unreachable MacBook is info
+# claude-account version: both machines on the package and equal is a pass; a different MacBook, a mini off the package or a missing gate verb is a warning; an unreachable MacBook is info
 printf 'cache' > "$TMP/cfg/secrets/backend"
 printf '#!/bin/sh\necho "$CA_MINI"\n' > "$TMP/bin/claude-account"; chmod +x "$TMP/bin/claude-account"
 printf '#!/bin/sh\ncase "$*" in *account-version*) [ -n "$SSH_RC" ] && exit "$SSH_RC"; echo "$SSH_OUT" ;; esac\n' > "$TMP/bin/ssh"; chmod +x "$TMP/bin/ssh"
@@ -76,7 +76,7 @@ out=$(doctor claude_account_version CA_MINI="$V" SSH_OUT='@software-factory/acco
 assert_eq "account version: a different MacBook warns" "0 passed, 1 warnings, 0 info." "$(last "$out")"
 assert_eq "account version: the warning names the fix" 1 "$(printf '%s\n' "$out" | grep -c 'ssh iumac claude-account-sync')"
 out=$(doctor claude_account_version CA_MINI="unknown verb '--version'" SSH_OUT="$V")
-assert_eq "account version: a rolled-back mini warns" 1 "$(printf '%s\n' "$out" | grep -c 'make claude-account-forward')"
+assert_eq "account version: a mini off the package warns" 1 "$(printf '%s\n' "$out" | grep -c 'make claude-account-link')"
 out=$(doctor claude_account_version CA_MINI="$V" SSH_RC=126)
 assert_eq "account version: a gate without the verb warns" 1 "$(printf '%s\n' "$out" | grep -c 'ssh iumac dotfiles-sync')"
 out=$(doctor claude_account_version CA_MINI="$V" SSH_RC=255); rc=$?

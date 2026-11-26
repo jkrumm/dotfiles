@@ -16,7 +16,7 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import { homedir } from "os";
 
 const LOG_DIR = join(homedir(), ".claude", "logs");
@@ -52,11 +52,22 @@ function cleanupOldLogs(keepDays = 3): void {
   }
 }
 
-/** Registry id of the account this session runs on (CLAUDE_CONFIG_DIR unset -> "iu"); null if the registry is unreadable. */
-async function currentAccount(): Promise<string | null> {
+/**
+ * Registry id of the account this session runs on, from `claude-account account` (CLAUDE_CONFIG_DIR unset = the default
+ * account). null when it cannot say: no CLI, unreadable registry, or a dir no account owns ("?").
+ */
+function currentAccount(): string | null {
   try {
-    const { accountFromConfigDir, loadRegistry } = await import("../scripts/lib/claude-accounts.ts");
-    return accountFromConfigDir(loadRegistry(), process.env.CLAUDE_CONFIG_DIR);
+    const bin = Bun.which("claude-account") ?? join(homedir(), ".local", "bin", "claude-account");
+    const r = Bun.spawnSync([bin, "account"], {
+      // the CLI is `#!/usr/bin/env bun`: the bun that runs this hook must be findable
+      env: { ...process.env, PATH: `${process.env.PATH ?? ""}:${dirname(process.execPath)}` },
+      stdout: "pipe",
+      stderr: "ignore",
+      timeout: 5_000,
+    });
+    const id = r.exitCode === 0 ? r.stdout.toString().trim() : "";
+    return id && id !== "?" ? id : null;
   } catch {
     return null;
   }
@@ -74,7 +85,7 @@ async function main() {
       session: input.session_id,
       base_url: process.env.ANTHROPIC_BASE_URL || null,
       lane: process.env.USAGE_LANE || null,
-      account: await currentAccount(),
+      account: currentAccount(),
       factory_role: process.env.FACTORY_ROLE || null,
       factory_session: process.env.FACTORY_SESSION || null,
     });

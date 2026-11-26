@@ -1,7 +1,7 @@
 #!/bin/bash
 # claude-account-sync.sh — bring the MacBook's claude-account level with the live factory release on the mini.
 #
-# Runs on the MacBook (the `claude-account-sync` verb of scripts/iumac-gate.sh, `make claude-account-forward`,
+# Runs on the MacBook (the `claude-account-sync` verb of scripts/iumac-gate.sh, `make claude-account-link`,
 # `make herdr-app-setup`). The MacBook has no software-factory checkout, so the built single file of
 # packages/accounts (dist/claude-account) is pulled through the core (`hc exec --on mini`, already authenticated: no
 # `ssh mini`, no 1Password), compared with the copy here, and swapped in only if it differs and `--version` runs.
@@ -9,7 +9,7 @@
 #   changed    -> "claude-account <version line> (updated)"
 #   failed     -> the reason on stderr, exit 1, the running copy untouched
 # No arguments. Idempotent; a second run at once exits 0 ("busy"). The copy is ~/.local/share/claude-account/claude-account;
-# ~/.local/bin/claude-account points at it after `make claude-account-forward`. docs/claude-accounts.md §Package.
+# ~/.local/bin/claude-account points at it after `make claude-account-link`. docs/claude-accounts.md §Package.
 #
 # Test seams (tests only): CLAUDE_ACCOUNT_SYNC_DIR (the copy's parent), CLAUDE_ACCOUNT_SYNC_HC.
 #

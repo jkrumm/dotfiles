@@ -1653,7 +1653,7 @@ CLAUDE_MCP_CHECK = $(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default accou
 .PHONY: claude-accounts-setup
 claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to ~/.claude + rendered settings.json)
 	@echo "  Claude accounts..."
-	@chmod +x $(DOTFILES_DIR)/scripts/claude-account.ts $(DOTFILES_DIR)/scripts/claude-account-sync.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/claude-account-sync.sh
 	@mkdir -p "$(HOME)/.local/bin"
 	@$(MAKE) --no-print-directory claude-account-link
 	@chmod +x $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh
@@ -1677,17 +1677,16 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 	@# ...and so does every other folder the default account already trusts (never loosens; skips accounts not logged in yet).
 	@bash $(DOTFILES_DIR)/scripts/claude-trust-sync.sh || echo "    ✗ could not sync folder trust into every account's .claude.json"
 
-# `claude-account` is the factory's accounts package (docs/claude-accounts.md §Package); scripts/claude-account.ts stays as the
-# rollback until subs-cleanup-dotfiles. Mini: the CLI entry in the live release, so a deploy moves it. MacBook (no factory
-# checkout): a copy of the built file that scripts/claude-account-sync.sh keeps level. The registry is linked to the path the package reads.
+# `claude-account` is the factory's accounts package (docs/claude-accounts.md §Package). Mini: the CLI entry in the live
+# release, so a deploy moves it. MacBook (no factory checkout): a copy of the built file that scripts/claude-account-sync.sh
+# keeps level. The registry is linked to the path the package reads.
 CA_BIN = $(HOME)/.local/bin/claude-account
 CA_CFG = $(HOME)/.config/claude-accounts
-CA_PIN = $(CA_CFG)/rolled-back
 CA_PKG_MINI = $(HOME)/.software-factory/current/packages/accounts/bin/claude-account.ts
 CA_PKG_COPY = $(HOME)/.local/share/claude-account/claude-account
 
-.PHONY: claude-account-forward claude-account-rollback claude-account-link
-claude-account-forward: ## Point claude-account at the factory accounts package (undoes claude-account-rollback)
+.PHONY: claude-account-link
+claude-account-link: ## Point claude-account at the factory accounts package and link the registry (what setup and the MacBook's dotfiles-sync run)
 	@mkdir -p "$(HOME)/.local/bin" "$(CA_CFG)"
 	@src="$(CA_PKG_MINI)"; \
 	if [ ! -x "$$src" ]; then \
@@ -1697,22 +1696,7 @@ claude-account-forward: ## Point claude-account at the factory accounts package 
 	[ -x "$$src" ] || { echo "    ✗ $$src is not executable"; exit 1; }; \
 	$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/config/claude-accounts.json" DST="$(CA_CFG)/registry.json" && \
 	$(MAKE) --no-print-directory _link SRC="$$src" DST="$(CA_BIN)" && \
-	rm -f "$(CA_PIN)" && \
 	echo "    ↳ $$("$(CA_BIN)" --version) → $$(readlink "$(CA_BIN)")"
-
-claude-account-rollback: ## Point claude-account back at scripts/claude-account.ts (stays until claude-account-forward)
-	@mkdir -p "$(HOME)/.local/bin" "$(CA_CFG)"
-	@$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/config/claude-accounts.json" DST="$(CA_CFG)/registry.json"
-	@$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/scripts/claude-account.ts" DST="$(CA_BIN)"
-	@touch "$(CA_PIN)"
-	@echo "    ↳ rolled back: $$(readlink "$(CA_BIN)") (make claude-account-forward undoes it; make setup keeps it)"
-
-claude-account-link: ## claude-account-forward unless claude-account-rollback pinned it (what setup and the MacBook's dotfiles-sync run)
-	@if [ -e "$(CA_PIN)" ]; then \
-		$(MAKE) --no-print-directory claude-account-rollback; \
-	else \
-		$(MAKE) --no-print-directory claude-account-forward; \
-	fi
 
 # Read-only proof that every launcher/spawner lands on the intended account (also run by `make doctor`).
 .PHONY: claude-accounts-verify claude-accounts-stamp claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown

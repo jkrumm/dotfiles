@@ -18,7 +18,7 @@ USAGE_DB="${USAGE_TRACKER_DB:-$HOME/.local/share/usage-tracker/usage.db}"
 USAGE_TRACKER_DIR="${USAGE_TRACKER_DIR:-$HOME/SourceRoot/usage-tracker}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
-CA=(bun "$DOTFILES_DIR/scripts/claude-account.ts")
+CA=("${CLAUDE_ACCOUNT_BIN:-claude-account}")
 WITH_SUBAGENT=0
 NO_RUN=0
 for arg in "$@"; do
@@ -96,11 +96,14 @@ fi
 mkdir -p "$T/cache"
 [[ -d "${CLAUDE_ACCOUNTS_CACHE_DIR:-$HOME/.cache/claude-accounts}" ]] && cp -R "${CLAUDE_ACCOUNTS_CACHE_DIR:-$HOME/.cache/claude-accounts}/." "$T/cache/" 2>/dev/null
 rm -f "$T"/cache/*.refresh.claim "$T"/cache/*.exhausted.json "$T"/cache/*.auth.json
-CAENV=(env CLAUDE_ACCOUNTS_CACHE_DIR="$T/cache" CLAUDE_ACCOUNTS_PICKS="$T/picks.jsonl")
+OTHER=$(printf '%s\n' $ENABLED | grep -vx "$DEFAULT_ID" | head -1)
+# Two accounts only (the default and one other), no mode and no host block: with a second sibling the bulk draw is random,
+# and a refresh would adopt the peer's mode overrides.
+jq --arg d "$DEFAULT_ID" --arg o "$OTHER" 'del(.host) | .fable = null | .drain = [] | .accounts |= with_entries(.value.enabled = (.key == $d or .key == $o))' "$REGISTRY" > "$T/registry.json"
+CAENV=(env CLAUDE_ACCOUNTS_REGISTRY="$T/registry.json" CLAUDE_ACCOUNTS_CACHE_DIR="$T/cache" CLAUDE_ACCOUNTS_PICKS="$T/picks.jsonl" CLAUDE_ACCOUNTS_HISTORY="$T/history" CLAUDE_ACCOUNTS_MODES="$T/modes.json")
 for id in $ENABLED; do "${CAENV[@]}" "${CA[@]}" record --account "$id" --s 1 --w 1 || res 1 "setup/$id" "cannot seed a fresh sample"; done # fresh samples: a pick never refreshes
 last_pick() { tail -n 1 "$T/picks.jsonl" | jq -r "\"\(.picked) \(.reason)\""; }
 
-OTHER=$(printf '%s\n' $ENABLED | grep -vx "$DEFAULT_ID" | head -1)
 if [[ -z "$OTHER" ]]; then
   res 1 "break/exhausted" "no second enabled account in the registry"
 else
@@ -115,7 +118,7 @@ fi
 mkdir -p "$T/home"
 acct=$(CLAUDE_CONFIG_DIR="$T/unregistered" "${CA[@]}" account)
 expect "break/unregistered-dir" "?" "$acct" "claude-account account -> ?"
-echo '{"session_id":"e2e-unregistered","hook_event_name":"SessionStart"}' | HOME="$T/home" CLAUDE_CONFIG_DIR="$T/unregistered" bun "$DOTFILES_DIR/hooks/session-env.ts" >/dev/null 2>&1
+echo '{"session_id":"e2e-unregistered","hook_event_name":"SessionStart"}' | HOME="$T/home" CLAUDE_ACCOUNTS_REGISTRY="$REGISTRY" CLAUDE_CONFIG_DIR="$T/unregistered" bun "$DOTFILES_DIR/hooks/session-env.ts" >/dev/null 2>&1
 logged=$(cat "$T"/home/.claude/logs/*.jsonl 2>/dev/null | jq -c 'select(.event=="session_env") | .data | if has("account") and .account == null then "null" else "other" end' | tail -n 1)
 expect "break/hook-null" '"null"' "$logged" "session-env hook logs account null"
 
@@ -126,11 +129,11 @@ expect "break/registry-missing" "4 unset CLAUDE_CONFIG_DIR" "$rc $out" "pick exi
 # a me login that does not exist: a config dir with no credentials (its Keychain service has no entry; the real keychain is never touched)
 if [[ -n "$OTHER" ]]; then
   mkdir -p "$T/nologin"
-  jq --arg id "$OTHER" --arg d "$T/nologin" '.accounts[$id].dir = $d' "$REGISTRY" > "$T/registry-nologin.json"
+  jq --arg id "$OTHER" --arg d "$T/nologin" '.accounts[$id].dir = $d' "$T/registry.json" > "$T/registry-nologin.json"
   st=$(env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR="$T/nologin" USER="${USER:-$(id -un)}" "$CLAUDE_BIN" auth status 2>/dev/null | jq -r '.loggedIn // false')
   expect "break/no-login-status" false "$st" "claude auth status in a credential-less dir: loggedIn=false"
   rm -f "$T/cache/$OTHER".*.json
-  NL=(env CLAUDE_ACCOUNTS_REGISTRY="$T/registry-nologin.json" CLAUDE_ACCOUNTS_CACHE_DIR="$T/cache" CLAUDE_ACCOUNTS_PICKS="$T/picks.jsonl")
+  NL=("${CAENV[@]}" CLAUDE_ACCOUNTS_REGISTRY="$T/registry-nologin.json")
   "${NL[@]}" "${CA[@]}" refresh --ids "$OTHER" >/dev/null 2>&1
   "${NL[@]}" "${CA[@]}" pick --lane bulk >/dev/null 2>&1
   expect "break/no-login-ineligible" "$DEFAULT_ID spill" "$(last_pick)" "$OTHER without a login is never picked; bulk goes to $DEFAULT_ID"

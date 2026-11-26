@@ -514,7 +514,7 @@ classic cask shells and `penso/tap` removed; Claude Code 2.1.316 stamped. Still 
 (disk-sweep, drift-check, vps-pg-backup, usage-tracker failing, claude-accounts-keepalive flapping), `statusline/iu`
 "no statusline sample in 24 h but 18 sessions ran" (check the `fetch_usage.py` → `claude-account record` path), argo
 behind origin/master (`make deploy` in argo once its owner's work is not mid-flight), and these audit findings:
-- the picker applies 5 h logic to the Ultra plan, which has no 5 h limit (`lib/claude-accounts.ts` SESSION_MAX/SOFT_MAX
+- the picker applies 5 h logic to the Ultra plan, which has no 5 h limit (the picker's SESSION_MAX/SOFT_MAX
   for every account); registry plan names `max20x`/`max5x` vs the new tiers (Max, Ultra); a frozen 5 h sample is kept by
   `mergeSample`.
 - classic herdr fallbacks still in other repos (dead code calling a removed binary): shutterflow `scripts/fleet/*`,

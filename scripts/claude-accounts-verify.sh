@@ -31,7 +31,7 @@ command -v jq >/dev/null 2>&1 || { echo "FAIL  prerequisites            jq not f
 command -v bun >/dev/null 2>&1 || { echo "FAIL  prerequisites            bun not found"; exit 1; }
 [[ -r "$REGISTRY" ]] || { echo "FAIL  registry                $REGISTRY unreadable"; exit 1; }
 jq -e '.accounts' "$REGISTRY" >/dev/null 2>&1 || { echo "FAIL  registry                $REGISTRY unparsable"; exit 1; }
-CA=(bun "$DOTFILES_DIR/scripts/claude-account.ts")
+CA=("${CLAUDE_ACCOUNT_BIN:-claude-account}")
 
 # id<TAB>abs dir ("-" = default ~/.claude, env unset) for every enabled account, default first.
 ACCOUNTS=$(jq -r '.accounts | to_entries | sort_by(.value.dir != null) | .[] | select(.value.enabled) | "\(.key)\t\(.value.dir // "-")"' "$REGISTRY")
@@ -70,7 +70,7 @@ done <<<"$ACCOUNTS"
 # ── a2. login expiry ──────────────────────────────────────────────────────────
 # The refresh token ends 30 days after the login (claude-account expiry reads only that timestamp from the account's
 # own Keychain item). PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or already past; like auth/<id>, a non-default
-# account is capped at WARN (the picker routes around a dead one). Grading lives in scripts/lib/claude-accounts.ts
+# account is capped at WARN (the picker routes around a dead one). Grading lives in the accounts package
 # (gradeLogin, `severity` of each row); the heartbeat uses the same answer.
 EXP=$("${CA[@]}" expiry --json 2>/dev/null) || EXP=""
 while IFS= read -r id; do

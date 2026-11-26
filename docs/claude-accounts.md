@@ -1,23 +1,13 @@
-# Claude Max accounts — concept
+# Claude Max accounts: the dotfiles side
 
-Status: **W2 done** (2026-10-24); rule v1.4 (N accounts), the peer sample import and plan detection shipped 2026-10-27; W3 = tune from picks.jsonl and `quota_sample` after 2 weeks, and decide a 20x upgrade for `me` if its weekly stays > 80 %. Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
-`me` (personal account, Max 5x at `~/.claude-me`), both enabled, plus `me2` (second personal Max 5x at `~/.claude-me2`, Safari), registered dark (`enabled: false`) until its logins exist. Shipped in W1: ids renamed from
-`a`/`b`, `c`/`ch`/`cs`/`cf` pick (`--account iu|me` override), `rd work` picks and injects
-`CLAUDE_CONFIG_DIR` through the spawn's `env` (no room pauses the spawn, never
-IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
-MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
-dead = FAIL and `me` dead = WARN. Still open: usage-tracker
-`account` column (other repo), W2 displays. W2a shipped `make claude-accounts-verify`, the e2e attribution test and the login keepalive (§Operate). W0 shipped the registry, `claude-account`, the quota
-cache, the statusline badge and `account` in `session_env`. Pick log:
-`~/.local/share/claude-accounts/picks.jsonl`; `claude-account exhausted` exists but nothing calls it yet.
-Decision record and the numbers behind it: `~/Reports/ai-subscription-2026-10/index.html`.
+Several Claude subscriptions behave as one pool: no manual switching, no lost prompt cache, every display shows every
+account and every usage row says which account paid. The picker, the quota cache, the pick rule, the modes and the
+health grading are the software-factory `packages/accounts` package, the `claude-account` CLI. Its docs are the one
+source for them: `~/SourceRoot/software-factory/packages/accounts/docs/accounts.md` (rule §The picker, quota feeds
+§Quota sources, §Modes, §The host block). Verbs and flags: `claude-account --help`.
 
-## Goal
-
-All subscriptions behave like one larger pool, with no manual switching and
-no lost prompt cache. Every display (statusline, Tinycast, the Herdr app's `jk-status`,
-heartbeat, Argo) shows every account, and every usage row says which account
-paid for it.
+This page is what stays in dotfiles: the owner's registry and the adapters around the package (launchers and `rd`,
+statusline record, peer import, keepalive, heartbeat, re-login, displays).
 
 ## Invariants
 
@@ -51,19 +41,6 @@ The Keychain naming is verified in the 2.1.310 binary (`Jj()`: suffix =
 first 8 hex of sha256 of the config dir). The capacity units come from measured
 ratios: 20x/5x ≈ 3.7× per session and ≈ 2.0× per week (mulletiq regression).
 
-**Plans: Max and Ultra.** Max has a 5 h session window and a weekly one; Ultra has only the weekly one (the usage
-endpoint stops reporting `five_hour` for it). `plan` in the registry is `max` or `ultra`. The old `max5x` / `max20x`
-still load and mean a Max with a session window (units from the multiple), so an old registry keeps routing the same;
-the `plan/<id>` row flags the mismatch against the Keychain tier. For an Ultra account the session dimension does not
-exist: the picker ignores any 5 h value (no `SESSION_MAX` block, no `SESSION_SOFT_MAX` demotion, no session move),
-the quota cache never stores one (a leftover is dropped on the next write and ignored on every read), and `usage`
-prints and returns `five_hour: null` with `session_limit: false`.
-
-Registry: `config/claude-accounts.json` is the single source (id, dir, plan, optional
-units, home lanes, `loginBrowser`, enabled flag, optional `platform` block, §Platform (API credit) block). `units` defaults from `plan` (`ultra` 4 / 2, `max` 1 / 1; legacy `maxNx` by its multiple);
-a present block is still validated. `enabled` stays false until an account's login
-exists, so a new account ships dark (§Adding an account).
-
 `~/.claude-me` is created by `make claude-accounts-setup` (idempotent):
 
 - **Symlinked to `~/.claude`:** `skills agents hooks rules output-styles commands
@@ -92,236 +69,55 @@ exists, so a new account ships dark (§Adding an account).
 
 ## Package
 
-`~/.local/bin/claude-account` runs the software-factory `packages/accounts` CLI on both machines (program "subscriptions", row
-`subs-switch-dotfiles`); `scripts/claude-account.ts` and `scripts/lib/claude-accounts.ts` stay as the rollback until `subs-cleanup-dotfiles`.
-
 | Machine | `~/.local/bin/claude-account` is a link to | Kept level by |
 |-|-|-|
 | mini | `~/.software-factory/current/packages/accounts/bin/claude-account.ts` (the live release, as `factory` is linked) | the factory's deploy |
-| MacBook (no factory checkout) | `~/.local/share/claude-account/claude-account`, the package's built single file | `scripts/claude-account-sync.sh`: pulls it through the core (`hc exec --on mini cat`), swaps only if it differs and `--version` names the package; runs after every factory deploy (post-deploy hook, gate verb `claude-account-sync`), on `make herdr-app-setup` and on `make claude-account-forward` |
+| MacBook (no factory checkout) | `~/.local/share/claude-account/claude-account`, the package's built single file | `scripts/claude-account-sync.sh`: pulls it through the core (`hc exec --on mini cat`), swaps only if it differs and `--version` names the package; runs after every factory deploy (post-deploy hook, gate verb `claude-account-sync`), on `make herdr-app-setup` and on `make claude-account-link` |
 
-Both machines link `config/claude-accounts.json` to `~/.config/claude-accounts/registry.json`, the path the package reads first. `make setup`
-and `make claude-accounts-setup` run `make claude-account-link`, which forwards unless a rollback pinned it.
+`make claude-account-link` (run by `make setup`, `make claude-accounts-setup` and the MacBook's `dotfiles-sync`) links the CLI
+and links `config/claude-accounts.json` to `~/.config/claude-accounts/registry.json`, the path the package reads first.
+`claude-account --version` prints `@software-factory/accounts <version> (<commit>)`; the mini's `make doctor` row compares it
+with the MacBook's (`ssh iumac account-version`) and warns when they differ; an off MacBook is info. A bad release is
+rolled back in software-factory (`make rollback`), not here.
 
-- **Rollback, one command:** `make claude-account-rollback` (in the dotfiles checkout, on the machine) points the link back at
-  `scripts/claude-account.ts` and writes `~/.config/claude-accounts/rolled-back`; `make setup` and the MacBook's `dotfiles-sync` then keep it. Check:
-  `claude-account --version` answers "unknown verb" (the old picker has none). `make claude-account-forward` removes the pin and switches back.
-- **Version:** `claude-account --version` prints `@software-factory/accounts <version> (<commit>)`. The mini's `make doctor` row compares it with the MacBook's
-  (`ssh iumac account-version`) and warns when they differ or the mini is rolled back; an off MacBook is info.
-- Callers keep calling the same verbs (`relogin`, the keepalive LaunchAgent, heartbeat, the statusline record, the launchers).
+## Registry
 
-## The picker
+`config/claude-accounts.json` is the owner's data and the single source of which accounts exist (ids, dirs, plans, home
+lanes, `loginBrowser`, enabled flags, `platform` blocks). Field semantics and validation: the package docs §The registry.
+`scripts/claude-account-host.test.ts` loads it with the live release on the mini. What is specific here:
 
-`claude-account` is the factory's accounts package (§Package); the verbs below are unchanged:
+- `enabled` stays false until an account's login exists, so a new account ships dark (§Operate, Adding an account).
+- `host`: this setup's two machines. The mini reaches the MacBook over `ssh iumac` (fixed gate verbs), the MacBook the
+  mini over `ssh mini`, both preferring the herdr-core. `reloginAsk` runs `scripts/claude-relogin.sh`, `wake` pushes through
+  `scripts/ask-human.sh` and notifies, `afterAdd` runs `make claude-accounts-setup`.
+- `platform`: read by the agent-workflows gateway only (§Operate, Platform).
 
-```
-claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"; no headroom: prints "spill", exit 3
-claude-account rank --lane <lane> [--json]   # deterministic rule-v1.6 order of every eligible account (iterated `pick --dry`), pure read; what the factory admits by
-claude-account usage [--json]       # every account: 5h % (not for Ultra), 7d %, resets, auth ok
-claude-account env <id>             # force an account (c --account b)
-claude-account expiry [--json] [--ids a,b]   # when each enabled login ends (refresh token), graded PASS / WARN / FAIL; --ids names accounts, disabled ones included
-```
+### Fable mode
 
-`expiry` rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (the account owns `~/.claude`) and `severity` (the grade, but a non-default account never exceeds WARN, as with `auth/<id>`); verify and the heartbeat act on `severity`. They also carry `tier` (the item's raw `claudeAiOauth.rateLimitTier`, e.g. `default_claude_max_5x`, or null) and `plan_detected` (`ultra` for a `max_20x`-or-larger tier or one naming `ultra`, `max` for a smaller `max_Nx`, else null); the tier is not a secret and no token field is ever read or exposed. `--ids` includes disabled accounts because a re-login must read a first login. `usage` stays a pure file read (the statusline calls it): no Keychain access, no login fields; `expiry` is the only reader of the Keychain item's timestamps and tier.
+Fable resets refill only Fable usage, so one account can be set aside for it: the top-level `"fable": "<id>"` (`null` =
+off). `cf` launches on it (`claude-account fable` prints it; `cf --account <id>` wins) and every other pick holds it back as
+the last resort. `"drain": ["<id>"]` fills accounts first; it does not end by itself. Both are commit-to-switch, read on
+every call; a dated override without a commit is `claude-account mode`. The rules: package docs §Modes.
 
-**Quota sources: read-only use of the account's own token for one GET, plus a peer import.** Four feeds, freshest wins, all
-written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
+## Feeds dotfiles supplies
 
-1. **Statusline (live, free):** every render gets native `rate_limits` for the
-   session's own account. `statusline.sh` writes `{account, five_hour,
-   seven_day, resets_at, ts}` keyed by `CLAUDE_CONFIG_DIR`. While any session
-   runs on an account, its numbers are seconds old (the herdr-grazr pattern).
-2. **Limit events (instant):** a `StopFailure` / `rate_limit` hook marks the
-   account exhausted until `resets_at` the moment a wall is hit (the
-   agent-relay pattern). No poll needed to learn about a wall.
-3. **Idle accounts:** `GET https://api.anthropic.com/api/oauth/usage` (headers `Authorization: Bearer`, `anthropic-beta:
-   oauth-2025-04-20`, as in `fetch_usage.py`) with that account's own Keychain token: service `Claude Code-credentials`
-   (default dir) or `Claude Code-credentials-<sha256(abs dir)[:8]>`, read with `security find-generic-password -s <svc> -w`
-   (`claudeAiOauth.accessToken`). 0 tokens, no window priming, 10 s timeout, in-process. The token is used for that one
-   request and nothing else: never copied, logged, written to the cache or written back to the Keychain (invariant 2: we
-   never become co-owner of the login). `utilization` / `resets_at` of `five_hour` / `seven_day` become the sample
-   (`src: oauth`). Any failure (Keychain locked or denied, HTTP 401/429/5xx, unparseable body) means *no sample* and
-   never an auth mark: a locked Keychain or a 429 proves nothing about the login, so the run falls through to the
-   `claude auth status` verdict (§Operate, Login keepalive). One failure is repaired instead: **HTTP 401**. The Keychain
-   access token of an idle account expires and nothing renews it (seen live 2026-10-25: `me` idle 01:01 to 08:27, sample
-   8.5 h old, out of routing). `claude mcp list` for that account's `CLAUDE_CONFIG_DIR` (0 tokens, 30 s deadline) makes the binary renew the token
-   in the Keychain, so a 401 runs it, re-reads the token and retries the GET once; a second failure is plain "no sample".
-   `claude auth status` no longer renews anything (seen 2026-11-24 on 2.1.331), so it stays the run's login verdict only
-   (never run twice), and the auth mark logic is unchanged: only a verdict, a sample or a statusline record moves it, and
-   no token reaches a log or a file. A refresh runs
-   only when an account's newest sample is older than 10 minutes, at most once every 5 minutes per account (the claim,
-   unchanged), because the endpoint rate-limits per token (a 429 can block for up to an hour: claude-swap, ClaudeBar). `claude -p "/usage"` was the source until Claude
-   Code 2.1.310; it now prints an analysis and no longer updates `cachedUsageUtilization`, so it is gone.
-   `readClaudeJson` still merges whatever `cachedUsageUtilization` the binary writes during real sessions (newest
-   timestamp wins).
-4. **Peer machine (import, refresh only):** quota is per account, not per machine, so the other machine's numbers are as
-   good as ours. Seen 2026-10-27: MacBook `me` had no sample for 36 h (idle Keychain access token expired, every GET 401,
-   and `claude auth status` in 2.1.311 no longer renews it; `claude mcp list` does) while the mini, where `me` is busy, had fresh ones.
-   `runRefresh` (keepalive `--all` and the detached pick-time refresh) first fetches the peer's `claude-account usage
-   --json` once (mini -> `ssh iumac`, MacBook -> `ssh mini`, the same peer resolution as `health`; BatchMode,
-   ConnectTimeout 5, 20 s cap) and turns each row of a locally registered, enabled account into a sample (`src: peer`).
-   Each window's timestamp is rebuilt from the row's age (now minus `*_age_s`; null age, null timestamp), so an old
-   number is never laundered into a fresh one, and `mergeSample` keeps the newer window. A full endpoint answer (`src: oauth`) with a weekly window but no `five_hour` drops the stored session half instead of keeping it frozen; the other feeds only omit. A future `exhausted_until`
-   is imported as a mark. **Auth state is never imported** (logins are per machine): an account served from the peer still
-   gets its own `claude auth status` verdict. An account whose merged sample is now younger than 10 min skips the
-   endpoint GET for that run and counts as `fresh` only when this machine's verdict says logged in (no verdict:
-   `unresolved`, the keepalive's exit 1). An unreachable or garbled peer is one log line and the run continues
-   unchanged. It runs only in the keepalive and the *detached* pick-time refresh; the synchronous refresh a
-   non-interactive pick may wait for skips it, so no pick ever waits on ssh.
-
-`fetch_usage.py` is only a reader of this cache (its own API path retired 2026-10-31; on a stale default sample it
-runs `claude-account refresh --ids <default>`). It writes `/tmp/claude_sl/usage_api.json` (the default account, the
-old shape the statusline and Tinycast read) plus `usage_accounts.json` (all accounts). Every consumer (the statusline,
-Tinycast and the Herdr app's `jk-status`) now reads subscription data through `claude-account` (`usage`, `health`).
-
-**Rule v1.9** (v1.8 plus the 72 h expiring horizon, 2026-11-19: step 1 serves the earliest weekly reset first among accounts resetting within 72 h (`EXPIRING_S`), where it looked 24 h ahead; the 98 % ceiling keeps its own 24 h (`CEILING_EXPIRING_S`); v1.8 = v1.7 plus the drain-to-the-end change, 2026-11-18: `weeklyMax` is 100 in the last 3 h before the reset and step 1 lost its 70 % cap, so an expiring account keeps taking bulk work up to its ceiling; v1.7 = v1.6 plus the step-5 pace guard; v1.6 = v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
-
-```
-eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
-              (sample > 10 min old: `pick` uses it and refreshes in the background on EVERY lane, interactive
-               included, detached and budgeted; a refresh takes a couple of seconds. Only a non-interactive lane
-               refreshes an account with no usable sample synchronously; the interactive pick never waits.
-               The pick log carries `stale: true`)
-pace(x)     = 100 × elapsed share of x's 7-day window (seven_day_resets_at, clamped 0..1)
-overPace(x) = eligible(x) ∧ weekly%(x) > pace(x) + 15      # PACE_MARGIN; no weekly reset → never over pace
-units(x)    = registry units, else from the plan: ultra {4, 2}, max {1, 1}; legacy "maxNx": k = max(1, N/5) → {session k, weekly 1 + (k−1)/3}
-              (max5x {1,1}, max10x {2, 1.33}, max20x {4, 2}); any other plan → {1, 1}
-session%(x) = x's 5 h percent when its plan has a session window and the sample is < 6 h old, else absent
-              (Ultra: always absent; every session% term below is then skipped: no block, no demotion, no session move)
-spare(x)    = (weeklyMax(x) − weekly%(x)) × units(x).weekly     # no weekly window → WEEKLY_MAX × units.weekly
-weight(x)   = spare(x) / hoursToWeeklyReset(x)^1.5    # URGENCY_EXP; ≥ 1 h; no weekly reset → a full week
-best(S)     = the member of S with the highest weight (registry order breaks ties)
-share(S)    = a draw from S with probability ∝ weight   # what the CLI uses; `pick --dry` and tests use best(S)
-home(lane)  = share(eligible x whose homeLanes claim the lane)
-              iu for interactive, headless
-              me and me2 for bulk (only the lane named `bulk`; any other lane name has no home and picks by headroom. Factory spawns carry the picked-marker, so `USAGE_LANE=wave` there is only a usage label)
-coolSet      = eligible accounts with session% < 80 (SESSION_SOFT_MAX), else all eligible   # a hot 5h window is the last choice, not excluded
-                 every step below reads coolSet as "eligible"
-pick(lane):
-  0. ∃ cool drain account → share(those)   # drain mode (registry `drain`), every lane, weekly ceiling 100
-  1. bulk lane ∧ ∃ eligible x with weekly reset < 72 h → x   # use expiring capacity first (soonest reset); no weekly% cap since v1.8, 72 h since v1.9
-  2. eligible(home) ∧ overPace(home) → share(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
-  3. eligible(home) → the eligible x ≠ home with (¬overPace(x) ∨ session%(home) ≥ 60) ∧ session%(home) − session%(x) > 20
-                      and the lowest session% (ties by weight); a sibling that shares the lane beats an outsider
-                      # balance the 5h windows
-  4. eligible(home) → home
-  5. share(eligible x ∧ ¬overPace(x), else eligible)   # spill to the accounts with the most room, calm ones first (v1.7)
-  6. interactive → iu (Claude Code shows the limit itself)
-     bulk        → "spill": the caller spills to its IU path
-                   (`rd` pauses — Herdr work never spills to IU, agw steps keep their IU path)
-```
-
-Why v1.4: with two accounts "the other" was one account, so the first match was the only match. With `me2` the
-siblings `me` and `me2` share the bulk lanes, and registry order would have drained `me` while `me2` idled. Headroom
-is the weekly points left below the account's own ceiling, scaled by its plan, so a 20x account with the same
-percent counts for twice the room. Every threshold and the expiring-capacity step are unchanged. From v1.5 the ranking is
-spare per hour to the account's own reset (a reset already past counts as a fresh week), and the CLI's draw is random
-(only the outcome reaches the pick log, so a single pick is not reproducible; `pick --dry` and the tests stay deterministic).
-
-Why v1.5 (2026-10-29): the pick log showed `me2` at 67 % weekly with three days to its reset taking about a tenth
-of the bulk picks while `iu` and `me` (resets 6-7 days out) took the rest. v1.4's best-headroom pick looked at spare
-points only, so an account that expires sooner was no more attractive than one that expires next week, and
-argmax sends a whole burst of spawns to one account. v1.5 weighs each account's spare capacity per hour to *its own*
-reset (sharpened ×1.5, so a window closing sooner counts for more), and the CLI draws among the home accounts in
-proportion to the weights, so a burst spreads instead of landing on one account. Nothing names an account or a plan:
-a new subscription is a registry entry, its reset time and quota come from the sample. With `me` and `me2` at
-similar 5h load the split at the time was about 49/51; the 5h-balance step (3) still moves work to the emptier
-window and keeps overriding the weekly weighting while the 5h loads differ by more than 20 points.
-
-Why v1.9 (2026-11-19): `scripts/claude-account-sim.test.ts` runs the rule for three weeks against sticky sessions, a day/night
-demand curve and the real reset offsets, and judges it by the weekly % each account reaches at its reset. At demand 0.85× the
-pool the 24 h horizon ended iu at 88-92 %, me2 at 88-95 % and me at 64-67 %; 72 h ends iu and me2 at 99-100 % and leaves the slack
-on one account (me, about 40 %). Below the pool's size the slack has to land somewhere, and earliest-reset-first lands it on
-the fewest accounts. At 1.0× and above both horizons fill every window to 91-100 %. 120 h and 168 h added mid-session walls
-(moved sessions) without a better result. The same file models the factory's own choice (`roomLeft`, most room in the tightest
-window): it leaves every account at 75-98 % at its reset, which is what 2026-11-18 showed (me 93 % at its reset). The suite
-asserts these outcomes, so a rule change that wastes quota fails `make check`.
-
-**The factory follows `rank` only as a tie-break** (software-factory `pickAccount` orders by `roomLeft` first) until
-issue_2379 lands, which makes the rank its order. Until then Fable and drain mode steer `c`, `rd` and every `pick`, but
-not which account a new factory lead lands on.
-
-Why v1.8 (2026-11-18): `iu` reached its reset at 90 % (83 % a day earlier). Eligible under the 98 % ceiling, it was never chosen: step 1
-skipped any account above 70 %, the bulk lanes sat on `me`/`me2` at step 4, and 98 % left the last points unspent. Expiring capacity now
-has no weekly cap, and the ceiling is 100 in the last 3 h (a wall hit then costs under 3 h).
-
-Why v1.7 (2026-11-18): `me2` went from 43 % to 86 % weekly in a day at 43 % pace and then sat at its wall for days, while `iu`
-(which already ends its weeks at 90-98 %) took the rest. Homeless lanes (factory `lead`, `headless` overflow) land in step 5, the only
-step without a pace guard, and a lead is a long session that drags its workers onto the account it was drawn for (`cf` on `me2`
-under Fable mode, off since fdef713, added to it; the pick log cannot separate the two). Step 5 now draws
-only among accounts not over pace and falls back to all of them when every candidate is over pace.
-
-Why v1.6 (2026-10-30): all three accounts sat over weekly pace (`iu` 41 % vs 27 % elapsed, `me` 42 vs 18, `me2` 94 vs 68),
-so step 3 had no candidate and `me` (5h window a quarter of `iu`'s) took every bulk spawn from 3 % to 99 % in 75 minutes while
-`iu` idled at 5 %. A full 5h window is a wall; an over-pace week is a preference (it recovers over a weekend). So (a) the
-session move ignores the other's pace once the home 5h is at 60 % (`SESSION_PRESSURE`), and (b) from 80 %
-(`SESSION_SOFT_MAX`) an account only takes work when no cooler one is eligible; `SESSION_MAX` 90 stays the hard stop.
-
-Why the pace step (v1.1): on 2026-10-24 `c` picked `iu` at 89 % weekly with about
-four days to its reset while `me` sat at 2 %. v1 only leaves home at weekly ≥ 90 %,
-so interactive work burned iu's last 11 % while `me` idled. An over-pace home now
-yields to an under-pace account (iu 88 % at pace 44 → `me`, reason `pace`). Picks
-are per spawn, so no hysteresis. Expiring capacity (rule 1) still wins for bulk lanes.
-
-Why the session step (v1.2): `me`'s 5h window is a quarter of `iu`'s and runs out
-fast, so an idle `me` window is capacity that is gone at the next reset. A spawn moves
-to the other account when its 5h is more than 20 points emptier (`SESSION_MARGIN`)
-and it is not over weekly pace; reason `session`. Within the margin home stays, so
-cache and routing remain stable.
-
-Why the refresh is not interactive-exempt (v1.2 text, 2026-10-25): v1.1 left the interactive lane untouched so a
-pick could never block or spend anything. That exemption starved an idle account: on a machine where only interactive
-picks run (the MacBook) nothing ever refreshed `me`. The refresh itself is cheap (one usage GET or `claude auth status`,
-0 tokens), so the lane now spawns the same detached, claimed (5-min budget) background refresh as the others and still
-never waits: the pick answers from the cache it has, the next one sees the new sample. The rule itself is unchanged.
-The periodic keepalive (§Operate) is the guarantee; the pick-time refresh is the opportunistic second path.
-
-Why these homes: bulk work is steady, unattended and starts a fresh context
-per spawn, so each spawn is a free re-pick point. Together they are 63% of Max
-spend, which fits `me`'s small session window better than bursty interactive work
-does. `me` cannot hold all of it (its weekly is about half of `iu`'s); `me2` takes the share
-`me` cannot, and step 5 spills the rest to `iu`, which gains headroom because the bulk work left it.
-
-Every decision is appended as JSONL (`ts, lane, picked, reason, a{s,w}, b{s,w}`)
-to `~/.claude/logs/`. That pick log is the dataset for v2 tuning.
-
-**v2 (later, from data):** replace the fixed thresholds with pace.
-`projected_w(x) = weekly% + burn_rate(lane mix) × hours_to_reset`. Pick the
-account with the most slack left at its own reset, which spends capacity before
-it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
-
-## Fable mode
-
-Fable resets refill only Fable usage, so one account is set aside for Fable. The registry's top-level `"fable": "<id>"`
-(today `me2`) does two things:
-
-- `cf` launches on it (`claude-account fable` prints it; Fable mode off, the account disabled or the CLI failing → the
-  default account). `cf --account <id>` still wins.
-- every pick, any lane, runs the rule without it first; it takes work only when no other account is eligible (reason
-  `fable-reserve`). `rank` therefore lists it last, so factory leads reach it last too. Its `homeLanes` stay as they are,
-  so switching the mode off restores the plain rule.
-
-Switch: set `"fable"` to another account id, or to `null` for off, and commit. Read on every call, no restart.
-
-## Drain mode
-
-The registry's top-level `"drain": ["<id>", …]` names accounts the owner wants at the wall fast (an account to empty before
-a reset he controls, or a week he knows will go unused otherwise). Every pick, any lane, takes a drain account first while its
-5h window is under `SESSION_SOFT_MAX` (reason `drain`; several share by weight); its weekly ceiling is 100, not 95/98. A hot
-5h window hands the work to the plain rule until the window cools. A drain account cannot be the Fable account (`loadRegistry`
-refuses it). Drain mode does not end by itself: remove the id once the account is full, or it keeps draining the next week.
-With `"fable": "iu", "drain": ["me2"]` (2026-11-19) the order is me2 (drain), then me, then iu (fable-reserve) in every lane;
-the simulation fills me2 within 3-4 hours and keeps iu under 65 % for the week.
+- **Statusline record:** every render gets native `rate_limits` for the session's own account; `statusline.sh` hands them
+  to `claude-account record`.
+- **Peer import:** quota is per account, not per machine, so a refresh imports the other machine's samples (`host` block;
+  the MacBook's gate verb `account-usage`). Auth state is never imported: logins are per machine.
+- **Cache reader:** `scripts/fetch_usage.py` only reads the quota cache (on a stale default sample it runs
+  `claude-account refresh --ids <default>`) and writes `/tmp/claude_sl/usage_api.json` (the default account) and
+  `usage_accounts.json` (all accounts), which the statusline and Tinycast read.
 
 ## Spawn integration
 
-| Spawner | Today | Change |
-|-|-|-|
-| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what a terminal in the core runs when you type `claude`) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
-| `c` / `ch` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive` (`cf` skips it: always the Fable account, `claude-account fable`, §Fable mode); `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
-| `rd work` (`remote-dev.sh` `pick_account`, `spawn_env`) | terminal exports `USAGE_LANE` only | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
-| `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
-| `hc-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
+| Spawner | What it does |
+|-|-|
+| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what a terminal in the core runs when you type `claude`) | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
+| `c` / `ch` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | `claude-account pick --lane interactive` (`cf` skips it: always the Fable account, `claude-account fable`, §Fable mode); `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
+| `rd work` (`remote-dev.sh` `pick_account`, `spawn_env`) | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
+| `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
+| `hc-reap.py`, `remote-dev.sh` `claude agents --json` | query once per enabled account and merge |
 
 Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
 `session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the
@@ -418,7 +214,8 @@ recorded one, until the stamp is renewed. Subagents run inside the parent proces
 subagent). Per enabled account it builds the launcher env, runs `claude -p "reply ok" --model haiku`, ingests with
 usage-tracker, and asserts the session's `usage_record` rows say `billing=max` + the expected account and `session_env`
 has the account (with `--subagent`: every row of the subagent session carries the parent's account). Break tests need
-no tokens and run against a throw-away copy of the cache, pick log and registry (the real ones are never written):
+no tokens and run against a throw-away copy of the cache, pick log and registry (the default account and one other, no mode, no peer; the real files
+are never written):
 
 | Break | Expected |
 |-|-|
@@ -428,51 +225,33 @@ no tokens and run against a throw-away copy of the cache, pick log and registry 
 | `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `bulk` never picks it |
 
 **Quota + login keepalive.** `com.jkrumm.claude-accounts-keepalive` (**hourly, on both machines**, under jobrun with
-`--every 3600`, `RunAtLoad`) runs `claude-account refresh --all`. Decision 2026-10-25: it was daily 06:30 on the mini only, so
-an idle account's sample went past the 6 h eligibility window and silently left routing (and the MacBook, whose picks are
-all interactive, had no refresher at all). Hourly sits far under 6 h, survives a missed run or two, and costs 24 usage GETs
-a day per account (the claim keeps the 5-minute budget; the endpoint is rate-limited per token, nowhere near that).
-`make claude-accounts-keepalive-setup` (part of `make setup`) installs it everywhere; it needs `~/.local/bin/jobrun` and
-`claude-account` (both from `make setup`) and fails loudly without them. Each machine keeps its own cache, so each
-refreshes its own (feed 4 tops up an idle account from the peer): the MacBook's picks route on the MacBook's samples. `jobs-grade` window for `every 3600` is 3 h (a
-sleeping laptop fires one run on wake, not a backlog); `make doctor` maps the label in `docs/architecture.md` (mini table
-and MacBook list). Per enabled account:
-per enabled account: the OAuth usage endpoint first (source 3), and when that gives no sample `claude auth status` for that account's `CLAUDE_CONFIG_DIR`. The two are decoupled: the auth mark follows the verdict, never the sample. loggedIn=true clears the mark (`auth-ok`), loggedIn=false sets it (`auth-failed`), and a fresh sample or a statusline `record` also clears it (both prove the login). Both calls cost 0 tokens and prime no window. The run exits 1 when an account got neither a sample nor a verdict, unless this machine proved that login (a sample from its own token or `loggedIn: true`, stamped in `<id>.verified.json`) less than 6 h ago: that is `deferred`, logged and exit 0 (2026-11-13, issue 997: a transient 503/401 outage hung `claude auth status` 30 s per account, ~95 s red runs 1-2 times a day that cleared by the next hour; a proof older than 6 h or none is still exit 1), and also when the account is logged in but the endpoint gave no sample and its stored sample is older than 6 h (or missing): a dying feed must turn the jobrun grade red instead of fading out quietly. An endpoint failure with a clean `auth status` and a sample younger than 6 h is exit 0. stderr names the account and the age. On a 401, `claude mcp list` is what renews an idle account's expired access token; `claude auth status` only gives the verdict. `--all` ignores the 10-minute freshness and the auth cooldown but not the
-5-minute claim. The interactive and non-interactive picks run the same refresh opportunistically (detached, same
-claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/claude-accounts-keepalive.log`
-(a green run prints nothing; the detached refresh a pick spawns appends its stdout/stderr to the same file). Every external call of the refresh (`claude auth status`, `security`, the peer `ssh`) runs through `boundedSpawnSync` (`scripts/claude-account.ts`): own process group, perl alarm, group KILL. Node's `spawnSync` `timeout` kills only the direct child, and a helper holding the capture pipe kept it blocked until jobrun's 900 s deadline (2026-11-12 09:58 `rc=124`, issue 886, during a swap-thrash window; the same class as the devhost `claude_bounded` fix). A deadline now comes back as `ETIMEDOUT` (no verdict, claim kept), not as a hung job. `--all` also asks for a re-login when a login is dead or inside its last 7 days (§Re-login, once per account per 24 h).
+`--every 3600`, `RunAtLoad`) runs `claude-account refresh --all`. Hourly sits far under the picker's 6 h eligibility window and
+survives a missed run or two. `make claude-accounts-keepalive-setup` (part of `make setup`) installs it; it needs
+`~/.local/bin/jobrun` and `claude-account` (both from `make setup`) and fails loudly without them. Each machine keeps its own
+cache, so each refreshes its own (the peer import tops up an idle account): the MacBook's picks route on the MacBook's
+samples. `jobs-grade`'s window for `every 3600` is 3 h (a sleeping laptop fires one run on wake, not a backlog);
+`make doctor` maps the label in `docs/architecture.md` (mini table and MacBook list). Log:
+`~/Library/Logs/claude-accounts-keepalive.log` (a green run prints nothing). What a refresh calls, when it exits 1 and when
+it asks for a re-login: the package docs.
 
-**Health on wake.** `claude-account health [--json] [--wake]` grades this machine and its peer (MacBook reaches the mini over
-`ssh mini`, the mini the MacBook over `ssh iumac`; both unauthenticated reads: `usage --json`, `expiry --json`, the human-queue).
-**Transport:** the peer is read through a herdr-core, never a plain ssh shell. Why: an ssh session on the mini cannot read
-the login Keychain (`security` rc=36), so over ssh every login expiry is unreadable (2026-10-31: the app's chip said ok
-while `me`/`me2` were logged out on the mini); the core is a launchd GUI-session child and reads it. Two routes, in order:
-(1) this machine's core lists the peer `connected` (`hc exec --on <peer>`; only when `hc server status` says the core runs),
-(2) one ssh hop to the peer and *its own* core (`launchctl print` first, then `hc exec` there). Neither starts a core: an
-`hc` call auto-starts a stray one when none runs, so both check first. Only when no core answers does it read over plain
-ssh, and then says so: a `NOTE <peer>: its herdr-core was not reachable…` line (stdout in text mode, stderr under `--json`
-so the JSON stays parseable). Every peer row carries `via: "core"|"ssh"` (unreadable details end `(via ssh)`). Exit codes
-and the JSON shape are unchanged.
-A login with no readable expiry is `warn` (`login expiry unreadable`), never `ok`. Test seams: `CLAUDE_ACCOUNTS_HC` (the hc binary), `CLAUDE_ACCOUNTS_SSH`.
-Rows: `login` (logged out = FAIL for `iu`, WARN otherwise; login ending <= 7 d = WARN), `quota` (logged in but no sample for
-> 6 h: the usage endpoint is rejecting the token, the failure `auth status` alone cannot see), `queue` (re-login asks
-waiting for a click). `--wake`, run 30 s after wake by `scripts/wakeup.sh` (sleepwatcher, MacBook), re-pushes the mini's
-pending re-login dialogs younger than 24 h (a push that failed while this Mac slept is not retried by anything else:
-2026-10-27 the `iu` ask sat 8 h) and posts one notification, repeated only when the set of bad rows changes or after 12 h.
-Tinycast's Claude usage view reads `health --json` and offers each row's `fix`.
-The Herdr app's `jk-status` polls `health --json` every 5 min for its ⚠ chip. A Re-login started from the chip in `jk-details`
-sets `shared("jk.relogin")`; `jk-status` then re-polls from 60 s after the start, once a minute, until that row is gone or 15 min
-have passed (the chip's "approve in browser" label follows the same key, on either machine), so the chip clears when the login lands.
+**Health on wake.** `claude-account health [--json] [--wake]` grades this machine and its peer; the rows, the transport and
+the exit codes are the package's. What dotfiles supplies: the registry's `host` block (§Registry), `scripts/claude-account-snapshot.sh`
+behind the gate verbs `account-snapshot` / `account-snapshot-core`, and `scripts/wakeup.sh` (sleepwatcher, MacBook), which runs
+`health --wake` 30 s after wake. Readers: Tinycast's Claude usage view (offers each row's `fix`) and the Herdr app's
+`jk-status`, which polls every 5 min for its ⚠ chip. A Re-login started from the chip in `jk-details` sets
+`shared("jk.relogin")`; `jk-status` then re-polls from 60 s after the start, once a minute, until that row is gone or 15 min
+have passed (the chip's "approve in browser" label follows the same key, on either machine), so the chip clears when the
+login lands.
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
 1. No FAIL -> `make claude-accounts-stamp` records the version, the WARN clears on the next heartbeat.
 2. `auth/*` FAIL -> the credential naming or config-dir resolution changed. Re-derive the keychain suffix from the new
    binary, fix `scripts/claude-accounts-verify.sh` and the table above, and check `claude-auth.zsh` still agrees.
-3. `quota/*` FAIL -> the `cachedUsageUtilization` shape changed; fix `sampleFromClaudeJson` in
-   `scripts/lib/claude-accounts.ts` (until then the picker routes on the statusline and OAuth feeds). If refreshes stop
-   producing samples (`refresh` logs `usage endpoint gave no sample` / `no Keychain token`), check `sampleFromOAuthUsage`
-   against a live `/api/oauth/usage` body and `keychainService` against the binary.
+3. `quota/*` FAIL -> the `cachedUsageUtilization` shape changed: that parser, like the usage-endpoint one and the Keychain
+   service name, lives in the accounts package (software-factory `packages/accounts`); fix it there. Until then the picker
+   routes on the statusline and OAuth feeds. A refresh that logs `usage endpoint gave no sample` / `no Keychain token` is the
+   same repo's job.
 4. Optional: `make claude-accounts-e2e` for the real attribution round trip.
 
 **Re-login** (dead login, revoked session, or `login/<id>` WARN): `claude-relogin <id>`. Logins are per machine (the
@@ -636,7 +415,6 @@ The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one A
 | a stale expiry or 401 right after a fresh login, `security find-generic-password -s 'Claude Code-credentials…'` without `-a` shows `"acct"<blob>="unknown"` | a Keychain twin: a process that ran without `USER` filed a second item under acct `unknown` next to the real one (acct = `$USER`) | lookups here pass `-a $USER`; delete the twin: `security delete-generic-password -s 'Claude Code-credentials' -a unknown` (add the `-<hash>` suffix for a non-default account) |
 | notification `login finished but the Keychain login did not change` | the CLI exited 0 but the item the reader sees was not rewritten (Keychain twin above, a locked Keychain, a login in the wrong browser profile) | check the twin row above, then `claude-relogin <id> --visible` |
 | log `refresh: peer usage unavailable` / `unreadable` | the other machine is asleep or unreachable over ssh, or answered garbage | nothing: the run continues on its own endpoint; `ssh mini claude-account usage --json` (MacBook) / `ssh iumac account-usage` (mini) shows why |
-| `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
 | `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
 | `pick/*` all `iu`, reason `interactive-fallback` or `spill` | `me` has no fresh sample or is auth-failed | `claude-account usage`, `claude-account refresh --ids me` |
 | a `me` session shows `IU` quota | session started with `CLAUDE_CONFIG_DIR` unset (resumed without the `jk.claude.config` label) | restart the session through `c --account me` |
@@ -647,46 +425,13 @@ The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one A
 | an account's sample is hours old on the MacBook | keepalive agent not installed there (`launchctl list \| grep claude-accounts`) | `make setup` or `make claude-accounts-keepalive-setup` on that machine |
 | `usage` shows `src oauth` samples but old ages for an account | its refresh is failing quietly (429, Keychain) | run `claude-account refresh --ids <id>` and read the stderr line |
 
-## Borrowed from open source (2026-10 survey)
-
-No existing tool does per-lane spawn-time selection across terminals. The per-spawn tools (diranged/claude-profile, ccs native
-profiles, RA1NM4KER/agent-relay, CarlosTheory/claude-multi-account) are profile
-launchers that are about 30 lines here. The global-swap tools (claude-swap
-`switch`, herdr-account-switch, herdr-grazr, cc-account-switcher, caam vault
-mode) rewrite the one live credential under running sessions, which kills
-concurrency and cache. So we build a thin picker and take the parts:
-
-| Idea | From | Used as |
-|-|-|-|
-| statusline `rate_limits` as the quota feed, no polling | wazum/herdr-grazr | quota source 1 |
-| `StopFailure` hook for event-driven limit detection | RA1NM4KER/agent-relay | quota source 2 |
-| `claude -p "/usage"` → `cachedUsageUtilization`, 0 tokens | n2ns/plan-swap | quota source 3 until Claude Code 2.1.310 (dead since); now the OAuth usage endpoint |
-| poll budget ≥ 3 min, shared backoff, honour `Retry-After`, cache successes only | claude-swap, paddo/ccseats, ClaudeBar | idle-account refresh |
-| `consume-first` / `earliest-reset-headroom`, 10-pt hysteresis | claude-swap, caam | rule 1 + v2 pace |
-| pin a session to one account for its lifetime; re-pin only on 401/quota | hbinhng/ccm `--sticky` | invariant 1 |
-| auto-re-prompt agents after a limit wall resets | rcosteira79/herdr-autocontinue | W2: interactive panes that hit the wall resume at `resets_at` |
-| never symlink `settings.json`; locked keychain looks logged out | fujibee/agswt | layout rules, heartbeat |
-| `CLAUDE_CODE_DISABLE_AGENT_VIEW` for non-default identities | caam | `--bg` stays on `iu` |
-| profile badge + chained statusline env | diranged/claude-profile | statusline `IU`/`ME` badge |
-
-Avoid: relay class (claude-relay-service, CCR pools, OmniRoute, `ccs cliproxy`,
-doxaras/claude-rotate, 2solarmax/maxpool, tuxevil-rotator). Also any tool that
-writes refreshed tokens back into Claude Code's store (ClaudeBar API mode, Raycast
-Agent Usage), which makes the tool co-owner of the login. Window priming
-(`claude -p ping` to start the 5h window early) is undocumented meter-gaming.
-Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
-
 ## Attribution (usage-tracker → Argo)
 
-- `hooks/session-env.ts` adds `account` to its line: the registry id resolved
-  from `CLAUDE_CONFIG_DIR` (unset → `iu`).
-- usage-tracker gets a new `account` column on `session_env` and `usage_record`.
-  `billing` keeps its meaning (`max` = sunk, `iu` = metered); account is a
-  separate dimension. Backfill: all historical `max` rows → `iu`. `billing-audit`
-  learns the account.
-- The claude-code collector needs no new root: `projects/` and `logs/` are shared.
-- Argo: an account filter and split on the usage page (`apps/api/src/routes/usage.ts`,
-  `lib/usage-query.ts`).
+- `hooks/session-env.ts` adds `account` to its line: what `claude-account account` says for the session's
+  `CLAUDE_CONFIG_DIR`, `null` when it cannot say.
+- usage-tracker carries it as the `account` column on `session_env` and `usage_record`. `billing` keeps its meaning (`max` =
+  sunk, `iu` = metered); account is a separate dimension.
+- The claude-code collector needs no extra root: `projects/` and `logs/` are shared.
 
 ## Displays
 
@@ -695,7 +440,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | Claude Code statusline | Native `rate_limits` already comes from the session's own account, so the own numbers are correct for free; the `IU`/`ME` badge stays at the front. After the duration, one final segment (files only, never a spawn in the render): every enabled account as `<id> <5h>/<wk>` in registry order, e.g. `iu 2/90 · me 41/22 ↺90m · ∑76%`. The own account is bold with the live stdin numbers (and its 5h reset countdown while line 1 fits 130 columns); the others come from `/tmp/claude_sl/usage_accounts.json`, grey when the sample is over 1 h old, `✗login` when the login failed, absent without figures. `∑` is the plan-weighted weekly pool (weight = the plan multiple, `max20x` 20 / `max5x` 5, all 1 when one is unknown; the same formula as Tinycast's `usage/summary.ts`), only with more than one account. Numbers use the context thresholds. An account's mode is one mark right after its id (`me2↓ 4/0`): drain ↓, reserve ◆, paused ‖; normal, an override past its end and an unknown kind show none. The mark comes from `mode` in the same file: `fetch_usage.py` adds `mode` and `forecast` per account from `claude-account status --json` when it rewrites the file, so the render still only reads a file and spawns nothing. The routing reason (`CLAUDE_ACCOUNT_REASON`, see Account marker) and a pace hint are not rendered. `usage_accounts.json` is rewritten in the background at most once a minute by `fetch_usage.py --accounts` (20 s cap). Tests: `scripts/statusline.test.sh` |
 | Herdr app (`jk-status`, `jk-details`) | per-account `5h/7d %` and the `∑` pool from `claude-account usage --json`, the usage popup, and `⚠` chips from `claude-account health --json`. `claude-account status --json` is read beside the usage (merged by id, only `mode` and `forecast` used): the bar chip carries the mode mark after the id (`me2↓ 4/0`, same marks as the statusline); the popup names the mode in words (`drain until reset`, `reserve for fable`) and, for an account that will not be full at its reset (no `forecast.full_at`, `waste_percent` > 0), one line `ends the week at 0%, 100% unused at reset`. A failed status read shows no marks. Tests: `scripts/herdr-mods-accounts.test.ts` |
 | Tinycast (MacBook, `extension/src/usage/quota.ts`) | read both accounts from Argo `GET /agents/overview` (`latest.snapshot.quota`), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
-| Heartbeat (`devhost-health-check.sh` `check_quota`) | `quota` shows every enabled account (WARN never pages, as today), each with the mode mark after its id and, when it will not be full at its reset, the same forecast words after its numbers (`me2↓ 5h 4% · 7d 0% — ends the week at 0%, 100% unused at reset`), both from `claude-account status --json`; a failed status read leaves the row as before. No limit or threshold of its own: modes and forecasts are `packages/accounts`' (`docs/accounts.md` in the software-factory repo). Test: `scripts/devhost-heartbeat.test.sh`. In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it. The same check grades login expiry from `claude-account expiry` (its `severity`): anything but PASS is a WARN (never pages): inside 7 days, an unreadable item, or a check that could not run (helper missing, failing or answering garbage: `login expiry check could not run (<reason>)`, reason also on stderr). Expiry never raises past the existing `iu` policy: a dead keychain login with a working cached token stays the accepted state (WARN at worst); FAIL only where `check_claude_auth_iu` fails too |
+| Heartbeat (`devhost-health-check.sh` `check_quota`) | `quota` shows every enabled account (WARN never pages, as today), each with the mode mark after its id and, when it will not be full at its reset, the same forecast words after its numbers (`me2↓ 5h 4% · 7d 0% — ends the week at 0%, 100% unused at reset`), both from `claude-account status --json`; a failed status read leaves the row as before. No limit or threshold of its own: modes and forecasts are `packages/accounts`' (`docs/accounts.md` in the software-factory repo). Test: `scripts/devhost-heartbeat.test.sh`. In `claude auth`, `iu` dead = FAIL; `me` dead = WARN, because the picker routes around it. The same check grades login expiry from `claude-account expiry` (its `severity`): anything but PASS is a WARN (never pages): inside 7 days, an unreadable item, or a check that could not run (helper missing, failing or answering garbage: `login expiry check could not run (<reason>)`, reason also on stderr). Expiry never raises past the existing `iu` policy: a dead keychain login with a working cached token stays the accepted state (WARN at worst); FAIL only where `check_claude_auth_iu` fails too |
 | Hermes digests | inherit from the heartbeat; no change |
 
 ## Login logistics
@@ -718,12 +463,3 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 - **Tinycast (MacBook)** reads the mini's quota; it needs no login of its own.
 - **Hygiene:** real identity, own card, no VPN hopping. Use `me` at normal intensity
   on day one; ban reports cluster right after a purchase or upgrade.
-
-## Rollout
-
-| Wave | When | Contents | Done when |
-|-|-|-|-|
-| W0 | now, B absent | registry (`me` disabled), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (`iu` only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `iu`; no behaviour change (at W0 no `api/oauth/usage` calls from `claude-account`; source 3 now makes them, budgeted) |
-| W1 | after the `me` login | enable `me`; `rd work` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a bulk spawn lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
-| W2 | after W1 | `/api/usage` multi-account, overview pane, Tinycast, heartbeat, Argo split | both accounts visible on every surface |
-| W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for `me` | written decision |
