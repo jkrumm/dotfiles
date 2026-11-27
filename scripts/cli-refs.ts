@@ -123,7 +123,7 @@ export function collectFiles(root: string): string[] {
 // ── quotes ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 const SEGMENT = /\s\|\|\s|\s&&\s|\s\|\s|;\s/
-const WRAPPERS = /^(?:(?:\$|sudo|time|nohup|exec|then|do|else)\s+)+/
+const WRAPPERS = /^(?:(?:\$|sudo|time|nohup|exec|command|then|do|else)\s+)+/
 const ENV = /^(?:[A-Za-z_]\w*=\S*\s+)+/
 
 // One shell line (or span) → the commands of the checked CLIs it starts, each with the text after the CLI's name.

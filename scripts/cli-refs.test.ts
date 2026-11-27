@@ -34,6 +34,7 @@ esac`,
     echo '  file read|write [--on m] <path>   a file here or there'
     echo '                              continuation prose at a deep indent' ;;
 esac`,
+  print: `echo 'usage: print <file> [--check] [--dry-run] [--pages <range>]'`,
   jobrun: `echo 'jobrun: broken'; exit 3`,
   "playwright-cli": `echo 'playwright-cli <command> [args] [options]'; echo
 echo '  attach [name]               attach to a running browser'
@@ -218,6 +219,14 @@ describe("files and output", () => {
     ])
     expect(body.skipped).toEqual(["playwright-cli: not installed, skipped"])
     expect(body.files).toBe(1)
+  })
+
+  test("a quote behind `command` is checked like the bare CLI name: zsh's builtin print takes that form", async () => {
+    const root = repo({ "skills/p/SKILL.md": "`command print --bogus`\n`command print --check`\n" })
+    const r = await run(["--root", root, "--json"], { env: { PATH: bin(["print"]) } })
+    const body = JSON.parse(r.out)
+    expect(r.code).toBe(1)
+    expect(body.findings.map((f: { kind: string; line: number }) => [f.kind, f.line])).toEqual([["unknown-flag", 1]])
   })
 
   test("the CLI process exits 1 on a finding, 0 clean, 2 on a bad argument", async () => {
