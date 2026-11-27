@@ -1,79 +1,66 @@
 ---
 name: documents
-description: "The paper-document system end to end: scanning on the Brother MFC (Tinycast Scanner, scan CLI), the Eingang/Scans inbox on the Dokumente share, the finances pipeline that classifies and files a scan (fin doc inbox), the index notes in the brain, review decisions, finding a filed document, printing. Use when the user mentions scanning, a scanned paper, the inbox, a document waiting in review, where a paper is filed, finding or printing a document, or the scanner or printer itself."
+allowed-tools: Bash(paper --help *)
+description: "Paper documents end to end through the `paper` CLI: scan with the owner at the Brother scanner, the Eingang/Scans inbox and its review items (decide one), find a filed document by issuer, kind, date or words, print a file or a filed document (one- or two-sided, landscape, envelopes, labels, toner, cancel). Use when the user mentions scanning, a scanned paper, the inbox, a document in review, where a paper is filed, finding a document, or printing."
 ---
 
-# Documents: paper in, filed, findable
+# Documents: paper in, filed, findable, printed
 
-Three repos own one pipeline. This page is the map; each step's rules live in its owner's doc, named in the last column.
-Read that doc before changing or debugging a step.
+One CLI, `paper`, on both Macs. Every call prints one JSON line; exit 0 is `ok: true`, 1 a refusal (`message`), 2 a usage error. Verbs, live from the CLI
+(descriptions cut at a column; `paper <verb> --help` has the flags and output fields, and `paper doctor` is the health check):
 
-| Step | Where it runs | What happens | Owner and reference |
-|-|-|-|-|
-| 1. Scan | MacBook | Tinycast **Scanner** (`sn`) or the scan commands drive the Brother over eSCL. Pages wait as a *pending scan* in `~/.local/state/scan/pending/` until **Submit Scan** | tinycast-extensions, `AGENTS.md` § Scanner |
-| 2. Inbox | the Dokumente share | Submit copies `scan-<date>-<time>.pdf` into `Dokumente/Eingang/Scans/`; a double-sided stack is two files, `…-vorne.pdf` and `…-hinten.pdf` | same |
-| 3. Pipeline | mini, every 5 min (`com.jkrumm.finances-inbox`) | waits 30 s after the last write, collates the pair, turns pages upright, OCR, splits a stack into documents, classifies, files | finances, `docs/inbox.md` |
-| 4. Result | share, brain, vault | original + `.txt` under `Dokumente/<folder by kind>/`, an index note `Areas/Documents/<year>/<name>.md` in the brain, a queued vault row; the scan moves to `Eingang/Scans/done/` | finances, `docs/inbox.md` § Where it lands |
-| 5. Unclear | share | the file goes to `Eingang/Scans/review/` with `<name>.why.txt` (reason, proposal, how to decide) and one ntfy notice | finances, `docs/inbox.md` § Deciding a review row |
+!`{ paper --help 2>&1 || echo "paper is not on this machine"; } | cut -c1-118`
 
-The share is mounted at `/Volumes/SSD` on the MacBook and `~/HomeLab/SSD` on the mini. The scanner state (pending scan,
-log, kept failures) exists only on the MacBook.
+## Who owns which step
 
-## Rules that are easy to get wrong
+| Step | Where | Owner |
+|-|-|-|
+| Scan: pages wait as a *pending scan* until Submit | state on the mini, once | paper |
+| Inbox: `Dokumente/Eingang/Scans/`, `scan-<date>-<time>.pdf`, pairs `-vorne` / `-hinten` | the Dokumente share | paper writes, finances reads |
+| Pipeline every 5 min: collate, turn, OCR, split, classify, file; unclear files go to `review/` with a `.why.txt` | mini | finances, `docs/inbox.md` |
+| Index: one note per document, `Areas/Documents/<year>/<name>.md` in the brain | brain | finances writes, paper reads |
+| Print: the CUPS queue of the same device | each Mac has its own | paper |
 
-- **Nothing reaches the inbox without Submit.** The scanner reports a feeder that stopped mid-stack as a clean success,
-  so the page count is the only check. Compare it with the sheets before submitting; Scan More appends the rest.
-- **Never start a scan from an unattended script or a test.** It needs paper in the feeder and a person. Reading state is
-  always fine.
-- **While `Eingang/Scans/.fin-inbox.lock` exists a run is filing: do not move, rename or delete inbox files.** Never write
-  into `done/`.
-- **A file in `review/` is decided, not edited.** Move it back into the inbox under a name that carries the decision
-  (`<name>.single.pdf`, `<name>.split-9-12.pdf`, `.kind-<kind>`, `.date-YYYY-MM-DD`, `.issuer-<Name_With_Underscores>`),
-  or on the mini run `fin doc inbox file <review-file>` with the same values as flags. The Scanner view's review tiles do
-  the two common moves (one document, the proposed split).
-- **A filed document is corrected with `fin doc inbox fix <share-path>`**, never by renaming on the share: the brain note,
-  the text file and the vault row carry its path.
-- **Blank pages and skew are the pipeline's business.** The scan PDF holds the scanner's JPEGs untouched; a blank back
-  stays in `-hinten` so the pairing cannot shift.
-- **Document contents are private.** Never paste text of a filed document into another repo, an Issue or a web request.
+On the MacBook `scan`, `inbox` and `docs` run on the mini (`host` in `~/.config/paper/config.json`), so `paper scan status` gives the same answer on both
+Macs. If the mini does not answer, the call fails with one JSON line naming it; it never scans locally. `print` always runs on the machine you type it on.
+
+## Scan, with the owner at the scanner
+
+1. `paper scan check`: scanner reachable and idle, paper in the feeder, nothing pending that refuses it. Read-only.
+2. Start only when the owner says the stack is in: `paper scan start --mode feeder` (also `fronts`, `backs`, `flatbed`, `more`; `--wait` blocks for the result).
+3. `paper scan status` shows progress, `lastResult` and `actions`, the allowed next steps each with its command.
+4. Count the pages against the sheets, then `paper scan submit`. The scanner reports a feeder that stopped mid-stack as a clean success, so the count is the only check; `more` appends the rest. `paper scan discard` drops the pending scan.
+
+Nothing reaches the inbox without Submit. A symptom list is in `paper scan log` (every page, the device's final job record).
+
+## Decide a review item
+
+`paper inbox list` shows each review file with its `reason`, the pipeline's `proposal` (kind, date, a `split` with its `starts`) and the `sides` of a collated pair.
+Decide with `paper inbox decide <review-file> --single`, `--split 9,10,12`, or the values `--kind --issuer --date --title --object`; the move carries the decision and the
+pipeline files it on its next run. Values describe one document and are refused with `--split`. A filed document that is wrong is corrected on the mini with
+`fin doc inbox fix <share-path>`, never by renaming on the share: the brain note, the text file and the vault row carry its path.
+
+While `Eingang/Scans/.fin-inbox.lock` exists a run is filing: do not move, rename or delete inbox files, and never write into `done/`.
 
 ## Find a document
 
-1. Search the index notes: `rg -il "<word>" ~/SourceRoot/brain/Areas/Documents` (frontmatter `kind`, `issuer`, `date`,
-   `tax_year`, `tags`, `share_path`, `text_path`; the body is a four-sentence summary). Pull the brain first: a clone lags.
-2. Read the extracted text at `<Dokumente>/<text_path>`.
-3. Open or print the original at `<Dokumente>/<share_path>`.
+`paper docs list` filters by kind, issuer, year, tax year, tag or words, newest first. `paper docs show <id>` is one record. Read the content from the file
+`paper docs text <id>` names; `paper docs path <id>` is the original on this machine's mount, and `paper docs fetch <id>` copies it to a local path for a caller that cannot read the share.
+After a filing, nothing shows for up to 5 minutes (the pipeline interval) and a pair waits 30 s after its last write; a lone `-vorne` waits 30 minutes for its `-hinten`.
 
-With the vault unlocked on the mini the finances `fin` skill has the richer route (`fin doc list`, full-text search).
+## Print
 
-## Commands
+- `paper print check` first: state, toner (`tonerPercent`, `tonerLow`), queued jobs. `paper print capabilities` says which flags the queue accepts.
+- `paper print <file>` or `paper print --doc <id>` for a filed document. The edge follows the file: two-sided long edge by default, short edge when the first page is landscape,
+  one-sided when the job fits one sheet side; the reply says which and why. `--simplex` only when asked, `--pages 1-3`, `--copies N`, `--n-up N`.
+- Envelopes and labels: `--media EnvDL|EnvC5|Env10` or `--media-type envelope|labels`; both imply the manual tray and one-sided, and the owner loads the tray first.
+- `paper print status [<jobId>]` follows a job; `paper print cancel <jobId>` stops it. A file named `check`, `status`, `capabilities` or `cancel` needs `./` in front.
 
-```bash
-# Scanner state and inbox, read-only (MacBook)
-S=~/SourceRoot/tinycast-extensions/extension/scripts/scan.ts
-export SCAN_INBOX=/Volumes/SSD/Dokumente/Eingang/Scans   # every call but --status and --discard needs it
-bun $S --status                       # pending scan, a running scan's progress, the last result
-bun $S --documents --brain-dir ~/SourceRoot/brain --dokumente-dir /Volumes/SSD/Dokumente   # review, waiting, recently filed
-bun $S --check                        # inbox mounted, scanner reachable and idle, paper in the feeder
-tail -40 ~/.local/state/scan/scan.log # every page of every scan, the scanner's final job record
+## Never
 
-# With the owner at the scanner
-bun $S --mode feeder|fronts|backs|flatbed|more
-bun $S --submit | --discard
+- **Start a scan from an unattended script, a test or a hook.** It needs paper in the feeder and a person at the machine. Reading state is always fine.
+- **Print as a proof.** Prove with `paper print <file> --dry-run`, `paper print check`, or `--hold` then `paper print cancel <jobId>`. No `lp` or `cancel` by hand.
+- **Paste document contents anywhere.** No text, issuer or name of a filed document in another repo, an Issue, a commit, a log or a web request.
+- **Rename, move or edit inbox files by hand.** A review file is decided with `paper inbox decide`; `inbox decide` never runs against the real review folder in a test.
 
-# Printing, either machine (skill: print)
-command print <file> [--pages 1-3] [--simplex]
-```
-
-Every scan CLI call prints one JSON line. The launcher aliases are `sn` (Scanner), `sd` scan, `sf`/`sb` fronts and backs,
-`sm` more, `ss` submit, `sx` discard, `pr` (Printer), `ps` print the Finder selection.
-
-## When something looks wrong
-
-| Symptom | Look at |
-|-|-|
-| Fewer pages than sheets | `scan.log`: the device's `imagesCompleted` equals what it fed. Fan the stack, scan the rest with Scan More |
-| "all pages look blank" | the stack went in upside down; the PDF is kept in `~/.local/state/scan/blank/` |
-| Submitted, nothing filed after 10 minutes | is the file still in the inbox (pipeline did not run: `jobs-grade` on the mini), in `review/` (read the `.why.txt`), or a lone `-vorne` waiting 30 minutes for its `-hinten` |
-| Filed under the wrong kind, date or issuer | `fin doc inbox fix` on the mini |
-| A filed note is missing in the Scanner view | the MacBook's brain clone lags; pull it |
+Why a step is built the way it is: `~/SourceRoot/paper/AGENTS.md`, `docs/scanner.md`, `docs/printer.md`; the pipeline: finances `docs/inbox.md`.

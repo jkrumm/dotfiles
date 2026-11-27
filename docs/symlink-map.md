@@ -37,7 +37,7 @@ What links where, and what is rendered or copied instead. Edit at either end of 
 | `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd work\|agents\|read\|say` (`AGENTS.md` §Machines & remote dev) |
 | `scripts/ask-human-local.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human; `ask-human.sh` on the mini, the dialog local on the MacBook (`docs/remote-dev.md` §human-queue) |
 | `scripts/agent-note.sh` | `~/.local/bin/agent-note` | Agent to agent across the mini and the MacBook (`docs/remote-dev.md` §Agent notes) |
-| `scripts/print.sh` | `~/.local/bin/print` | The Tinycast print CLI on PATH: the checkout's bundle or source, one JSON line per call (`rules/clis.md`, skill `print`). zsh's builtin shadows the bare name: agents type `command print` |
+| `~/SourceRoot/paper/bin/paper` (checkout of the `paper` repo, cloned or fast-forwarded by `scripts/paper-link.sh`) | `~/.local/bin/paper` | The scanner, printer and document-inbox CLI on both Macs (`make paper-link`, the repo's own `make install`); on the MacBook `~/.config/paper/config.json` sets `host` to the mini. Retires the old `~/.local/bin/print` link (`rules/clis.md`, skill `documents`) |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |

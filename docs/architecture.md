@@ -50,6 +50,7 @@ which validates geometry before it delivers.
 | `dotfiles` | Claude config, hooks, skills, machine bootstrap. Source of truth. |
 | `dotfiles-private` | Secrets data half: refs lists, tailscale ACL + serve declarations. |
 | `brain` | Obsidian vault — the deliberate second checkout, reconciled by brain-sync. |
+| `paper` | Scanner, printer and the document inbox behind one CLI, `paper` (private repo; skill `documents`). Both Macs run it from a checkout, `make paper-link` puts it on PATH; the scanner state lives on the mini and the MacBook forwards `scan`, `inbox` and `docs` there |
 
 ### Mini-only (`~/SourceRoot`)
 

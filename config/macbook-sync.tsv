@@ -5,4 +5,4 @@
 config/herdr-app/	herdr-app-setup
 scripts/herdr-app-	herdr-app-setup
 scripts/claude-account-sync	claude-account-link
-scripts/print.sh	print-link
+scripts/paper-link	paper-link

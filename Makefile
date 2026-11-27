@@ -881,7 +881,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test colima-mounts-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brain-backup-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test print-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test colima-mounts-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brain-backup-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test paper-link-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Two lanes run side by side: `check-slow-start` (first prerequisite) launches the CHECK_SLOW suites in
@@ -1428,7 +1428,7 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/agent-note.sh" \
 		DST="$(HOME)/.local/bin/agent-note"
-	@$(MAKE) --no-print-directory print-link
+	@$(MAKE) --no-print-directory paper-link
 	@# hl: HomeLab files over S3 (rclone + an env-defined remote; key per machine)
 	@chmod +x $(DOTFILES_DIR)/scripts/hl
 	@$(MAKE) --no-print-directory _link \
@@ -2787,21 +2787,20 @@ human-queue-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@$(DOTFILES_DIR)/scripts/human-queue.test.sh
 
-# print: the Tinycast print CLI on PATH (rules/clis.md, skill print). The checkout holds the code; the wrapper picks the entry.
-# Setup and dotfiles-sync (config/macbook-sync.tsv) both run this target, so it needs no 1Password, sudo or SSH identity.
-.PHONY: print-link
-print-link: ## Link the print wrapper into ~/.local/bin (setup and the MacBook's dotfiles-sync run it)
+# paper: the scan, inbox, document-index and print CLI on PATH (rules/clis.md, skill documents). The checkout under ~/SourceRoot/paper holds
+# the code; scripts/paper-link.sh clones or fast-forwards it, runs its `make install`, sets the MacBook's host to the mini and retires the old
+# print link. Setup and dotfiles-sync (config/macbook-sync.tsv) both run this target, so it needs no 1Password, sudo or SSH identity.
+.PHONY: paper-link
+paper-link: ## Put paper on PATH (checkout, link, MacBook host config; setup and the MacBook's dotfiles-sync run it)
 	@mkdir -p "$(HOME)/.local/bin"
-	@chmod +x $(DOTFILES_DIR)/scripts/print.sh
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/scripts/print.sh" \
-		DST="$(HOME)/.local/bin/print"
+	@chmod +x $(DOTFILES_DIR)/scripts/paper-link.sh
+	@$(DOTFILES_DIR)/scripts/paper-link.sh
 
-.PHONY: print-test
-print-test: ## print wrapper (the Tinycast print CLI on PATH): entry choice, argument forwarding, the no-checkout JSON, hermetic
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/print.sh $(DOTFILES_DIR)/scripts/print.test.sh
-	@chmod +x $(DOTFILES_DIR)/scripts/print.test.sh
-	@$(DOTFILES_DIR)/scripts/print.test.sh
+.PHONY: paper-link-test
+paper-link-test: ## paper-link (clone or fast-forward, install, MacBook host config, old print link retired), hermetic
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/paper-link.sh $(DOTFILES_DIR)/scripts/paper-link.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/paper-link.test.sh
+	@$(DOTFILES_DIR)/scripts/paper-link.test.sh
 
 .PHONY: agent-note-test
 agent-note-test: ## agent-note (mini <-> MacBook notes) and the MacBook ask-human entry point, hermetic
@@ -4116,8 +4115,8 @@ help:
 	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md, and every mapped label for this machine exists"
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
 	@echo "  make cli-refs           quoted CLI commands/flags in agent texts the live CLI lacks, CLI index rows, injected commands (ARGS=\"--root <dir> --json\")"
-	@echo "  make print-test         Hermetic suite for scripts/print.sh (the print CLI on PATH: entry choice, forwarding, no-checkout JSON)"
-	@echo "  make print-link         Link ~/.local/bin/print (setup and the MacBook's dotfiles-sync run it)"
+	@echo "  make paper-link-test    Hermetic suite for scripts/paper-link.sh (paper checkout, link, MacBook host config, old print link retired)"
+	@echo "  make paper-link         Put paper on PATH (setup and the MacBook's dotfiles-sync run it)"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (every step that needs no live host)"
