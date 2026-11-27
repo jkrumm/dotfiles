@@ -58,6 +58,7 @@ export const CLIS: Record<string, Spec> = {
   "secrets-run": { verbs: true, deep: true },
   jobrun: { verbs: false, deep: false },
   "agent-note": { verbs: false, deep: false }, // <machine>:<terminal> is its first word, not a verb
+  print: { verbs: false, deep: false }, // flags only; agents type `command print` (zsh's builtin print shadows the bare name)
   home: { verbs: true, deep: false, passthrough: true },
 }
 

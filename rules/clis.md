@@ -15,6 +15,7 @@ Before using a CLI for something this table or a skill does not spell out, run i
 | `agent-note` | message an agent terminal on the other machine (mini / MacBook) and get the reply; list who takes notes | `agent-note --help` | remote-dev |
 | `claude-account` | Claude Max accounts (the factory's accounts package): pick, quota, mode, expiry | `claude-account --help` | none |
 | `secrets-run` | read secrets on the mini | `secrets-run --help` | secrets |
+| `print` | print a file (two-sided long edge by default), queue state, toner, cancel; in zsh type `command print` (the builtin `print` shadows it) | `print --help` | print |
 | `jobrun` | run and record a scheduled job | `jobrun --help` | mini-service |
 | `shared-chrome` | the one headless Chrome | `shared-chrome --help` | browse |
 | `home` | Apple Home: lights, scenes, accessories | `home --help` | home |

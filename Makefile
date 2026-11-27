@@ -881,7 +881,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test colima-mounts-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brain-backup-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: check-slow-start mini-registry-lint context-load-check cli-refs-check architecture-check-test colima-mounts-test colima-dns-test colima-mounts-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test opbackup-seed-test brain-backup-test brew-service-test pg-process-type-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test tailscale-serve-test rd-test log-rotate-test doctor-test fseventsd-watch-test spotlight-test disk-sweep-test disk-budget-test hc-reap-test browser-reap-test claude-project-mcp-test herdr-glance-sync-test claude-account-sync-test herdr-app-keys-test kuma-door-test lenses-test archify-test tcc-check-test herdr-core-test bun-bin-test planned-restart-test host-waste-test github-config-test secrets-rotate-test secrets-seed-test secrets-reseal-request-test opbackup-auto-test agent-note-test print-test macbook-sync-test authorized-keys-sync-test gate-pin-notice-test deploy-guard-test volume-gate-test cargo-target-seed-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 # `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
 # the failures. Two lanes run side by side: `check-slow-start` (first prerequisite) launches the CHECK_SLOW suites in
@@ -1428,6 +1428,11 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/agent-note.sh" \
 		DST="$(HOME)/.local/bin/agent-note"
+	@# print: the Tinycast print CLI on PATH (rules/clis.md, skill print); the checkout holds the code, the wrapper picks the entry
+	@chmod +x $(DOTFILES_DIR)/scripts/print.sh
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/print.sh" \
+		DST="$(HOME)/.local/bin/print"
 	@# hl: HomeLab files over S3 (rclone + an env-defined remote; key per machine)
 	@chmod +x $(DOTFILES_DIR)/scripts/hl
 	@$(MAKE) --no-print-directory _link \
@@ -2785,6 +2790,12 @@ human-queue-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/human-queue.sh $(DOTFILES_DIR)/scripts/ask-human.sh $(DOTFILES_DIR)/scripts/lib/human-queue-json.sh $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@$(DOTFILES_DIR)/scripts/human-queue.test.sh
+
+.PHONY: print-test
+print-test: ## print wrapper (the Tinycast print CLI on PATH): entry choice, argument forwarding, the no-checkout JSON, hermetic
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/print.sh $(DOTFILES_DIR)/scripts/print.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/print.test.sh
+	@$(DOTFILES_DIR)/scripts/print.test.sh
 
 .PHONY: agent-note-test
 agent-note-test: ## agent-note (mini <-> MacBook notes) and the MacBook ask-human entry point, hermetic
