@@ -2791,6 +2791,7 @@ human-queue-test:
 # Setup and dotfiles-sync (config/macbook-sync.tsv) both run this target, so it needs no 1Password, sudo or SSH identity.
 .PHONY: print-link
 print-link: ## Link the print wrapper into ~/.local/bin (setup and the MacBook's dotfiles-sync run it)
+	@mkdir -p "$(HOME)/.local/bin"
 	@chmod +x $(DOTFILES_DIR)/scripts/print.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/print.sh" \
@@ -4115,6 +4116,8 @@ help:
 	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md, and every mapped label for this machine exists"
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
 	@echo "  make cli-refs           quoted CLI commands/flags in agent texts the live CLI lacks, CLI index rows, injected commands (ARGS=\"--root <dir> --json\")"
+	@echo "  make print-test         Hermetic suite for scripts/print.sh (the print CLI on PATH: entry choice, forwarding, no-checkout JSON)"
+	@echo "  make print-link         Link ~/.local/bin/print (setup and the MacBook's dotfiles-sync run it)"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
 	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (every step that needs no live host)"
