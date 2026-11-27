@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CONFIG, DISPATCHED, HELP, VERB_HELP, daemonOf, plan, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
+import { CONFIG, DISPATCHED, HELP, VERB_HELP, daemonOf, plan, strayExpired, unitsOf, type PlanState, type TargetInfo } from "./shared-chrome"
 
 const cfg = { idleMs: 1000, graceMs: 500 }
 const page = (id: string, ctx: string, url = "https://a.test/", title = ""): TargetInfo => ({
@@ -119,6 +119,24 @@ describe("daemonOf", () => {
     expect(daemonOf(running(`["--viaCli","--auto-connect"]`), url).kind).toBe("foreign")
     expect(daemonOf(running(`["--viaCli","--browser-url=http://127.0.0.1:9222"]`), url).kind).toBe("foreign")
     expect(daemonOf(running("not json"), url).kind).toBe("foreign")
+    expect(daemonOf(running("[]"), url).kind).toBe("foreign")
+  })
+  test("a daemon with no attach or launch flag opened a Chrome of its own: a stray", () => {
+    const startedAt = Date.parse("2026-11-16T08:47:11.447Z")
+    expect(daemonOf(running(`["--viaCli"]`), url)).toEqual({ kind: "stray", pid: 4242, args: '["--viaCli"]', startedAt })
+    expect(daemonOf(running(`["--viaCli","--usageStatistics=false","--headless"]`), url).kind).toBe("stray")
+  })
+  test("any flag that attaches or picks the Chrome keeps it an owner's daemon", () => {
+    for (const flag of ["--autoConnect", "--auto-connect", "--wsEndpoint=ws://x", "--browser-url=http://127.0.0.1:9222", "--user-data-dir=/tmp/p", "--userDataDir=/tmp/p", "--channel=beta", "--executablePath=/x"]) {
+      expect(daemonOf(running(`["--viaCli","${flag}"]`), url).kind).toBe("foreign")
+    }
+  })
+  test("a stray is reaped only once it is old enough; an unreadable start date is never old", () => {
+    const stray = { kind: "stray", pid: 1, args: "[]", startedAt: 1_000 } as const
+    expect(strayExpired(stray, 1_000 + 599_999, 600_000)).toBe(false)
+    expect(strayExpired(stray, 1_000 + 600_000, 600_000)).toBe(true)
+    expect(strayExpired({ ...stray, startedAt: Number.NaN }, 9e15, 600_000)).toBe(false)
+    expect(strayExpired({ kind: "foreign", pid: 1, args: "[]" }, 9e15, 0)).toBe(false)
   })
 })
 
@@ -307,5 +325,36 @@ esac
     expect(cli("stop").stdout.toString().trim()).toBe("stopped")
     expect(await up()).toBe(false)
     expect(daemonText()).toBe(foreign) // Chrome stopped, the foreign daemon did not
+  }, 20_000)
+
+  const stray = (startDate: string) => `pid=778 socket=/tmp/fake start-date=${startDate} version=1\nargs=["--viaCli"]\n`
+  const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString()
+
+  test("an old stray daemon (its own Chrome, no attach flag) is reaped and replaced by devtools", async () => {
+    writeFileSync(daemonFile, stray(twoDaysAgo))
+    expect(cli("status").stdout.toString()).toMatch(/devtools: +daemon pid 778 is a stray/)
+    const r = cli("devtools")
+    expect(r.exitCode).toBe(0)
+    expect(daemonText()).toContain("--browser-url=")
+    expect(daemonText()).not.toContain("pid=778")
+    expect(cli("stop").stdout.toString().trim()).toBe("stopped")
+  }, 20_000)
+
+  test("a young stray is refused and left running: it may be someone's run in progress", async () => {
+    const young = stray(new Date().toISOString())
+    writeFileSync(daemonFile, young)
+    const r = cli("devtools")
+    expect(r.exitCode).toBe(1)
+    expect(r.stderr.toString()).toContain("runs a Chrome of its own")
+    expect(daemonText()).toBe(young)
+    expect(cli("stop").stdout.toString().trim()).toBe("stopped")
+    expect(daemonText()).toBe(young) // too young for stop to reap it as well
+  }, 20_000)
+
+  test("an old stray is reaped when Chrome stops", async () => {
+    expect(cli("ensure").exitCode).toBe(0)
+    writeFileSync(daemonFile, stray(twoDaysAgo))
+    expect(cli("stop").stdout.toString().trim()).toBe("stopped")
+    expect(daemonText()).toBeNull()
   }, 20_000)
 })

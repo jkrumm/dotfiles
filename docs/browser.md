@@ -151,13 +151,23 @@ Chrome 157 on `127.0.0.1:9223`; CLI reference: [docs/cli.md](https://github.com/
 |-|-|
 | `shared-chrome devtools` | ensures Chrome, then starts the daemon (`start --browserUrl=<shared Chrome> --usageStatistics=false --performanceCrux=false`) if `chrome-devtools status` shows none; leaves a running one alone; restarts one of its own that started before the current Chrome or whose `list_pages` fails (an answer later than 15 s counts as busy with another agent's trace, not dead); the check-then-start runs under a lock, so two agents never start two |
 | the supervisor stops Chrome (idle exit, `shared-chrome stop`, a crashed Chrome) | `chrome-devtools stop`, when `status` names this Chrome's URL |
-| `shared-chrome status` | one `devtools:` line: no daemon, the daemon's pid on the shared Chrome, or one attached elsewhere |
+| `shared-chrome devtools` finds a stray, or the supervisor stops Chrome with one running | `chrome-devtools stop` for a stray at least `SHARED_CHROME_STRAY_MS` (10 min) old; a younger one makes `devtools` exit 1 and stays |
+| `shared-chrome status` | one `devtools:` line: no daemon, the daemon's pid on the shared Chrome, a stray, or one attached elsewhere |
 
 - **A daemon attached elsewhere is never touched.** Finances' `chrome-live` skill starts the default daemon with `--autoConnect`
   against the owner's signed-in Chrome, and `--autoConnect` cannot run next to a `--browserUrl` daemon. Whichever runs first holds
   the one daemon slot; the other waits. `shared-chrome devtools` then exits 1 naming the pid and its arguments, and the browser agent
   reports that and stops. Mirror rule: the finances skill reads `chrome-devtools status` and refuses to restart a daemon that
   serves the shared Chrome.
+- **A stray is a daemon nobody owns.** Its arguments hold no attach flag (`--autoConnect`, `--browserUrl`, `--wsEndpoint`) and no
+  launch flag (`--channel`, `--executablePath`, `--userDataDir`), typically just `["--viaCli"]`: a bare `chrome-devtools <tool>`
+  auto-started it and it launched a headless Chrome of its own. On 2026-11-25 one did, survived two days (the daemon has no idle
+  exit) and made `shared-chrome status` read `attached elsewhere`, so finances' `chrome-live` refused to attach to the owner's
+  Chrome. A stray serves nobody's Chrome, so shared-chrome reaps it at 10 min of age (age is all the daemon reports: it keeps no
+  last-client time); younger, it may be a run in progress. `status` names it `stray`.
+- **Stray or busy, for a skill that reads `chrome-devtools status`** (finances' `chrome-live`): `args` with `--autoConnect` or
+  `--browserUrl` is held by its owner, so wait. `args` that is only `["--viaCli"]` (no attach flag) is a stray: it is no one's
+  session, and `chrome-devtools stop` is safe once `start-date` is more than 10 min old; `shared-chrome devtools` does it too.
 - **Page ids are shared** by every agent using the daemon, so an agent finds its page as the id that is new after its own `tab-new`
   and addresses only that one.
 

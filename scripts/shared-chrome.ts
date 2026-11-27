@@ -18,6 +18,8 @@
 // never runs either: `devtools` starts it when none runs, and the supervisor stops it whenever it stops Chrome
 // (idle exit, `stop`, a crashed Chrome). It touches only a daemon whose arguments name this Chrome's URL; one attached
 // elsewhere (`--autoConnect`, finances' chrome-live) is never restarted or stopped, and `devtools` then fails naming it.
+// A daemon with no attach flag at all (a bare `chrome-devtools <tool>` auto-started it) launched a Chrome of its own, serves
+// no one's Chrome and has no owner: it is a stray, reaped once it is STRAY_MS old, by `devtools` and when Chrome stops.
 import { spawn, spawnSync } from "node:child_process"
 import { mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -28,7 +30,7 @@ const HOME = env.HOME ?? ""
 /** Every verb the dispatch accepts, in help order; `caller` set = meant for a job, not for agents. */
 export const VERB_HELP: { name: string; summary: string; caller?: string }[] = [
   { name: "ensure", summary: "start Chrome if it is not answering, print its DevTools URL on stdout, exit 0 (1 when it did not come up in 90 s)" },
-  { name: "devtools", summary: "ensure Chrome, then the chrome-devtools daemon attached to it (starts it when none runs): the one verb to run before `chrome-devtools` traces, Lighthouse and CSS; exit 1 when the daemon is attached elsewhere (--autoConnect), which it never touches" },
+  { name: "devtools", summary: "ensure Chrome, then the chrome-devtools daemon attached to it (starts it when none runs): the one verb to run before `chrome-devtools` traces, Lighthouse and CSS; exit 1 when the daemon is attached elsewhere (--autoConnect), which it never touches; reaps a stray one (no attach flag, its own Chrome) older than 10 min" },
   { name: "status", summary: "chrome up/down, supervisor pid, the chrome-devtools daemon, one line per browser context; exit 0 when up, 1 when down" },
   { name: "stop", summary: "stop the supervisor and with it Chrome and the chrome-devtools daemon; prints `stopped` (exit 0) or `still answering` (exit 1)" },
   { name: "run", summary: "the supervisor itself: owns the idle rules and exits when no context is left", caller: "launchd com.jkrumm.shared-chrome (`ensure` starts it); never by hand" },
@@ -46,10 +48,10 @@ ${VERB_HELP.filter((v) => v.caller).map((v) => `  shared-chrome ${v.name}\n     
 
 No verb takes a flag. Chrome listens on 127.0.0.1 only; every agent works in its own isolated context
 (playwright-cli \`tab-new --isolated-context=<name>\`). A context idle for 15 min is closed; Chrome stops 60 s after the last one.
-The chrome-devtools daemon is one per user and shared-chrome owns it: agents never run its \`start\` or \`stop\`; it stops with Chrome.
+The chrome-devtools daemon is one per user and shared-chrome owns it: agents never run its \`start\` or \`stop\`; it stops with Chrome. A daemon with no attach flag launched a Chrome of its own: it is a stray and is reaped after 10 min.
 Environment (defaults in CONFIG): SHARED_CHROME_PORT (9223), SHARED_CHROME_BIN, SHARED_CHROME_PROFILE, SHARED_CHROME_STATE,
 SHARED_CHROME_LABEL, SHARED_CHROME_LOG, SHARED_CHROME_IDLE_MS, SHARED_CHROME_GRACE_MS, SHARED_CHROME_POLL_MS,
-SHARED_CHROME_DEVTOOLS_BIN (chrome-devtools), SHARED_CHROME_PROBE_MS (15000), SHARED_CHROME_START_MS (120000: how long the
+SHARED_CHROME_DEVTOOLS_BIN (chrome-devtools), SHARED_CHROME_PROBE_MS (15000), SHARED_CHROME_STRAY_MS (600000: age at which a stray daemon is reaped), SHARED_CHROME_START_MS (120000: how long the
 supervisor waits for a new Chrome to answer), SHARED_CHROME_ENSURE_MS (90000: how long ensure and devtools wait; capped 1 s below START_MS).
 Exit: 0 ok · 1 verb failed or Chrome down (status) · 2 unknown verb.
 `
@@ -66,6 +68,7 @@ export const CONFIG = {
   pollMs: Number(env.SHARED_CHROME_POLL_MS ?? 30_000),
   devtoolsBin: env.SHARED_CHROME_DEVTOOLS_BIN ?? "chrome-devtools",
   probeMs: Number(env.SHARED_CHROME_PROBE_MS ?? 15_000), // a daemon busy with another agent's trace answers late, not never
+  strayMs: Number(env.SHARED_CHROME_STRAY_MS ?? 10 * 60_000), // a daemon with no attach flag is reaped at this age: younger, it may be an agent's run in progress
   startMs: Number(env.SHARED_CHROME_START_MS ?? 120_000), // how long the supervisor waits for a new Chrome to answer before it kills it; a loaded machine starts Chrome in tens of seconds
   // ensureMs must stay below startMs, so `ensure` never hands out a Chrome the supervisor is about to kill
   ensureMs: Number(env.SHARED_CHROME_ENSURE_MS ?? 90_000),
@@ -73,7 +76,18 @@ export const CONFIG = {
 
 // ---- chrome-devtools daemon (pure) ----------------------------------------------------------------------------
 
-export type Daemon = { kind: "none" } | { kind: "ours"; pid: number; startedAt: number } | { kind: "foreign"; pid: number; args: string }
+export type Daemon =
+  | { kind: "none" }
+  | { kind: "ours"; pid: number; startedAt: number }
+  | { kind: "foreign"; pid: number; args: string }
+  | { kind: "stray"; pid: number; args: string; startedAt: number }
+
+/** A flag that points the daemon at a Chrome (attach) or shapes the one it launches (profile, binary): an owner chose it. */
+const OWNED_FLAG = /^--(auto-?connect|browser-?url|ws-?endpoint|channel|executable-?path|user-?data-?dir)\b/i
+const hasOwnedFlag = (list: string[]) => list.some((a) => OWNED_FLAG.test(a.replaceAll("_", "-")))
+
+/** A stray is old enough to reap; an unreadable start date is never old (it may be someone's run in progress). */
+export const strayExpired = (d: Daemon, now: number, strayMs: number): boolean => d.kind === "stray" && now - d.startedAt >= strayMs
 
 /** Read `chrome-devtools status`: running or not, its pid, and whether its arguments name `url` (this Chrome). */
 export function daemonOf(statusOutput: string, url: string): Daemon {
@@ -88,7 +102,9 @@ export function daemonOf(statusOutput: string, url: string): Daemon {
     /* an unreadable args line is not ours */
   }
   const startedAt = Date.parse(/start-date=(\S+)/.exec(statusOutput)?.[1] ?? "") // NaN when unreadable: never "older"
-  return list.some(named) ? { kind: "ours", pid, startedAt } : { kind: "foreign", pid, args }
+  if (list.some(named)) return { kind: "ours", pid, startedAt }
+  // Unreadable or empty arguments stay foreign; readable ones with no attach or launch flag are a daemon that opened its own Chrome.
+  return list.length > 0 && !hasOwnedFlag(list) ? { kind: "stray", pid, args, startedAt } : { kind: "foreign", pid, args }
 }
 
 // ---- idle decision (pure) ------------------------------------------------------------------------------------
@@ -308,12 +324,12 @@ function daemon(): Daemon | null {
   }
   return daemonOf(r.stdout, endpoint())
 }
-/** Stop the daemon if it is attached to this Chrome; a daemon attached elsewhere is left alone. */
+/** Stop the daemon if it is attached to this Chrome or is an expired stray; a daemon attached elsewhere is left alone. */
 function stopDaemon(): void {
   const d = daemon()
   if (!d) log(`cannot read the chrome-devtools daemon status, so it is left running: ${daemonProblem}`)
-  if (d?.kind !== "ours") return
-  log(`stopping the chrome-devtools daemon (pid ${d.pid})`)
+  if (!d || !(d.kind === "ours" || strayExpired(d, Date.now(), CONFIG.strayMs))) return
+  log(`stopping the chrome-devtools daemon (pid ${d.pid}${d.kind === "stray" ? ", a stray with its own Chrome" : ""})`)
   devtools(["stop"])
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -501,6 +517,18 @@ async function startDaemonIfAbsent(): Promise<number> {
     console.error(`${CONFIG.devtoolsBin} status failed (${daemonProblem}); is it installed and on this PATH? make setup`)
     return 1
   }
+  if (strayExpired(d, Date.now(), CONFIG.strayMs)) {
+    log(`the chrome-devtools daemon (pid ${d.pid}) has no attach flag and runs a Chrome of its own, started ${new Date((d as { startedAt: number }).startedAt).toISOString()}: reaping it`)
+    devtools(["stop"])
+    d = { kind: "none" }
+  }
+  if (d.kind === "stray") {
+    console.error(
+      `a chrome-devtools daemon (pid ${d.pid}, args ${d.args}) runs a Chrome of its own and is younger than ${Math.round(CONFIG.strayMs / 60_000)} min: ` +
+        `it may be someone's run in progress. Retry once it is that old: shared-chrome reaps it then.`,
+    )
+    return 1
+  }
   if (d.kind === "foreign") {
     console.error(
       `the chrome-devtools daemon (pid ${d.pid}) is attached elsewhere (args ${d.args}) and its owner holds it: ` +
@@ -544,7 +572,7 @@ async function status(): Promise<number> {
   console.log(`supervisor: ${sup ?? "none"}`)
   const d = daemon()
   console.log(
-    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
+    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : d.kind === "stray" ? `daemon pid ${d.pid} is a stray with its own Chrome (started ${new Date(d.startedAt).toISOString()}); \`shared-chrome devtools\` reaps it after ${Math.round(CONFIG.strayMs / 60_000)} min` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
   )
   if (up) {
     for (const u of await observe()) console.log(`context ${u.id}${u.isDefault ? " (default)" : ""}: ${u.targetIds.length} page(s)`)

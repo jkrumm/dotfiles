@@ -46,7 +46,7 @@ chrome-devtools lighthouse_audit <id> --mode navigation --device desktop --outpu
 
 The same tools answer the rest: an insight of the trace (set and insight names are in the trace output), the element uids of a snapshot, and the matched rules, inherited custom properties and `[overloaded]` losers of one uid. Their names and flags come from `chrome-devtools --help`.
 
-If `shared-chrome devtools` fails with `attached elsewhere`, another tool holds the daemon (finances' `chrome-live` skill uses `--autoConnect`): say so in your report and stop; do not stop or restart it. A `Could not connect to Chrome` answer means Chrome stopped: run `shared-chrome devtools` again.
+If `shared-chrome devtools` fails with `attached elsewhere`, another tool holds the daemon (finances' `chrome-live` skill uses `--autoConnect`): say so in your report and stop; do not stop or restart it. A `stray` daemon (no attach flag, its own Chrome) is not another tool's: `shared-chrome devtools` reaps it once it is 10 min old, and until then it exits 1 saying so; report that and stop. A `Could not connect to Chrome` answer means Chrome stopped: run `shared-chrome devtools` again.
 
 Only ever address your own page id. Name the trace and report files yourself and return their paths, not their contents. The daemon never closes pages; your tab closes with `playwright-cli detach`, last, also after a failure. Chrome stops a minute after the last context, and the daemon with it.
 
