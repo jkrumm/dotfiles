@@ -577,7 +577,7 @@ async function status(): Promise<number> {
   console.log(`supervisor: ${sup ?? "none"}`)
   const d = daemon()
   console.log(
-    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : d.kind === "stray" ? `daemon pid ${d.pid} is a stray with its own Chrome (started ${startText(d.startedAt)}); \`shared-chrome devtools\` reaps it after ${Math.round(CONFIG.strayMs / 60_000)} min` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
+    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : d.kind === "stray" ? `daemon pid ${d.pid} is a stray with its own Chrome (started ${startText(d.startedAt)}); ${Number.isFinite(d.startedAt) ? `\`shared-chrome devtools\` reaps it after ${Math.round(CONFIG.strayMs / 60_000)} min` : "its age is unknown, so it is never reaped: stop it by hand"}` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
   )
   if (up) {
     for (const u of await observe()) console.log(`context ${u.id}${u.isDefault ? " (default)" : ""}: ${u.targetIds.length} page(s)`)
