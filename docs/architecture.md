@@ -212,7 +212,7 @@ the weatherorb session workflow.
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |
 | `com.iu.prometheus-vpn-watcher` | IuRoot | KeepAlive |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
-| `com.iu.tool-checkout-deploy` | IuRoot (epos-tool-athena) | 600s — `prometheus-deploy-gate/gate.py` for the tool-checkout dashboard worktree |
+| `com.iu.tool-checkout-follow` | IuRoot (epos-tool-athena) | 300s — `bash/tool-checkout.sh`: fetch plus detached checkout of origin/main for the tool-checkout dashboard worktree |
 | `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
 
 Three of the five IU jobs (`epos-token`, `state-backup`, `conduktor-token`) log to `/tmp` — a known gap, owned by `epos-tool-athena`,

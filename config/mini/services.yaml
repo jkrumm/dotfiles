@@ -25,7 +25,7 @@ services:
   - { name: prometheus-epos-token, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-epos-token, memory_mib: 50 }
   - { name: prometheus-state-backup, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-state-backup, memory_mib: 50 }
   - { name: prometheus-vpn-watcher, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.prometheus-vpn-watcher, memory_mib: 50 }
-  - { name: tool-checkout-deploy, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.tool-checkout-deploy, memory_mib: 50 }
+  - { name: tool-checkout-follow, repo: epos-tool-athena, kind: launchd, tier: core, label: com.iu.tool-checkout-follow, memory_mib: 50, note: "every 300s keeps ~/IuRoot/worktrees/prometheus-dashboard at origin/main" }
   - { name: argo, repo: argo, kind: launchd, tier: core, label: com.jkrumm.argo, door: argo-live, memory_mib: 160 }
   - { name: host-agent, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.host-agent, ports: [4416, 4417], memory_mib: 45, note: "OpenTelemetry collector (agent/): host metrics to ClickStack, OTLP receiver on 127.0.0.1:4416 gRPC / :4417 HTTP (the on-demand dev ClickStack publishes 4318 and 4319); footprint 28-30 MiB after an hour, budget 1.5x, docs/host-agent.md" }
   - { name: brain-backup, repo: dotfiles, kind: launchd, tier: core, label: com.jkrumm.brain-backup, memory_mib: 50 }
