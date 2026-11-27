@@ -351,6 +351,19 @@ esac
     expect(daemonText()).toBe(young) // too young for stop to reap it as well
   }, 20_000)
 
+  test("a stray with an unreadable start date: status still prints, devtools says it cannot age it and leaves it", async () => {
+    const unaged = `pid=779 socket=/tmp/fake start-date=now version=1\nargs=["--viaCli"]\n`
+    writeFileSync(daemonFile, unaged)
+    const s = cli("status")
+    expect(s.stdout.toString()).toMatch(/devtools: +daemon pid 779 is a stray.*start time unreadable/)
+    const r = cli("devtools")
+    expect(r.exitCode).toBe(1)
+    expect(r.stderr.toString()).toContain("start date is unreadable")
+    expect(daemonText()).toBe(unaged)
+    cli("stop")
+    rmSync(daemonFile, { force: true })
+  }, 20_000)
+
   test("an old stray is reaped when Chrome stops", async () => {
     expect(cli("ensure").exitCode).toBe(0)
     writeFileSync(daemonFile, stray(twoDaysAgo))

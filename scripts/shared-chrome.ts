@@ -86,6 +86,8 @@ export type Daemon =
 const OWNED_FLAG = /^--(auto-?connect|browser-?url|ws-?endpoint|channel|executable-?path|user-?data-?dir)\b/i
 const hasOwnedFlag = (list: string[]) => list.some((a) => OWNED_FLAG.test(a.replaceAll("_", "-")))
 
+const startText = (startedAt: number) => (Number.isFinite(startedAt) ? new Date(startedAt).toISOString() : "start time unreadable")
+
 /** A stray is old enough to reap; an unreadable start date is never old (it may be someone's run in progress). */
 export const strayExpired = (d: Daemon, now: number, strayMs: number): boolean => d.kind === "stray" && now - d.startedAt >= strayMs
 
@@ -518,14 +520,17 @@ async function startDaemonIfAbsent(): Promise<number> {
     return 1
   }
   if (strayExpired(d, Date.now(), CONFIG.strayMs)) {
-    log(`the chrome-devtools daemon (pid ${d.pid}) has no attach flag and runs a Chrome of its own, started ${new Date((d as { startedAt: number }).startedAt).toISOString()}: reaping it`)
+    log(`the chrome-devtools daemon (pid ${d.pid}) has no attach flag and runs a Chrome of its own, started ${startText((d as { startedAt: number }).startedAt)}: reaping it`)
     devtools(["stop"])
     d = { kind: "none" }
   }
   if (d.kind === "stray") {
+    const unaged = !Number.isFinite(d.startedAt)
     console.error(
-      `a chrome-devtools daemon (pid ${d.pid}, args ${d.args}) runs a Chrome of its own and is younger than ${Math.round(CONFIG.strayMs / 60_000)} min: ` +
-        `it may be someone's run in progress. Retry once it is that old: shared-chrome reaps it then.`,
+      `a chrome-devtools daemon (pid ${d.pid}, args ${d.args}) runs a Chrome of its own and ` +
+        (unaged
+          ? `its start date is unreadable, so shared-chrome cannot age it: stop it by hand with \`${CONFIG.devtoolsBin} stop\` once nobody uses it.`
+          : `is younger than ${Math.round(CONFIG.strayMs / 60_000)} min: it may be someone's run in progress. Retry once it is that old: shared-chrome reaps it then.`),
     )
     return 1
   }
@@ -572,7 +577,7 @@ async function status(): Promise<number> {
   console.log(`supervisor: ${sup ?? "none"}`)
   const d = daemon()
   console.log(
-    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : d.kind === "stray" ? `daemon pid ${d.pid} is a stray with its own Chrome (started ${new Date(d.startedAt).toISOString()}); \`shared-chrome devtools\` reaps it after ${Math.round(CONFIG.strayMs / 60_000)} min` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
+    `devtools:   ${!d ? `unreadable (${daemonProblem})` : d.kind === "none" ? "no daemon" : d.kind === "ours" ? `daemon pid ${d.pid} on the shared Chrome` : d.kind === "stray" ? `daemon pid ${d.pid} is a stray with its own Chrome (started ${startText(d.startedAt)}); \`shared-chrome devtools\` reaps it after ${Math.round(CONFIG.strayMs / 60_000)} min` : `daemon pid ${d.pid} attached elsewhere (not ours)`}`,
   )
   if (up) {
     for (const u of await observe()) console.log(`context ${u.id}${u.isDefault ? " (default)" : ""}: ${u.targetIds.length} page(s)`)
