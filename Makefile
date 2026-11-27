@@ -1428,11 +1428,7 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/agent-note.sh" \
 		DST="$(HOME)/.local/bin/agent-note"
-	@# print: the Tinycast print CLI on PATH (rules/clis.md, skill print); the checkout holds the code, the wrapper picks the entry
-	@chmod +x $(DOTFILES_DIR)/scripts/print.sh
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/scripts/print.sh" \
-		DST="$(HOME)/.local/bin/print"
+	@$(MAKE) --no-print-directory print-link
 	@# hl: HomeLab files over S3 (rclone + an env-defined remote; key per machine)
 	@chmod +x $(DOTFILES_DIR)/scripts/hl
 	@$(MAKE) --no-print-directory _link \
@@ -2790,6 +2786,15 @@ human-queue-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/human-queue.sh $(DOTFILES_DIR)/scripts/ask-human.sh $(DOTFILES_DIR)/scripts/lib/human-queue-json.sh $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/human-queue.test.sh
 	@$(DOTFILES_DIR)/scripts/human-queue.test.sh
+
+# print: the Tinycast print CLI on PATH (rules/clis.md, skill print). The checkout holds the code; the wrapper picks the entry.
+# Setup and dotfiles-sync (config/macbook-sync.tsv) both run this target, so it needs no 1Password, sudo or SSH identity.
+.PHONY: print-link
+print-link: ## Link the print wrapper into ~/.local/bin (setup and the MacBook's dotfiles-sync run it)
+	@chmod +x $(DOTFILES_DIR)/scripts/print.sh
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/print.sh" \
+		DST="$(HOME)/.local/bin/print"
 
 .PHONY: print-test
 print-test: ## print wrapper (the Tinycast print CLI on PATH): entry choice, argument forwarding, the no-checkout JSON, hermetic
