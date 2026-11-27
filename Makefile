@@ -1428,7 +1428,7 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/agent-note.sh" \
 		DST="$(HOME)/.local/bin/agent-note"
-	@$(MAKE) --no-print-directory paper-link
+	@$(MAKE) --no-print-directory paper-link || echo "    ✗ paper-link failed — run: make paper-link"
 	@# hl: HomeLab files over S3 (rclone + an env-defined remote; key per machine)
 	@chmod +x $(DOTFILES_DIR)/scripts/hl
 	@$(MAKE) --no-print-directory _link \

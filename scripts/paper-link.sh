@@ -39,7 +39,7 @@ if [ -e "$SRC/.git" ]; then
 else
   mkdir -p "$HOME/SourceRoot"
   git clone --quiet "$REMOTE" "$SRC" || {
-    echo "paper-link: FAIL - no checkout at $SRC and the clone of $REMOTE failed"
+    echo "paper-link: FAIL - no checkout at $SRC and the clone of $REMOTE failed (the repo is private: the first clone needs a stored https git credential)"
     exit 1
   }
 fi
