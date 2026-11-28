@@ -256,6 +256,26 @@ check "worktrees: counts 3 dirs of 1 closed Issue" sh -c 'printf "%s" "$1" | gre
 out14=$(DISK_SWEEP_FACTORY="$TMP/no-factory" bash "$HERE/disk-sweep.sh" worktrees 2>&1); rc14=$?
 check "no factory CLI: skipped, exit 0, nothing removed" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "skipped" && [ -f "$3/factory-7002-1/node_modules/keep" ]' _ "$rc14" "$out14" "$W"
 
+# (g2) incremental: a main checkout's idle cargo incremental cache goes, one changed within 2 hours stays, deps/ stays,
+# and a target/ beside no Cargo.toml is not a checkout and stays.
+IR="$HOME/SourceRoot/mainapp"; NC="$HOME/SourceRoot/nocargo"
+mkdir -p "$IR/target/debug/incremental/old" "$IR/target/debug/deps" "$IR/target/aarch/debug/incremental/busy" \
+  "$IR/target/x86/debug/incremental/idle" "$NC/target/debug/incremental/old"
+echo x > "$IR/Cargo.toml"; echo x > "$IR/target/debug/incremental/old/f"; echo x > "$IR/target/debug/deps/keep"
+echo x > "$IR/target/aarch/debug/incremental/busy/f"; echo x > "$IR/target/x86/debug/incremental/idle/f"
+echo x > "$NC/target/debug/incremental/old/f"
+old 5 "$IR/target/debug/incremental/old/f" "$IR/target/debug/incremental/old" "$IR/target/debug/incremental"
+old 5 "$IR/target/x86/debug/incremental/idle/f" "$IR/target/x86/debug/incremental/idle" "$IR/target/x86/debug/incremental"
+old 5 "$NC/target/debug/incremental/old/f" "$NC/target/debug/incremental/old" "$NC/target/debug/incremental"
+out23=$(bash "$HERE/disk-sweep.sh" incremental 2>&1); rc23=$?
+check "incremental: exit 0" test "$rc23" -eq 0
+check "incremental: idle debug/ cache removed" test ! -e "$IR/target/debug/incremental"
+check "incremental: idle cache under a triple removed" test ! -e "$IR/target/x86/debug/incremental"
+check "incremental: cache changed in the last 2 hours kept" test -f "$IR/target/aarch/debug/incremental/busy/f"
+check "incremental: deps/ kept" test -f "$IR/target/debug/deps/keep"
+check "incremental: target/ beside no Cargo.toml kept" test -f "$NC/target/debug/incremental/old/f"
+check "incremental: the line counts what went and what stayed" sh -c 'printf "%s" "$1" | grep -q "2 cargo incremental cache dir(s) of 1 main checkout(s) removed (1 in use kept)"' _ "$out23"
+
 # (h) scratch: a closed Issue's ~/cache/<repo>/<id> goes; open, unknown, non-numeric and seed dirs stay. A cloud-wave
 # clone untouched 14 days goes; a fresh clone, a loose file and a ~/.cache dir outside cloud-wave stay. An sccache dir
 # over its cap goes (the server is stopped first); one under its cap stays.

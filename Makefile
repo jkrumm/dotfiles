@@ -4210,7 +4210,7 @@ help:
 	@echo "  make log-rotate-setup           Load the 15-min copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
-	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (docker, colima fstrim, tmp, package caches, Lima IPSWs, simulator runtimes, closed worktrees' build dirs, cargo seeds, ~/cache scratch, sccache cap)"
+	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (docker, colima fstrim, tmp, package caches, Lima IPSWs, simulator runtimes, closed worktrees' build dirs, main checkouts' idle cargo incremental cache, cargo seeds, ~/cache scratch, sccache cap)"
 	@echo "  make disk-sweep-fstrim-setup    Load the 4-hourly fstrim of the Colima data disk (the sweep's colima-trim step alone)"
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"

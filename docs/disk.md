@@ -12,7 +12,7 @@ Caps are ceilings set above what each path measures today. `system_gib` (45) is 
 | `~/SourceRoot/weatherorb` | weatherorb | 115 | data | the app (retention); a blend round in flight adds ~22 GiB |
 | `~/orb` | weatherorb | 8 | data | the owner: releases, units and the data/ tree here; the live data root is /Volumes/orb-data, not counted; no sweep step |
 | `~/cache/weatherorb` | weatherorb | 40 | build | sweep: scratch, seeds |
-| `~/SourceRoot/shutterflow` | shutterflow | 50 | build | sweep: worktrees; a live lead bounds its own target/ |
+| `~/SourceRoot/shutterflow` | shutterflow | 50 | build | sweep: worktrees, incremental; a live lead bounds its own target/ |
 | `~/cache/shutterflow` | shutterflow | 15 | build | cargo-target-seed; sweep: seeds |
 | `~/ShutterflowLab` | shutterflow | 10 | data | shutterflow: make lab-clean |
 | `~/SourceRoot/basalt-ui` | basalt-ui | 18 | build | sweep: worktrees |
@@ -60,6 +60,7 @@ Classes: `data` is state to keep, `cache` regenerates, `build` is build output a
 | `pkg-caches` | uv prune (forced when a `uv run` holds the lock), `brew cleanup -s`, npm over 3 GB, npx installs (`~/.npm/_npx`) over 7 days old, bun over 5 GB |
 | `lima-cache`, `sim-runtimes`, `simulators` | Lima IPSWs a day old; all but the newest simulator runtime per platform, and the devices they orphaned |
 | `worktrees` | `target/` and `node_modules/` of a closed Issue's factory worktree (source stays) |
+| `incremental` | cargo's `incremental` caches under a main checkout's `target/` under `~/SourceRoot` (any `incremental` dir up to three levels deep: `debug/`, `release/`, `<triple>/debug/`), when nothing in one changed in 2 h; deps and check output stay |
 | `seeds`, `scratch` | cargo seeds a day old except the current key's and the newest; `~/cache` dirs of closed Issues, idle ones over 14 days, sccache over 5 GB |
 | `docker` | build cache over 5 GB, dangling and unused images over 48 h, anonymous volumes. Named volumes are only listed |
 | `colima-trim` | `fstrim` returns pruned blocks to the host (20+ GiB regrow within hours) |

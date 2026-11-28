@@ -42,7 +42,7 @@ TOOL_TIMEOUT=600
 UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
-STEPS=(tmpdir node-cache pkg-caches lima-cache sim-runtimes simulators worktrees seeds scratch docker colima-trim)
+STEPS=(tmpdir node-cache pkg-caches lima-cache sim-runtimes simulators worktrees incremental seeds scratch docker colima-trim)
 
 # Free KB on the volume holding $1; 0 when df cannot say, so the arithmetic below never breaks.
 free_kb() {
@@ -448,6 +448,40 @@ step_worktrees() {
     return 1
   fi
   echo "worktrees: $total target/node_modules dir(s) of $closed closed Issue(s) removed, $(delta "$before" "$after")"
+}
+
+# A main checkout's target/ regrows past its disk-budget cap (2026-11-28: shutterflow's, 10 GiB of incremental cache beside 18 GiB of
+# deps) and no other step reaches it: worktrees touches only closed Issues' worktrees, and reap-targets refuses the main checkout. Only
+# cargo's incremental cache goes: it is regenerable, and cargo rebuilds it on the next build. A cache with anything changed in the last
+# 2 hours is a build in flight: kept. deps/, cross-target check output and the rest stay, so the next build starts from its artifacts.
+step_incremental() {
+  local before after target dir total=0 removed=0 left=0 kept=0 checkouts=0 list
+  before=$(free_kb "$HOME")
+  list=$(mktemp) || { echo "incremental: FAILED: mktemp"; return 1; }
+  for target in "$HOME"/SourceRoot/*/target; do
+    [ -d "$target" ] && [ -f "${target%/target}/Cargo.toml" ] || continue
+    checkouts=$((checkouts + 1))
+    while IFS= read -r -d '' dir; do
+      if recent_in "$dir" 120; then kept=$((kept + 1)); continue; fi
+      printf '%s\0' "$dir" >> "$list"
+    done < <(find "$target" -maxdepth 3 -type d -name incremental -prune -print0 2>/dev/null)
+  done
+  if [ "$checkouts" -eq 0 ]; then
+    rm -f "$list"
+    skip incremental "no ~/SourceRoot/<repo>/target beside a Cargo.toml"
+    return 0
+  fi
+  total=$(count_listed "$list")
+  xargs -0 rm -rf -- < "$list" || true # judged by the re-test below, not by rm's exit
+  removed=$(count_gone "$list")
+  rm -f "$list"
+  after=$(free_kb "$HOME")
+  left=$((total - removed))
+  if [ "$left" -gt 0 ]; then
+    echo "incremental: FAILED: $removed of $total incremental cache dir(s) removed ($left could not be), $(delta "$before" "$after")"
+    return 1
+  fi
+  echo "incremental: $total cargo incremental cache dir(s) of $checkouts main checkout(s) removed ($kept in use kept), $(delta "$before" "$after")"
 }
 
 # The cargo seeds (cargo-target-seed) outlive their keys: the tool prunes only at the end of one of its own builds, so a repo nobody
